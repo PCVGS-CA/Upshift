@@ -127,7 +127,9 @@ errors and no warnings.
   - The commit identity is set for this repo only: `PCVGS <335109779+PCVGS-CA@users.noreply.github.com>`. No global
     identity is set on this PC.
   - `.gitattributes` keeps LF endings (`* text=auto eol=lf`), whatever `core.autocrlf` says.
-  - No remote yet: the user will create the GitHub repo from Visual Studio. Never push.
+  - Remote `origin` is the private GitHub repo `PCVGS-CA/Upshift` (https://github.com/PCVGS-CA/Upshift), created by
+    the user from Visual Studio.
+  - Push to `origin main` only at the end of each finished and tested step, or when the user asks. Never force-push.
   - No LICENSE yet (MIT or GPL-3.0 still to be chosen).
 - **Current game state:**
   - Witcher 3 has OptiScaler v0.9.4 (updated from v0.9.3), with an undo copy in `.upshift\undo20260927-225122`.
