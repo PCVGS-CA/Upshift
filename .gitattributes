@@ -1,0 +1,6 @@
+# Keep LF line endings in the repo and in the working copy, whatever core.autocrlf says.
+* text=auto eol=lf
+
+*.png binary
+*.ico binary
+*.7z  binary

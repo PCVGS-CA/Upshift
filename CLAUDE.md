@@ -123,10 +123,12 @@ errors and no warnings.
   - A dated "Changes Upshift made to this game" list.
   - README.md and .gitignore.
 - **Git:**
-  - The repo is initialised in this folder on branch `main`, with all files staged but **no commit yet**. The
-    commit waits for the user's name and email (not set on this PC); recommend their GitHub noreply address.
-  - The commit message is "Upshift: phase 1 and 2 so far". No LICENSE yet (MIT or GPL-3.0 still to be chosen).
-    Never push.
+  - Branch `main`, committed as "Upshift: phase 1 and 2 so far", then "Add project notes" (CLAUDE.md).
+  - The commit identity is set for this repo only: `PCVGS <335109779+PCVGS-CA@users.noreply.github.com>`. No global
+    identity is set on this PC.
+  - `.gitattributes` keeps LF endings (`* text=auto eol=lf`), whatever `core.autocrlf` says.
+  - No remote yet: the user will create the GitHub repo from Visual Studio. Never push.
+  - No LICENSE yet (MIT or GPL-3.0 still to be chosen).
 - **Current game state:**
   - Witcher 3 has OptiScaler v0.9.4 (updated from v0.9.3), with an undo copy in `.upshift\undo20260927-225122`.
   - Silent Hill 2 has OptiScaler v0.9.4, installed by the user.
