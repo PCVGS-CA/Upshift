@@ -1,0 +1,93 @@
+# ---------------- Build output ----------------
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa]rm64/
+[Ll]og/
+[Pp]ublish/
+AppPackages/
+BundleArtifacts/
+*.msix
+*.msixbundle
+*.appx
+*.appxbundle
+
+# ---------------- Visual Studio / Rider / VS Code ----------------
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+launchSettings.json
+*.rsuser
+*.pdb
+*.ilk
+*.ipch
+*.aps
+*.ncb
+*.opensdf
+*.sdf
+*.cachefile
+*.VC.db
+*.VC.VC.opendb
+
+# ---------------- NuGet ----------------
+*.nupkg
+*.snupkg
+packages/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# ---------------- Tests and coverage ----------------
+TestResults/
+[Tt]est[Rr]esult*/
+coverage*.json
+coverage*.xml
+*.coverage
+
+# ---------------- Personal and local data ----------------
+# Upshift keeps its data in %LocalAppData%\Upshift, outside this folder. These patterns keep a copy of any of it
+# (and any key or local override) out of the repository if it's ever placed here. The data folders are anchored
+# to the top of the repo: Git ignores case on Windows, and src/Upshift.Core has Components/ and Artwork/ folders.
+settings.json
+settings.local.json
+*.local.json
+appsettings.*.json
+library.json
+launch-options.json
+install-preferences.json
+exe-overrides.json
+remote-catalog.json
+/user-files/
+/components/
+/github-cache/
+/artwork/
+/wiki-cache/
+/catalog/
+/pending/
+/optiscaler-wiki/
+*.log
+logs/
+*.env
+.env*
+*.key
+*.pem
+*.pfx
+*.p12
+secrets.json
+*secret*
+*apikey*
+
+# ---------------- OS clutter ----------------
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store

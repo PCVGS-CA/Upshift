@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Upshift.App.Views.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:hw="using:Upshift.Core.Hardware"
+    Background="Transparent">
+
+    <ScrollViewer>
+        <StackPanel Padding="40,28,40,40" Spacing="20" MaxWidth="900" HorizontalAlignment="Left">
+            <TextBlock Text="Settings" FontSize="26" FontWeight="SemiBold" />
+
+            <StackPanel Spacing="8">
+                <TextBlock Text="Graphics cards Windows reports" FontWeight="SemiBold" />
+                <ItemsControl x:Name="GpuList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="hw:GpuInfo">
+                            <Grid Margin="0,0,0,8" Padding="16,12" CornerRadius="8" ColumnSpacing="16"
+                                  Background="{StaticResource CardSurfaceBrush}"
+                                  BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" />
+                                    <TextBlock Text="{x:Bind Generation}" FontSize="13" Foreground="{StaticResource SubtleTextBrush}" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" Text="{x:Bind DriverVersion}" FontSize="12"
+                                           Foreground="{StaticResource SubtleTextBrush}" VerticalAlignment="Center" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
+                           Text="When there is more than one, the dedicated card is used to decide which DLSS 5 option to offer." />
+            </StackPanel>
+
+            <StackPanel Spacing="8">
+                <TextBlock Text="Updates" FontWeight="SemiBold" />
+                <ToggleSwitch x:Name="AutoCheckSwitch" Header="Check for updates automatically" />
+                <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
+                           Text="At start-up, at most every 6 hours, the app reads each component's release list on GitHub. Nothing is installed into games unless you choose to update them." />
+                <TextBlock Text="Catalog address (catalogUrl)" Margin="0,6,0,0" />
+                <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
+                           Text="Optional. When set, the catalog at this address replaces the built-in one if it's valid and newer. Leave it empty to use the built-in catalog." />
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBox x:Name="CatalogUrlBox" Width="360" PlaceholderText="https://… (empty: built-in catalog)" />
+                    <Button Content="Save" Click="SaveCatalogUrl_Click" />
+                </StackPanel>
+                <TextBlock x:Name="CatalogStatusText" FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap" />
+            </StackPanel>
+
+            <StackPanel Spacing="8">
+                <TextBlock Text="Cover art" FontWeight="SemiBold" />
+                <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
+                           Text="Covers come from Steam, GOG, Epic and the Steam store without signing in. Optionally, add a SteamGridDB API key (from steamgriddb.com, Preferences, API) to fill in the rest. It's only used when nothing else has a cover." />
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <PasswordBox x:Name="SteamGridDbKeyBox" Width="360" PlaceholderText="SteamGridDB API key (optional)" />
+                    <Button Content="Save" Click="SaveSteamGridDbKey_Click" />
+                </StackPanel>
+                <TextBlock x:Name="SteamGridDbStatusText" FontSize="12" Foreground="{StaticResource SubtleTextBrush}" />
+            </StackPanel>
+
+            <StackPanel Spacing="8">
+                <TextBlock Text="Optional files you supply" FontWeight="SemiBold" />
+                <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
+                           Text="The app never downloads or bundles these. Point it at a copy you already have and it's copied into the app's own folder." />
+                <StackPanel x:Name="UserFileRows" Spacing="10" />
+            </StackPanel>
+
+            <StackPanel Spacing="8">
+                <TextBlock Text="App data" FontWeight="SemiBold" />
+                <TextBlock x:Name="DataDirText" FontFamily="Consolas" FontSize="12" IsTextSelectionEnabled="True" />
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Button Content="Open data folder" Click="OpenDataFolder_Click" />
+                    <Button Content="Forget scanned games" Click="ClearCache_Click" />
+                </StackPanel>
+                <TextBlock x:Name="CacheStatusText" FontSize="12" Foreground="{StaticResource SubtleTextBrush}" />
+            </StackPanel>
+
+            <StackPanel Spacing="8">
+                <TextBlock Text="About" FontWeight="SemiBold" />
+                <Border CornerRadius="8" Padding="16,14" Background="{StaticResource CardSurfaceBrush}"
+                        BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <!-- Source set in code from Assets\Upshift.svg next to the exe. -->
+                        <Image x:Name="AboutLogo" Width="56" Height="56" VerticalAlignment="Top" />
+                        <StackPanel Grid.Column="1" Spacing="4">
+                            <TextBlock Text="Upshift" FontSize="20" FontWeight="SemiBold" />
+                            <TextBlock x:Name="AboutVersionText" FontSize="12" Foreground="{StaticResource SubtleTextBrush}" />
+                            <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
+                                       Text="Upshift is a free, unofficial tool. It isn't made by or affiliated with the OptiScaler team, NVIDIA, AMD or Intel. Everything it installs is downloaded from each project's official GitHub page." />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

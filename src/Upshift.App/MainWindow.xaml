@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Upshift.App.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Upshift">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Custom title bar (drag area) -->
+        <Grid x:Name="AppTitleBar" Padding="16,0,0,0" ColumnSpacing="10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <!-- Upshift logo; its source (Assets\Upshift.svg) is set in code from the app folder. -->
+            <Image x:Name="TitleBarLogo" Height="20" Width="20" VerticalAlignment="Center" />
+
+            <TextBlock Grid.Column="1" Text="Upshift" VerticalAlignment="Center"
+                       FontSize="13" FontWeight="SemiBold" />
+        </Grid>
+
+        <NavigationView
+            x:Name="Nav"
+            Grid.Row="1"
+            PaneDisplayMode="Left"
+            OpenPaneLength="240"
+            IsPaneToggleButtonVisible="False"
+            IsBackButtonVisible="Collapsed"
+            IsSettingsVisible="False"
+            SelectionChanged="Nav_SelectionChanged">
+
+            <NavigationView.MenuItems>
+                <NavigationViewItem Content="Library" Tag="library" IsSelected="True">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8F1;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Updates" Tag="updates">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE895;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Settings" Tag="settings">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE713;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+
+            <NavigationView.PaneFooter>
+                <Border Margin="12,0,12,16" Padding="14" CornerRadius="8"
+                        Background="{StaticResource CardSurfaceBrush}"
+                        BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="Graphics card" FontSize="12" Foreground="{StaticResource SubtleTextBrush}" />
+                        <TextBlock x:Name="GpuNameText" Text="Detecting…" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <Border x:Name="GpuChip" HorizontalAlignment="Left" CornerRadius="4" Padding="8,2,8,3" Background="#ECEEF1">
+                            <TextBlock x:Name="GpuGenText" FontSize="12" FontWeight="SemiBold" Text="…" />
+                        </Border>
+                    </StackPanel>
+                </Border>
+            </NavigationView.PaneFooter>
+
+            <Frame x:Name="ContentFrame" />
+        </NavigationView>
+    </Grid>
+</Window>

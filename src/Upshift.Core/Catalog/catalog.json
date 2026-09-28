@@ -1,0 +1,329 @@
+{
+  "schema": 1,
+  "updated": "2026-09-27",
+  "notes": "Upshift's built-in catalog. Upshift will later download a newer version of this file from its GitHub repo, so new forks and GPU support can be added without releasing a new version. The userAgent values below are fallbacks; the app sends Upshift/<its version>.",
+
+  "components": [
+    {
+      "id": "optiscaler",
+      "name": "OptiScaler",
+      "kind": "injector",
+      "description": "The official OptiScaler. Adds the Insert-key menu for switching between DLSS, FSR and XeSS and turning on frame generation.",
+      "repo": "optiscaler/OptiScaler",
+      "assetPattern": "(?i)^OptiScaler.*\\.(7z|zip)$",
+      "pinnedVersion": "v0.9.4",
+      "installable": true,
+      "notes": "Stable = pinnedVersion. When a release has several matching files (the old nightly has five), the one with the highest version in its name is used."
+    },
+    {
+      "id": "optiscaler-dlssnr",
+      "name": "OptiScaler DLSSNR",
+      "kind": "injector",
+      "description": "OptiScaler fork that adds NVIDIA DLSS 5 Neural Rendering. Needs the user's own nvngx_dlssnr.dll.",
+      "repo": "Dagherbou/OptiScaler_DLSSNR",
+      "assetPattern": "(?i)^OptiScaler-DLSSNR-.*\\.zip$",
+      "pinnedVersion": "v0.2.0-dlssnr"
+    },
+    {
+      "id": "amd-nr",
+      "name": "AMD-NR",
+      "kind": "injector",
+      "description": "OptiScaler fork that runs DLSS 5 Neural Rendering on AMD RX 7000 and RX 9000 cards. Includes the lmxxf runtime.",
+      "repo": "3zwr1/AMD-NR---OptiScaler",
+      "assetPattern": "(?i)^AMDNR-v.*\\.zip$",
+      "pinnedVersion": "Alpha0.3.2"
+    },
+    {
+      "id": "amd-nr-runtime",
+      "name": "AMD-NR runtime (danielblnc)",
+      "kind": "runtime",
+      "description": "Extra runtime that AMD-NR needs on RX 7000 cards (optional on RX 9000). Must match the AMD-NR version.",
+      "repo": "3zwr1/AMD-NR---OptiScaler",
+      "assetPattern": "(?i)^(v[\\d.]+-)?Runtime\\.zip$",
+      "pinnedVersion": "Alpha0.3.2",
+      "groupWith": "amd-nr",
+      "notes": "Runtime file names vary (Runtime.zip, v0.3.1-Runtime.zip) and some releases carry two (v0.4.0- and v0.4.1-Runtime.zip); the highest version is used."
+    },
+    {
+      "id": "dlssg-to-fsr3",
+      "name": "dlssg-to-fsr3",
+      "kind": "addon",
+      "description": "Nukem9's mod that lets a game's DLSS Frame Generation option run FSR 3 frame generation. Bundled with OptiScaler 0.9 and newer.",
+      "repo": "Nukem9/dlssg-to-fsr3",
+      "assetPattern": "(?i)\\.zip$",
+      "bundledIn": "optiscaler",
+      "bundledVersionPattern": "(?im)dlssg_to_fsr3\\s+v?(\\d+(?:\\.\\d+)+)",
+      "notes": "Its recent GitHub releases have no files attached (only 0.3 and 0.21 from 2023 do). OptiScaler 0.9+ bundles it; the version comes from OptiScaler's release notes (\"Nukems dlssg_to_fsr3 0.130\")."
+    },
+    {
+      "id": "fakenvapi",
+      "name": "fakenvapi",
+      "kind": "addon",
+      "description": "Lets non-NVIDIA cards use a game's Reflex option through Anti-Lag 2, LatencyFlex or XeLL. Bundled with OptiScaler 0.9 and newer.",
+      "repo": "optiscaler/fakenvapi",
+      "assetPattern": "(?i)\\.(7z|zip)$",
+      "bundledIn": "optiscaler",
+      "bundledVersionPattern": "(?im)fakenvapi\\s+v?(\\d+(?:\\.\\d+)+)"
+    },
+    {
+      "id": "nvidia-dlss",
+      "name": "NVIDIA DLSS",
+      "kind": "upscaler",
+      "description": "NVIDIA's own DLSS files, for updating the DLSS a game shipped with.",
+      "repo": "NVIDIA/DLSS",
+      "repoFilePath": "lib/Windows_x86_64/rel/nvngx_dlss.dll",
+      "notes": "The DLL is read from the repository at the release tag (release files are only demos) and checked against the git blob hash GitHub reports."
+    },
+    {
+      "id": "amd-fidelityfx",
+      "name": "AMD FidelityFX (FSR)",
+      "kind": "upscaler",
+      "description": "AMD's FidelityFX SDK, for updating FSR 3.1+ files a game shipped with.",
+      "repo": "GPUOpen-LibrariesAndSDKs/FidelityFX-SDK",
+      "assetPattern": "(?i)^FidelityFX-(SDK-v[\\d.]+|Samples-v[\\d.]+-prebuilt)\\.zip$",
+      "notes": "v2.3.0 only ships FidelityFX-Samples-…-prebuilt.zip, v2.0.0 ships FidelityFX-SDK-….zip and v2.1.x ship no files.",
+      "verifyBeforeRelease": "Confirm which files inside the zip are the signed DLLs before offering FSR updates in games."
+    },
+    {
+      "id": "intel-xess",
+      "name": "Intel XeSS",
+      "kind": "upscaler",
+      "description": "Intel's XeSS SDK, for updating XeSS files a game shipped with.",
+      "repo": "intel/xess",
+      "assetPattern": "(?i)^XeSS_SDK_[\\d.]+\\.zip$",
+      "verifyBeforeRelease": "Confirm where libxess.dll sits inside XeSS_SDK_….zip before offering XeSS updates in games."
+    }
+  ],
+
+  "neuralBackends": [
+    {
+      "id": "amd-nr",
+      "name": "AMD-NR",
+      "componentId": "amd-nr",
+      "vendor": "Amd",
+      "generations": [ "RDNA 4", "RDNA 3" ],
+      "needsNvidiaDll": false,
+      "runtimes": [
+        { "id": "lmxxf", "name": "lmxxf", "generations": [ "RDNA 4" ], "componentId": null },
+        { "id": "danielblnc", "name": "danielblnc", "generations": [ "RDNA 4", "RDNA 3" ], "componentId": "amd-nr-runtime" }
+      ],
+      "summary": "Uses the AMD-NR fork of OptiScaler. No NVIDIA file needed. Press Home in-game to turn it on and off."
+    },
+    {
+      "id": "dlssnr",
+      "name": "OptiScaler DLSSNR",
+      "componentId": "optiscaler-dlssnr",
+      "vendor": "Nvidia",
+      "generations": [ "Blackwell" ],
+      "needsNvidiaDll": true,
+      "requiresSignedDll": true,
+      "summary": "Uses the NVIDIA DLSS 5 fork of OptiScaler with your own DLSS 5 file (nvngx_dlssnr.dll)."
+    },
+    {
+      "id": "dlssnr-older-rtx",
+      "name": "OptiScaler DLSSNR",
+      "componentId": "optiscaler-dlssnr",
+      "vendor": "Nvidia",
+      "generations": [ "Ada Lovelace", "Ampere", "Turing" ],
+      "needsNvidiaDll": true,
+      "requiresSignedDll": false,
+      "summary": "NVIDIA's official DLSS 5 file only runs on RTX 50 cards for now. It works on this card with a modified file you supply, which can't be verified as safe. RTX 40 support is expected from NVIDIA this fall."
+    }
+  ],
+
+  "artworkSources": {
+    "userAgent": "Upshift/1.0",
+    "timeoutSeconds": 20,
+    "maxParallel": 3,
+    "retryMissingAfterDays": 7,
+    "gog": {
+      "gamesDbUrl": "https://gamesdb.gog.com/platforms/gog/external_releases/{id}",
+      "coverFormatter": "_glx_vertical_cover",
+      "coverExtension": "jpg",
+      "apiUrl": "https://api.gog.com/v2/games/{id}",
+      "apiImageLink": "boxArtImage"
+    },
+    "epic": {
+      "catalogCachePath": "%ProgramData%/Epic/EpicGamesLauncher/Data/Catalog/catcache.bin",
+      "manifestsPath": "%ProgramData%/Epic/EpicGamesLauncher/Data/Manifests",
+      "imageTypes": [ "DieselGameBoxTall" ],
+      "imageQuery": "?h=900&w=600&resize=1"
+    },
+    "steamSearch": {
+      "searchUrl": "https://store.steampowered.com/api/storesearch/?term={name}&cc=CA&l=english",
+      "imageUrls": [
+        "https://shared.steamstatic.com/store_item_assets/steam/apps/{appid}/library_600x900.jpg",
+        "https://cdn.cloudflare.steamstatic.com/steam/apps/{appid}/library_600x900.jpg"
+      ],
+      "minNameSimilarity": 0.9
+    },
+    "steamGridDb": {
+      "searchUrl": "https://www.steamgriddb.com/api/v2/search/autocomplete/{name}",
+      "gridsUrl": "https://www.steamgriddb.com/api/v2/grids/game/{id}?dimensions=600x900&types=static"
+    }
+  },
+
+  "pcGamingWiki": {
+    "userAgent": "Upshift/1.0 (Upshift for Windows; reads engine and upscaler info)",
+    "timeoutSeconds": 20,
+    "cacheDays": 30,
+    "wikitextUrl": "https://www.pcgamingwiki.com/w/api.php?action=parse&page={title}&prop=wikitext&redirects=1&format=json&formatversion=2",
+    "searchUrl": "https://www.pcgamingwiki.com/w/api.php?action=query&list=search&srsearch={name}&srlimit=10&srprop=&format=json",
+    "pageUrl": "https://www.pcgamingwiki.com/wiki/{title}",
+    "minNameSimilarity": 0.9
+  },
+
+  "recommendations": {
+    "notes": "Suggestions only, never requirements. First rule whose vendor and generation match wins. {gpu} is the card's name. 'upscaler' is used when the game has it; 'upscalerViaOptiScaler' when it only has other upscalers.",
+    "rules": [
+      {
+        "vendor": "Nvidia", "generations": [ "Blackwell", "Ada Lovelace" ],
+        "upscaler": "DLSS", "upscalerViaOptiScaler": "DLSS through OptiScaler",
+        "reason": "NVIDIA's own upscaler runs on your card's Tensor cores and usually looks best.",
+        "frameGen": "DLSS FG", "frameGenReason": "RTX 40 and 50 cards can run NVIDIA's frame generation."
+      },
+      {
+        "vendor": "Nvidia", "generations": [ "Ampere", "Turing" ],
+        "upscaler": "DLSS", "upscalerViaOptiScaler": "DLSS through OptiScaler",
+        "reason": "NVIDIA's own upscaler runs on your card's Tensor cores and usually looks best.",
+        "frameGen": "FSR FG", "frameGenReason": "DLSS frame generation needs an RTX 40 or 50, so FSR frame generation is the one that runs here."
+      },
+      {
+        "vendor": "Nvidia", "generations": [ "Turing GTX", "Older NVIDIA" ],
+        "upscaler": "XeSS", "alternative": "FSR 3",
+        "reason": "Without Tensor cores DLSS isn't available; XeSS usually looks better than FSR 3 on these cards.",
+        "frameGen": "FSR FG", "frameGenReason": "FSR frame generation works on any recent card."
+      },
+      {
+        "vendor": "Amd", "generations": [ "RDNA 4" ],
+        "upscaler": "FSR 4", "upscalerViaOptiScaler": "FSR 4 through OptiScaler",
+        "reason": "FSR 4 is AMD's machine-learning upscaler and is made for RX 9000 cards.",
+        "frameGen": "FSR FG", "frameGenReason": "AMD's frame generation, with the FSR 4 version on RX 9000 cards."
+      },
+      {
+        "vendor": "Amd", "generations": [ "RDNA 3" ], "requiresOfficialFsr4": true,
+        "upscaler": "FSR 4", "upscalerViaOptiScaler": "FSR 4 through OptiScaler", "alternative": "FSR 3.1",
+        "reason": "FSR 4 (INT8) is officially supported on RX 7000 desktop cards since OptiScaler 0.9.4.",
+        "frameGen": "FSR FG", "frameGenReason": "AMD's frame generation."
+      },
+      {
+        "vendor": "Amd", "generations": [ "RDNA 2", "RDNA 3 integrated", "RDNA 3.5 integrated", "RDNA 2 integrated" ],
+        "upscaler": "XeSS", "alternative": "FSR 3.1",
+        "reason": "XeSS or FSR 3.1 run well here. FSR 4 (INT8) is an optional extra you can try.",
+        "frameGen": "FSR FG", "frameGenReason": "AMD's frame generation."
+      },
+      {
+        "vendor": "Intel", "generations": [ "Battlemage", "Alchemist", "Xe2 integrated" ],
+        "upscaler": "XeSS", "upscalerViaOptiScaler": "XeSS through OptiScaler",
+        "reason": "Intel's own upscaler uses your card's XMX units and usually looks best.",
+        "frameGen": "XeSS FG", "frameGenReason": "Intel's frame generation."
+      }
+    ],
+    "fallback": {
+      "upscaler": "TSR / TAAU",
+      "reason": "The game's own engine upscaler is the safest choice when no DLSS, FSR or XeSS is available."
+    }
+  },
+
+  "dlssPresets": [
+    { "id": "M", "value": 13, "name": "DLSS 4.5 – Preset M", "minVersion": "310.5.0", "note": "Sharper, a bit slower. NVIDIA's default for Performance." },
+    { "id": "L", "value": 12, "name": "DLSS 4.5 – Preset L (Ultra Performance)", "minVersion": "310.5.0", "note": "Sharpest and most stable, but slower. NVIDIA's default for Ultra Performance." },
+    { "id": "K", "value": 11, "name": "DLSS 4 – Preset K", "minVersion": "310.2.0", "note": "Balanced quality and speed. NVIDIA's default for DLAA, Quality and Balanced." },
+    { "id": "J", "value": 10, "name": "DLSS 4 – Preset J", "minVersion": "310.1.0", "note": "Like K with slightly less ghosting but more flicker." }
+  ],
+
+  "fsr4": {
+    "notes": "FSR 4 is official on these generations, so the INT8 options are hidden there.",
+    "officialGenerations": [ "RDNA 4", "RDNA 3" ],
+    "int8Generations": [ "RDNA 2", "RDNA 3 integrated", "RDNA 3.5 integrated", "RDNA 2 integrated", "Blackwell", "Ada Lovelace", "Ampere", "Turing", "Turing GTX", "Battlemage", "Alchemist", "Xe2 integrated" ],
+    "communityInt8FileName": "amdxcffx64.dll"
+  },
+
+  "optiScalerWiki": {
+    "compatibilityListUrl": "https://raw.githubusercontent.com/wiki/optiscaler/OptiScaler/Compatibility-List.md",
+    "pageUrl": "https://raw.githubusercontent.com/wiki/optiscaler/OptiScaler/{page}.asciidoc",
+    "webPageUrl": "https://github.com/optiscaler/OptiScaler/wiki/{page}",
+    "webListUrl": "https://github.com/optiscaler/OptiScaler/wiki/Compatibility-List",
+    "refreshDays": 7,
+    "userAgent": "Upshift/1.0"
+  },
+
+  "knownNvidiaNrFiles": [
+    {
+      "version": "310.8.0.0",
+      "sha256": "e16bcf15e16e13f527491cdf7845b2fe6521a738d8f7c9c721866a8496e1fc8e",
+      "source": "NBA 2K27"
+    }
+  ],
+
+  "dlssVersionNames": [
+    { "files": [ "nvngx_dlssnr.dll" ], "name": "DLSS 5" },
+    { "from": "310.5", "name": "DLSS 4.5" },
+    { "from": "310.1", "name": "DLSS 4" },
+    { "from": "3.0", "name": "DLSS 3" },
+    { "from": "2.0", "name": "DLSS 2" },
+    { "from": "1.0", "name": "DLSS 1" }
+  ],
+
+  "guides": {
+    "dlssModel": {
+      "title": "Which DLSS model should I pick?",
+      "rows": [
+        { "id": "preset-K", "name": "K (DLSS 4)", "text": "Sharp and clean, and the lightest of the new models.", "bestFor": "Quality, Balanced and DLAA" },
+        { "id": "preset-J", "name": "J (DLSS 4)", "text": "Like K, with slightly less ghosting but more flicker.", "bestFor": "Rarely better than K" },
+        { "id": "preset-M", "name": "M (DLSS 4.5)", "text": "Noticeably sharper and more stable than K, and costs a bit more.", "bestFor": "Performance mode" },
+        { "id": "preset-L", "name": "L (DLSS 4.5)", "text": "The sharpest and most stable, and the most expensive.", "bestFor": "Ultra Performance mode" },
+        { "id": "default", "name": "Game default", "text": "Let the game decide." },
+        { "id": "recommended", "name": "NVIDIA recommended", "text": "M for Performance, L for Ultra Performance, K for everything else." }
+      ],
+      "cardNotes": [
+        { "vendors": [ "Nvidia" ], "generations": [ "Ada Lovelace", "Blackwell" ], "text": "M and L run at full speed on your card." },
+        { "vendors": [ "Nvidia" ], "generations": [ "Turing", "Ampere" ], "text": "M and L cost more on your card; K is often the better choice." }
+      ]
+    },
+    "upscaler": {
+      "title": "Which upscaler should I pick?",
+      "rows": [
+        { "id": "auto", "text": "OptiScaler picks its own default for this game; choose one of the others to decide yourself." },
+        { "id": "dlss", "text": "NVIDIA's upscaler, and the best-looking choice on an RTX card." },
+        {
+          "id": "xess",
+          "text": "Intel's upscaler: runs on your card in a generic mode that looks better than FSR 3.1 but costs a little more.",
+          "forCard": { "Intel": "Intel's upscaler, running on your Arc card's own AI cores: the best choice on your card." }
+        },
+        {
+          "id": "fsr4",
+          "text": "AMD's AI upscaler in its INT8 version: clearly better than FSR 3.1, but it costs more on your card.",
+          "forCard": { "RDNA 4": "AMD's newest, AI-based upscaler, made for your card: the best choice on it." }
+        },
+        { "id": "fsr31", "text": "AMD's upscaler that runs on any card: fast, but softer and with more shimmer than the AI upscalers." },
+        { "id": "fsr22", "text": "An older FSR, only worth trying if FSR 3.1 misbehaves in this game." }
+      ],
+      "cardNotes": [
+        { "vendors": [ "Nvidia" ], "generations": [ "Turing", "Ampere", "Ada Lovelace", "Blackwell" ], "text": "On your card, DLSS is almost always the best choice." },
+        { "vendors": [ "Amd" ], "generations": [ "RDNA 4" ], "text": "On your card, FSR 4 is the best choice." },
+        { "vendors": [ "Amd" ], "text": "On your card, XeSS or FSR 4 (INT8) usually look better than FSR 3.1; FSR 3.1 is the fastest." },
+        { "vendors": [ "Intel" ], "text": "On your card, XeSS is the best choice." },
+        { "vendors": [ "Nvidia" ], "text": "Your card can't run DLSS; XeSS usually looks better than FSR 3.1, and FSR 3.1 is the fastest." }
+      ]
+    },
+    "frameGen": {
+      "title": "Which frame generation should I pick?",
+      "rows": [
+        { "id": "off", "text": "No generated frames: the lowest input lag." },
+        { "id": "native", "text": "The frame generation built into the game; turn it on in the game's own menu." },
+        { "id": "nukems", "text": "The game's DLSS frame generation option runs AMD's FSR frame generation instead, so it works without an RTX 40 card." },
+        { "id": "dlssg-fsrfg", "text": "The game's DLSS frame generation is replaced by AMD's FSR frame generation." },
+        { "id": "dlssg-xefg", "text": "The game's DLSS frame generation is replaced by Intel's XeSS frame generation (needs borderless windowed mode)." },
+        { "id": "fsrfg-fsrfg", "text": "The game's own FSR frame generation, run through OptiScaler's newer FSR." },
+        { "id": "fsrfg-xefg", "text": "The game's FSR frame generation is replaced by Intel's XeSS frame generation (needs borderless windowed mode)." },
+        { "id": "optifg-fsrfg", "text": "OptiScaler adds FSR frame generation to any game with an upscaler turned on; the HUD may smear without HUDfix." },
+        { "id": "optifg-xefg", "text": "OptiScaler adds XeSS frame generation to any game with an upscaler turned on (needs borderless windowed mode)." }
+      ],
+      "cardNotes": [
+        { "vendors": [ "Nvidia" ], "generations": [ "Ada Lovelace", "Blackwell" ], "text": "Your card has DLSS frame generation: if the game offers it, \"Game's own\" is usually best." }
+      ],
+      "footer": "Frame generation makes motion smoother but adds input lag. It works best when the game already runs at 60 fps or more."
+    }
+  }
+}

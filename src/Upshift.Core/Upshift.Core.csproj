@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <RootNamespace>Upshift.Core</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Used only for listing graphics cards (Win32_VideoController). -->
+    <PackageReference Include="System.Management" Version="8.0.0" />
+    <!-- Opens the .7z archives OptiScaler is released as. -->
+    <PackageReference Include="SharpCompress" Version="1.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Built-in copy of the catalog. A newer one can be loaded from the "catalogUrl" setting. -->
+    <EmbeddedResource Include="Catalog\catalog.json" LogicalName="catalog.json" />
+  </ItemGroup>
+
+</Project>

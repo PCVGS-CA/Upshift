@@ -1,0 +1,142 @@
+using System.ComponentModel;
+using System.Diagnostics;
+using Upshift.Core.Install;
+
+namespace Upshift.App.Services;
+
+/// <summary>
+/// Runs an install or uninstall. When the game folder is writable it happens right here; when it isn't
+/// (games under Program Files), the app starts a second copy of itself with a UAC prompt that does just this one
+/// job from a plan file (Upshift.exe --apply plan.json) and hands back a result file. The main window never runs as admin.
+/// </summary>
+public static class InstallRunner
+{
+    private const int ErrorCancelled = 1223; // the user said No to the UAC prompt
+
+    public static async Task<InstallResult> RunAsync(InstallPlan plan)
+    {
+        var log = new InstallLog(AppServices.DataDir);
+        if (OptiScalerInstaller.CanWrite(plan.TargetDir))
+            return await Task.Run(() => Apply(plan, log));
+
+        log.Write($"{plan.Operation.ToString().ToUpperInvariant()} {plan.GameName}: folder needs admin rights, asking via UAC");
+        var pending = Path.Combine(AppServices.DataDir, "pending");
+        Directory.CreateDirectory(pending);
+        var id = Guid.NewGuid().ToString("N");
+        var planPath = Path.Combine(pending, $"plan-{id}.json");
+        var resultPath = Path.Combine(pending, $"result-{id}.json");
+        await File.WriteAllTextAsync(planPath, OptiScalerInstaller.SerializePlan(plan));
+        var planHash = OptiScalerInstaller.Sha256(planPath);
+
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = Environment.ProcessPath!,
+                Arguments = $"--apply \"{planPath}\" --sha256 {planHash} --result \"{resultPath}\"",
+                UseShellExecute = true,
+                Verb = "runas"
+            })!;
+            await process.WaitForExitAsync();
+
+            if (!File.Exists(resultPath))
+                return new InstallResult { Message = $"The admin helper stopped without a result (exit code {process.ExitCode}). See the log in {Path.GetDirectoryName(log.FilePath)}." };
+            return OptiScalerInstaller.DeserializeResult(await File.ReadAllTextAsync(resultPath))
+                   ?? new InstallResult { Message = "The admin helper's result couldn't be read." };
+        }
+        catch (Win32Exception ex) when (ex.NativeErrorCode == ErrorCancelled)
+        {
+            log.Write("  admin prompt declined; nothing changed");
+            return new InstallResult { Message = "Windows didn't get permission to change the game folder, so nothing was changed." };
+        }
+        finally
+        {
+            TryDelete(planPath);
+            TryDelete(resultPath);
+        }
+    }
+
+    /// <summary>
+    /// The elevated side: Upshift.exe --apply plan.json --sha256 HASH --result result.json.
+    /// Checks the plan wasn't altered after the main window wrote it and only touches what a plan is allowed to touch.
+    /// </summary>
+    public static int RunElevated(string[] args)
+    {
+        string? Arg(string name) => Array.IndexOf(args, name) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
+        var planPath = Arg("--apply");
+        var resultPath = Arg("--result");
+        var expectedHash = Arg("--sha256");
+        if (planPath is null || resultPath is null || expectedHash is null) return 2;
+
+        // Log next to the plan (the main window's data folder), even if the admin account is a different user.
+        var dataDir = Path.GetDirectoryName(Path.GetDirectoryName(Path.GetFullPath(planPath)))!;
+        var log = new InstallLog(dataDir);
+        InstallResult result;
+        try
+        {
+            if (!File.Exists(planPath) || OptiScalerInstaller.Sha256(planPath) != expectedHash)
+                result = new InstallResult { Message = "The install plan was changed after it was written, so nothing was done." };
+            else if (OptiScalerInstaller.DeserializePlan(File.ReadAllText(planPath)) is not { } plan)
+                result = new InstallResult { Message = "The install plan couldn't be read." };
+            else if (Validate(plan, dataDir) is { } problem)
+                result = new InstallResult { Message = problem };
+            else
+                result = Apply(plan, log);
+        }
+        catch (Exception ex)
+        {
+            result = new InstallResult { Message = $"The admin helper failed: {ex.Message}" };
+        }
+
+        if (!result.Success) log.Write("  admin helper: " + result.Message);
+        File.WriteAllText(resultPath, OptiScalerInstaller.SerializeResult(result));
+        return result.Success ? 0 : 1;
+    }
+
+    private static InstallResult Apply(InstallPlan plan, InstallLog log) => plan.Operation switch
+    {
+        InstallOperation.Install => OptiScalerInstaller.Install(plan, log),
+        InstallOperation.Configure => OptiScalerInstaller.Configure(plan, log),
+        InstallOperation.Update => OptiScalerInstaller.Update(plan, log),
+        InstallOperation.UndoUpdate => OptiScalerInstaller.UndoUpdate(plan, log),
+        InstallOperation.Repair => OptiScalerInstaller.Repair(plan, log),
+        _ => OptiScalerInstaller.Uninstall(plan, log)
+    };
+
+    /// <summary>Files a settings change may copy in or take out: only the user-supplied ones the app knows.</summary>
+    private static readonly string[] UserFileNames = OptiScalerInstaller.UserFileNames;
+
+    /// <summary>
+    /// An elevated copy only installs from our own component cache into an existing folder, under a known loading name,
+    /// and only copies user-supplied files from the app's user-files folder under their known names.
+    /// </summary>
+    private static string? Validate(InstallPlan plan, string dataDir)
+    {
+        if (!Directory.Exists(plan.TargetDir)) return "The game folder in the plan doesn't exist.";
+        if (plan.Operation is InstallOperation.Uninstall or InstallOperation.UndoUpdate) return null;
+        if (plan.Operation == InstallOperation.Configure)
+        {
+            var userFiles = Path.GetFullPath(Path.Combine(dataDir, "user-files")) + Path.DirectorySeparatorChar;
+            if (plan.AddFileFrom is not null && !Path.GetFullPath(plan.AddFileFrom).StartsWith(userFiles, StringComparison.OrdinalIgnoreCase))
+                return "The plan points at a file outside the app's user-files folder, so nothing was done.";
+            foreach (var name in new[] { plan.AddFileAs, plan.RemoveFile }.Where(n => n is not null))
+                if (!UserFileNames.Contains(name, StringComparer.OrdinalIgnoreCase))
+                    return "The plan names a file the app doesn't manage, so nothing was done.";
+            return null;
+        }
+
+        var components = Path.GetFullPath(Path.Combine(dataDir, "components")) + Path.DirectorySeparatorChar;
+        if (plan.SourceDir is null || !Path.GetFullPath(plan.SourceDir).StartsWith(components, StringComparison.OrdinalIgnoreCase)
+            || (plan.OldSourceDir is not null && !Path.GetFullPath(plan.OldSourceDir).StartsWith(components, StringComparison.OrdinalIgnoreCase)))
+            return "The plan points at files outside the app's download folder, so nothing was done.";
+        if (plan.Operation is InstallOperation.Update or InstallOperation.Repair) return null; // the loading name comes from the manifest
+        if (plan.ProxyName is null || !OptiScalerInstaller.ProxyNames.Contains(plan.ProxyName, StringComparer.OrdinalIgnoreCase))
+            return "The plan has an unknown loading name, so nothing was done.";
+        return null;
+    }
+
+    private static void TryDelete(string path)
+    {
+        try { File.Delete(path); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+    }
+}

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Application
+    x:Class="Upshift.App.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    RequestedTheme="Light">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- One teal accent from the Upshift logo family (logo teal is #19C3B0), dark enough for white text:
+                 #0E7A6F is 5.2:1 on white (WCAG AA). Applied to the built-in controls too. -->
+            <Color x:Key="SystemAccentColor">#0E7A6F</Color>
+            <Color x:Key="SystemAccentColorLight1">#2E9488</Color>
+            <Color x:Key="SystemAccentColorLight2">#5FB2A8</Color>
+            <Color x:Key="SystemAccentColorLight3">#9ED3CC</Color>
+            <Color x:Key="SystemAccentColorDark1">#0E7A6F</Color>
+            <Color x:Key="SystemAccentColorDark2">#0A5F56</Color>
+            <Color x:Key="SystemAccentColorDark3">#07463F</Color>
+
+            <SolidColorBrush x:Key="UpshiftAccentBrush" Color="#0E7A6F" />
+            <SolidColorBrush x:Key="SubtleTextBrush" Color="#5B5F67" />
+            <SolidColorBrush x:Key="HairlineBrush" Color="#E3E6EB" />
+            <SolidColorBrush x:Key="CardSurfaceBrush" Color="#FFFFFF" />
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>
