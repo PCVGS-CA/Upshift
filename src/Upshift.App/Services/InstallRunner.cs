@@ -13,7 +13,19 @@ public static class InstallRunner
 {
     private const int ErrorCancelled = 1223; // the user said No to the UAC prompt
 
+    private static int _running;
+
+    /// <summary>True while an install or uninstall is running (the app isn't restarted for an update then).</summary>
+    public static bool IsRunning => Volatile.Read(ref _running) > 0;
+
     public static async Task<InstallResult> RunAsync(InstallPlan plan)
+    {
+        Interlocked.Increment(ref _running);
+        try { return await RunCoreAsync(plan); }
+        finally { Interlocked.Decrement(ref _running); }
+    }
+
+    private static async Task<InstallResult> RunCoreAsync(InstallPlan plan)
     {
         var log = new InstallLog(AppServices.DataDir);
         if (OptiScalerInstaller.CanWrite(plan.TargetDir))

@@ -1,0 +1,56 @@
+# Builds and publishes a release when a version tag is pushed, e.g. "git tag v1.0.0" then "git push origin v1.0.0".
+# The tag must match <Version> in Directory.Build.props, and CHANGELOG.md needs a "## [1.0.0]" section: its text
+# becomes the release notes. The release gets the installer, the portable zip and the self-update files.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write # create the release and upload its files
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore tools (vpk)
+        run: dotnet tool restore
+
+      # The previous release's package lets vpk make a small delta update. The very first release has none.
+      - name: Download the previous release
+        continue-on-error: true
+        run: dotnet vpk download github --repoUrl "https://github.com/${{ github.repository }}" --token "${{ secrets.GITHUB_TOKEN }}" --outputDir releases
+
+      - name: Build installer, portable zip and update packages
+        shell: pwsh
+        run: ./build/package.ps1 -OutDir releases -PublishDir publish -Tag "${{ github.ref_name }}"
+
+      - name: Create the GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag.Substring(1)
+          # Only this version's files; an older package downloaded above is left out.
+          $files = @(
+            "releases/Upshift-Setup-x64.exe",
+            "releases/Upshift-Portable-x64.zip",
+            "releases/releases.win.json"
+          ) + (Get-ChildItem releases -Filter "Upshift.App-$version-*.nupkg" | ForEach-Object { $_.FullName })
+          $flags = @("--verify-tag", "--title", "Upshift $version", "--notes-file", "releases/release-notes.md")
+          if ($version.Contains("-")) { $flags += "--prerelease" }
+          gh release create $tag @files @flags
+          if ($LASTEXITCODE -ne 0) { throw "gh release create failed." }

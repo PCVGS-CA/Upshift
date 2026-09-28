@@ -31,7 +31,7 @@ public sealed partial class MainWindow : Window
         AppWindow.Resize(new SizeInt32(1440, 920));
 
         // Window and taskbar icon, and the logo in the title bar, from the Assets folder next to Upshift.exe.
-        var assets = Path.Combine(AppContext.BaseDirectory, "Assets");
+        var assets = AppInfo.AssetsDir;
         AppWindow.SetIcon(Path.Combine(assets, "Upshift.ico"));
         TitleBarLogo.Source = new Microsoft.UI.Xaml.Media.Imaging.SvgImageSource(new Uri(Path.Combine(assets, "Upshift.svg")));
 
@@ -39,7 +39,30 @@ public sealed partial class MainWindow : Window
         _ = ShowGpuAsync();
         // The "catalogUrl" catalog and, at most every 6 hours, the release check (both in the background).
         _ = Task.Run(Services.GameUpdates.StartupAsync);
+
+        // A newer Upshift, when "Check for updates automatically" is on (never downloaded until the user chooses).
+        Services.AppUpdates.Changed += () => DispatcherQueue.TryEnqueue(ShowAppUpdate);
+        AppUpdateBar.Closed += (_, _) => _appUpdateBarDismissed = true;
+        _ = Task.Run(Services.AppUpdates.StartupAsync);
     }
+
+    private bool _appUpdateBarDismissed;
+
+    private void ShowAppUpdate()
+    {
+        var state = Services.AppUpdates.State;
+        if (state is not (Services.AppUpdateState.Available or Services.AppUpdateState.Downloading))
+        {
+            AppUpdateBar.IsOpen = false;
+            return;
+        }
+        AppUpdateBar.Title = "Update for Upshift";
+        AppUpdateBar.Message = Services.AppUpdates.Message;
+        if (AppUpdateBar.ActionButton is Button button) button.IsEnabled = state == Services.AppUpdateState.Available;
+        if (!_appUpdateBarDismissed) AppUpdateBar.IsOpen = true;
+    }
+
+    private async void RestartToUpdate_Click(object sender, RoutedEventArgs e) => await Services.AppUpdates.DownloadAndRestartAsync();
 
     private async Task ShowGpuAsync()
     {

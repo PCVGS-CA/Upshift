@@ -40,7 +40,7 @@
                 <TextBlock Text="Updates" FontWeight="SemiBold" />
                 <ToggleSwitch x:Name="AutoCheckSwitch" Header="Check for updates automatically" />
                 <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
-                           Text="At start-up, at most every 6 hours, the app reads each component's release list on GitHub. Nothing is installed into games unless you choose to update them." />
+                           Text="At start-up, Upshift checks GitHub for a newer version of itself and, at most every 6 hours, reads each component's release list. Nothing is installed into games unless you choose to update them, and Upshift only updates itself when you choose Restart to update." />
                 <TextBlock Text="Catalog address (catalogUrl)" Margin="0,6,0,0" />
                 <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
                            Text="Optional. When set, the catalog at this address replaces the built-in one if it's valid and newer. Leave it empty to use the built-in catalog." />
@@ -95,6 +95,14 @@
                             <TextBlock x:Name="AboutVersionText" FontSize="12" Foreground="{StaticResource SubtleTextBrush}" />
                             <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
                                        Text="Upshift is a free, unofficial tool. It isn't made by or affiliated with the OptiScaler team, NVIDIA, AMD or Intel. Everything it installs is downloaded from each project's official GitHub page." />
+                            <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,10,0,0">
+                                <Button x:Name="CheckAppUpdateButton" Content="Check for app updates" Click="CheckAppUpdate_Click" />
+                                <Button x:Name="RestartToUpdateButton" Content="Restart to update" Visibility="Collapsed"
+                                        Style="{StaticResource AccentButtonStyle}" Click="RestartToUpdate_Click" />
+                                <HyperlinkButton x:Name="ReleasesLink" Content="Releases on GitHub" Visibility="Collapsed" />
+                            </StackPanel>
+                            <TextBlock x:Name="AppUpdateText" FontSize="12" Foreground="{StaticResource SubtleTextBrush}"
+                                       TextWrapping="Wrap" />
                         </StackPanel>
                     </Grid>
                 </Border>

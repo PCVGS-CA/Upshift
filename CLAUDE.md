@@ -25,10 +25,20 @@ Run from the folder containing `Upshift.sln`:
 Output: `src\Upshift.App\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\Upshift.exe`. The build must finish with no
 errors and no warnings.
 
+- **Release packages:** `powershell -ExecutionPolicy Bypass -File build\package.ps1 -OutDir <dir> -PublishDir <dir>`
+  (defaults `releases\` and `publish\`, both git-ignored; use the scratchpad when testing). It runs `dotnet publish`
+  (Release x64, self-contained, not single-file), then `vpk pack` (Velopack, pinned in `dotnet-tools.json`), and
+  leaves `Upshift-Setup-x64.exe`, `Upshift-Portable-x64.zip`, `Upshift.App-<v>-full.nupkg`, `releases.win.json` and
+  `release-notes.md`.
+  - `EnableMsixTooling` must stay `true` in `Upshift.App.csproj`. Without it, `dotnet publish` leaves out
+    `Upshift.pri` and the compiled XAML, and the published app crashes at start in `Microsoft.UI.Xaml.dll`
+    (0xc000027b).
 - If the user has Visual Studio debugging Upshift, the Debug output is locked. Build to another folder with
   `"/p:OutDir=<project>\src\Upshift.App\bin\x64\Verify\"`, and delete that folder afterwards, after asking.
 - **Smart App Control is on.** It has blocked a freshly built `Upshift.dll` in that other folder ("An Application
-  Control policy has blocked this file", Code Integrity event 3077). Never change that setting; tell the user.
+  Control policy has blocked this file", Code Integrity event 3077). On 2026-09-28 it allowed the first
+  `Upshift-Setup-x64.exe`, then blocked the rebuilt one. Never change that setting or work around a block; tell the
+  user.
 
 ## Project layout and key files
 
@@ -56,9 +66,26 @@ errors and no warnings.
     - `IniFile.cs`.
   - `Launch/GameLauncher.cs`: Play through each store; never elevated.
   - `Wiki/`: PCGamingWiki (MediaWiki API, 30-day cache) and the OptiScaler wiki (compatibility list and game pages).
-  - `Services/`: library cache, settings, data migration.
+  - `Services/`: library cache, settings, data migration, and `AppLocations`. `AppLocations` holds the Velopack
+    package id `Upshift.App`, `ExeDir` (from `Environment.ProcessPath`, never `AppContext.BaseDirectory`) and the
+    check that the program and data folders never overlap.
+- **Version:** set only in `Directory.Build.props`. `CHANGELOG.md` needs a matching `## [x.y.z]` section, which
+  becomes the release notes.
+- **Release workflow:** `.github/workflows/release.yml` runs on a `v*.*.*` tag push. It checks the tag against the
+  version, runs `build\package.ps1`, and runs `gh release create` with the Setup, the portable zip, this version's
+  nupkg(s) and `releases.win.json`.
+- **Program folder (installed):** `%LocalAppData%\Upshift.App` (`current\`, `packages\`, `Update.exe`). There's a
+  Start menu shortcut, no desktop shortcut, and the uninstall entry is at `HKCU\...\Uninstall\Upshift.App`. The
+  portable zip has `Upshift.exe` (a Velopack stub), `Update.exe`, `.portable` and `current\`.
 - `src/Upshift.App`: WinUI app.
-  - `AppServices.cs`: shared services.
+  - `Program.cs`: the entry point (`DISABLE_XAML_GENERATED_MAIN`). It runs Velopack first (skipped for `--apply`),
+    including the uninstall hook that asks whether to delete the data folder (No by default, closes itself after
+    25 s). It also refuses to start if the program folder and data folder overlap.
+  - `AppServices.cs`: shared services. `AppInfo` holds the version (informational version), `RepoUrl` and
+    `AssetsDir`.
+  - `Services/AppUpdates.cs`: Upshift's own updates (Velopack `GithubSource` on `AppInfo.RepoUrl`). It checks at
+    start-up when "Check for updates automatically" is on, and from Settings > About. It downloads only on
+    "Restart to update", and not while an install or game update is running.
   - `Services/InstallRunner.cs`: runs installs in-process, or through a UAC helper (`Upshift.exe --apply plan.json`)
     for folders like Program Files.
   - `Services/GameUpdates.cs`: update, undo and repair for games, plus the start-up check.
@@ -122,6 +149,13 @@ errors and no warnings.
   - "Updated by Upshift" rows with a chip arrow.
   - A dated "Changes Upshift made to this game" list.
   - README.md and .gitignore.
+- **Installer and self-updates (2026-09-28):**
+  - Velopack 1.2.158: installer, portable zip, uninstall question, and self-updates from GitHub Releases.
+  - "Check for app updates" and "Restart to update" in Settings > About, plus an "Update for Upshift" bar in the
+    main window.
+  - Version 1.0.0 set in `Directory.Build.props`. `CHANGELOG.md` and the release workflow added.
+  - `Environment.ProcessPath` for the app's own folder.
+  - The workflow has never run, and no tag or release exists yet. The user will publish the first one.
 - **Git:**
   - Branch `main`, committed as "Upshift: phase 1 and 2 so far", then "Add project notes" (CLAUDE.md).
   - The commit identity is set for this repo only: `PCVGS <335109779+PCVGS-CA@users.noreply.github.com>`. No global
@@ -141,13 +175,30 @@ errors and no warnings.
    and their asset patterns are already in the catalog. Several are marked `verifyBeforeRelease`: check which files
    inside each download are the right DLLs.
 2. **DLSS 5 support:** the OptiScaler DLSSNR fork, the AMD-NR fork and its runtime, and `NeuralSelector`.
-3. **GitHub self-updates** for Upshift itself.
+3. **Code signing** for the installer and app (Azure Trusted Signing or a certificate): `vpk pack` takes
+   `--signParams` / `--azureTrustedSignFile`. Unsigned files trigger SmartScreen and can be blocked by Smart App
+   Control.
 
 ## Known open items
 
 - Filter out REDlauncher / REDprelauncher and similar launchers. Play runs the store's reported exe, and for
   The Witcher 3 GOG reports the launcher.
 - Plain-English help text for the DLSS models (the dropdown descriptions and preset notes).
+- Installer test (2026-09-28), results:
+  - Tested:
+    - Setup installs per user without admin, with a Start menu shortcut and an uninstall entry.
+    - Uninstall shows the question, removes the program folder, shortcut and registry entry, and leaves the data
+      folder and the game folders hash-identical (the 25 s timeout path; no button was pressed).
+    - The published build (the same files as `current\`) finds the existing data (22 games, covers, data path),
+      and About shows 1.0.0.
+  - Not tested, because Smart App Control blocked the rebuilt Setup:
+    - The installed app actually starting.
+    - The uninstall question's "No" and "Yes" buttons.
+    - The portable zip.
+    - A real self-update. This needs two releases, and the updater can't read releases while the repo is private.
+      Velopack's `GithubSource` has no token, so the repo or its releases must be public.
+- Size: about 94 MB Setup, 212 MB installed. Windows App SDK 1.8's ML runtime (onnxruntime and DirectML, 39 MB)
+  comes in with the `Microsoft.WindowsAppSDK` metapackage. Referencing only the needed 1.8 sub-packages could drop it.
 - Untested:
   - Play for EA, Ubisoft, Battle.net, Heroic and Xbox.
   - Play being disabled while a game is busy, and the launch-error box.
@@ -176,6 +227,16 @@ errors and no warnings.
     `w3-ini-093.ini`.
   - Backups: `catalog.before-updates.json`, `LibraryPage.xaml.orig`.
   - The DLSS programming guide (`dlss_guide.pdf` / `.txt`).
+- **Claude's scratch folder for the installer session** (2026-09-28), all disposable:
+  `%LocalAppData%\Temp\claude\C--Projects-Upshift\dac6047e-ca5e-4672-af97-e014e9bd2035\scratchpad\`.
+  - `publish\` (212 MB) and `releases\` (about 270 MB).
+  - Scripts: `snap.ps1` (hashes of the data folder and both game folders), `uninstall.ps1` (runs the registry
+    uninstall string and answers the question), `ui.ps1` (copied from the old scratch folder).
+  - Snapshots (`*.json`) and screenshots (`t1-library.png`, `t2-about.png`).
+- **Installer leftovers:**
+  - `%TEMP%\velopack\` (Velopack's own temp folder).
+  - The vpk 1.2.158 tool, in the NuGet cache (`%UserProfile%\.nuget\packages\vpk`).
+  - `%LocalAppData%\Upshift.App` was removed by the uninstall test and no longer exists.
 - **App data created by tests** in `%LocalAppData%\Upshift`: `components\optiscaler-v0.9.3\` (downloaded for the
   update test) and `launch-options.json` (now empty). The rest is the app's normal data.
 - **Claude's memory for this project:**

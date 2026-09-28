@@ -8,6 +8,7 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="48" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -24,9 +25,17 @@
                        FontSize="13" FontWeight="SemiBold" />
         </Grid>
 
+        <!-- Shown when the start-up check finds a newer Upshift (Settings > About has the same button). -->
+        <InfoBar x:Name="AppUpdateBar" Grid.Row="1" Margin="16,0,16,8" IsOpen="False" Severity="Informational"
+                 AutomationProperties.Name="App update">
+            <InfoBar.ActionButton>
+                <Button Content="Restart to update" Click="RestartToUpdate_Click" />
+            </InfoBar.ActionButton>
+        </InfoBar>
+
         <NavigationView
             x:Name="Nav"
-            Grid.Row="1"
+            Grid.Row="2"
             PaneDisplayMode="Left"
             OpenPaneLength="240"
             IsPaneToggleButtonVisible="False"

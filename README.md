@@ -7,6 +7,21 @@ release into a game: with a backup of every file it touches, a record of every c
 > **Upshift is a free, unofficial tool. It isn't made by or affiliated with the OptiScaler team, NVIDIA, AMD or
 > Intel.** Everything it installs is downloaded from each project's own GitHub releases; nothing is re-hosted.
 
+## Install
+
+Download from the [latest release](https://github.com/PCVGS-CA/Upshift/releases/latest):
+
+- **`Upshift-Setup-x64.exe`**: installs Upshift for your Windows account (no admin rights needed) into
+  `%LocalAppData%\Upshift.App`, with a Start menu shortcut. Uninstall it from Windows Settings > Apps; it asks
+  whether to delete your Upshift data as well, and keeps it unless you say yes.
+- **`Upshift-Portable-x64.zip`**: no installer. Unzip it to a folder of its own and run `Upshift.exe`.
+
+Both update themselves: Upshift checks for a new version at start-up (when "Check for updates automatically" is on)
+and in Settings > About, and installs it when you choose **Restart to update**.
+
+The files aren't code-signed yet, so Windows SmartScreen may say "Windows protected your PC" (choose More info >
+Run anyway), and on PCs with Smart App Control turned on, Windows may block them.
+
 ## Screenshots
 
 _Coming soon._
@@ -59,11 +74,25 @@ lookups; everything else works offline.
 
 Or from a Developer Command Prompt: `msbuild Upshift.sln /p:Configuration=Debug /p:Platform=x64`
 
+**To make the installer and portable zip locally:** `powershell -ExecutionPolicy Bypass -File build\package.ps1`
+(output in `releases\`). It uses Velopack's `vpk`, pinned in `dotnet-tools.json`.
+
+## Releasing
+
+1. Set the new version in `Directory.Build.props` (the only place it's set).
+2. Add a `## [x.y.z]` section to `CHANGELOG.md`; it becomes the release notes.
+3. Commit, then push a tag with the same version: `git tag v1.2.3` and `git push origin v1.2.3`.
+
+The [Release workflow](.github/workflows/release.yml) builds Release x64, makes the installer, the portable zip and
+the self-update packages, and publishes them as a GitHub release. It stops if the tag and the version differ.
+
 ## Where it keeps things
 
 Everything Upshift stores lives in `%LocalAppData%\Upshift`: the library cache, settings (including an optional
 SteamGridDB key), cover art, downloaded components, files you supply, wiki caches and `logs\`. None of it is part of
-this repository. In game folders, Upshift only writes the files it installs and its own `.upshift` folder.
+this repository. The installed program is in a separate folder, `%LocalAppData%\Upshift.App`, so uninstalling never
+touches your data unless you ask it to. In game folders, Upshift only writes the files it installs and its own
+`.upshift` folder.
 
 ## Project layout
 
@@ -95,8 +124,9 @@ Upshift downloads, installs or reads information from these projects. All credit
   notes behind "Suggestions for this game".
 
 Built with the [Windows App SDK](https://github.com/microsoft/WindowsAppSDK),
-[CommunityToolkit.Mvvm](https://github.com/CommunityToolkit/dotnet) and
-[SharpCompress](https://github.com/adamhathcock/sharpcompress). NVIDIA DLSS, AMD FidelityFX and Intel XeSS are
+[CommunityToolkit.Mvvm](https://github.com/CommunityToolkit/dotnet),
+[SharpCompress](https://github.com/adamhathcock/sharpcompress) and [Velopack](https://github.com/velopack/velopack)
+(installer and updates). NVIDIA DLSS, AMD FidelityFX and Intel XeSS are
 trademarks of their owners.
 
 ## License

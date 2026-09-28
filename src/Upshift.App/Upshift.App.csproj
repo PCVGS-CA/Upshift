@@ -7,7 +7,7 @@
     <RootNamespace>Upshift.App</RootNamespace>
     <AssemblyName>Upshift</AssemblyName>
     <Product>Upshift</Product>
-    <Version>1.0.0</Version>
+    <!-- The version is set in Directory.Build.props at the top of the repo. -->
     <ApplicationIcon>Assets\Upshift.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>x64</Platforms>
@@ -16,17 +16,23 @@
     <UseWinUI>true</UseWinUI>
     <!-- Unpackaged: runs as a normal .exe, no MSIX install needed. -->
     <WindowsPackageType>None</WindowsPackageType>
+    <!-- Without it, "dotnet publish" leaves out Upshift.pri and the compiled XAML (.xbf), and the app can't start. -->
+    <EnableMsixTooling>true</EnableMsixTooling>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <SelfContained>true</SelfContained>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
+    <!-- Main is in Program.cs, so Velopack's install/uninstall hooks run before WinUI starts. -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260921001" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.4654" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
+    <!-- Installer, uninstaller and self-updates from GitHub Releases. -->
+    <PackageReference Include="Velopack" Version="1.2.158" />
   </ItemGroup>
 
   <ItemGroup>

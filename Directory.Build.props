@@ -1,0 +1,12 @@
+<Project>
+  <!--
+    Upshift's version, in one place. The About section, the HTTP User-Agent, the Velopack installer and the GitHub
+    release all read it from here. To release, change it, add a matching "## [x.y.z]" section to CHANGELOG.md, and
+    push a tag "vx.y.z" (the release workflow refuses a tag that doesn't match).
+  -->
+  <PropertyGroup>
+    <Version>1.0.0</Version>
+    <!-- Keeps the version in About as "1.0.0" rather than "1.0.0+<commit>". -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+</Project>

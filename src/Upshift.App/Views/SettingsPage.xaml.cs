@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
+using Upshift.App.Services;
 using Upshift.Core.Services;
 using Upshift.Core.UserFiles;
 using Windows.Storage.Pickers;
@@ -23,9 +24,32 @@ public sealed partial class SettingsPage : Page
         BuildUserFileRows();
 
         AboutLogo.Source = new Microsoft.UI.Xaml.Media.Imaging.SvgImageSource(
-            new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "Upshift.svg")));
+            new Uri(Path.Combine(AppInfo.AssetsDir, "Upshift.svg")));
         AboutVersionText.Text = $"Version {AppInfo.Version}";
+        ReleasesLink.NavigateUri = new Uri(AppInfo.RepoUrl + "/releases");
+        ShowAppUpdate();
+        AppUpdates.Changed += AppUpdates_Changed;
+        Unloaded += (_, _) => AppUpdates.Changed -= AppUpdates_Changed;
     }
+
+    // ---------------- App updates (About) ----------------
+
+    private void AppUpdates_Changed() => DispatcherQueue.TryEnqueue(ShowAppUpdate);
+
+    private void ShowAppUpdate()
+    {
+        var state = AppUpdates.State;
+        AppUpdateText.Text = AppUpdates.Message;
+        AppUpdateText.Visibility = AppUpdates.Message.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        CheckAppUpdateButton.IsEnabled = state is not (AppUpdateState.Checking or AppUpdateState.Downloading);
+        RestartToUpdateButton.Visibility = state is AppUpdateState.Available or AppUpdateState.Downloading ? Visibility.Visible : Visibility.Collapsed;
+        RestartToUpdateButton.IsEnabled = state == AppUpdateState.Available;
+        ReleasesLink.Visibility = state == AppUpdateState.NotInstalled ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private async void CheckAppUpdate_Click(object sender, RoutedEventArgs e) => await AppUpdates.CheckAsync();
+
+    private async void RestartToUpdate_Click(object sender, RoutedEventArgs e) => await AppUpdates.DownloadAndRestartAsync();
 
     // ---------------- Optional files you supply ----------------
 

@@ -8,6 +8,8 @@ x86/
 [Aa]rm64/
 [Ll]og/
 [Pp]ublish/
+# Output of build\package.ps1 (installer, portable zip, update packages).
+/releases/
 AppPackages/
 BundleArtifacts/
 *.msix

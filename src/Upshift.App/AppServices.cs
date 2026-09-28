@@ -1,3 +1,4 @@
+using System.Reflection;
 using Upshift.Core.Artwork;
 using Upshift.Core.Catalog;
 using Upshift.Core.Components;
@@ -116,8 +117,16 @@ public static class DataFolder
 /// <summary>The app's name and version, e.g. for the About section and the HTTP User-Agent ("Upshift/1.0.0").</summary>
 public static class AppInfo
 {
+    /// <summary>From Directory.Build.props, e.g. "1.0.0" or "1.1.0-beta.1".</summary>
     public static string Version { get; } =
-        typeof(AppInfo).Assembly.GetName().Version is { } v ? $"{v.Major}.{v.Minor}.{v.Build}" : "1.0.0";
+        typeof(AppInfo).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0]
+        ?? "1.0.0";
 
     public static string UserAgent => $"Upshift/{Version}";
+
+    /// <summary>Where Upshift's releases are published; the installer and the app's own updates come from here.</summary>
+    public const string RepoUrl = "https://github.com/PCVGS-CA/Upshift";
+
+    /// <summary>The Assets folder next to Upshift.exe (logo and icons).</summary>
+    public static string AssetsDir => Path.Combine(Core.Services.AppLocations.ExeDir, "Assets");
 }
