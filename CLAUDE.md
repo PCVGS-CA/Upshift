@@ -435,7 +435,7 @@ errors and no warnings.
     - Scripts: `preview.ps1`, `pickfile.ps1`, `dlss5set.ps1`.
     - Snapshots D0–D4 and screenshots `p0`–`p6`, `r1`, `w*`, `u-updates`.
   - App data: `components\optiscaler-dlssnr-v0.2.0-dlssnr\` (downloaded for the switch test).
-  - From the 1.0 release session: `rel10\` (about 510 MB: publish, releases and the extracted portable copy),
+  - From the 1.0 release session: `rel10\` (about 545 MB: publish, releases and the extracted portable copy),
     `rel-*.png` screenshots and `rel-*.json` snapshots.
 - **Outside the scratch folder (1.0 release session):**
   - `%USERPROFILE%\Documents\Upshift-history-backup-20260929.bundle` (1.9 MB): the full history before the rewrite.
