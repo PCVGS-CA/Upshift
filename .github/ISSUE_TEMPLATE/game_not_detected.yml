@@ -1,0 +1,63 @@
+name: Game not detected / wrong info
+description: A game Upshift doesn't find, or shows wrong details for (upscalers, versions, API, engine, exe, anti-cheat, cover).
+title: "[Game] "
+labels: ["game detection"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Upshift version
+      description: Shown in Settings > About, e.g. 1.0.0.
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: input
+    id: game
+    attributes:
+      label: Game
+      description: The game's full name, and its version if you know it.
+    validations:
+      required: true
+  - type: dropdown
+    id: store
+    attributes:
+      label: Store
+      options:
+        - Steam
+        - Epic Games
+        - GOG
+        - Xbox app / Game Pass
+        - EA app
+        - Ubisoft Connect
+        - Battle.net
+        - Heroic
+        - itch.io
+        - Other / not from a store
+    validations:
+      required: true
+  - type: dropdown
+    id: problem
+    attributes:
+      label: What's wrong
+      options:
+        - The game isn't found at all
+        - Wrong upscalers or versions
+        - Wrong exe, API (DirectX / Vulkan) or engine
+        - Anti-cheat shown wrongly (or missing)
+        - Wrong name or cover art
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: What Upshift shows, and what's actually right. A screenshot of the game's details pane helps.
+    validations:
+      required: true
+  - type: input
+    id: folder
+    attributes:
+      label: Install folder (optional)
+      description: Where the game is installed. Replace your Windows user name if it's in the path.
+      placeholder: "D:\\SteamLibrary\\steamapps\\common\\GameName"

@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: OptiScaler itself (crashes or glitches in a game with OptiScaler)
+    url: https://github.com/optiscaler/OptiScaler/issues
+    about: Problems with how OptiScaler behaves in a game belong with the OptiScaler project. Upshift only installs it.

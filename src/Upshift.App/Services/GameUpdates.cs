@@ -252,16 +252,18 @@ public static class GameUpdates
     // ---------------- start-up ----------------
 
     /// <summary>
-    /// At start-up: the "catalogUrl" catalog (if set), then, when automatic checks are on and the last one was 6 or more
-    /// hours ago, a release check and downloads for components set to "Keep updated". Offline just means nothing new.
+    /// At start-up: the online catalog (Upshift's on GitHub, or the "catalogUrl" address), used from the next start when
+    /// it's valid and newer; then, when automatic checks are on and the last one was 6 or more hours ago, a release check
+    /// and downloads for components set to "Keep updated". Offline just means nothing new (the built-in catalog stays).
     /// </summary>
     public static async Task StartupAsync()
     {
         try
         {
-            var url = AppServices.Settings.Current.CatalogUrl;
-            if (!string.IsNullOrWhiteSpace(url))
-                AppServices.CatalogStatus = await RemoteCatalog.RefreshAsync(AppServices.DataDir, url, AppServices.BuiltInCatalog, AppInfo.UserAgent, CancellationToken.None);
+            var settings = AppServices.Settings.Current;
+            var status = await RemoteCatalog.RefreshAsync(AppServices.DataDir, settings.EffectiveCatalogUrl, AppServices.BuiltInCatalog, AppInfo.UserAgent, CancellationToken.None);
+            // Upshift's own catalog only needs a mention when it's actually in use; a custom address always gets its status.
+            if (!string.IsNullOrWhiteSpace(settings.CatalogUrl) || AppServices.UsingRemoteCatalog) AppServices.CatalogStatus = status;
 
             if (!AppServices.Updates.AutoCheckDue) return;
             await AppServices.Updates.CheckAsync(CancellationToken.None);

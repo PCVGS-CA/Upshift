@@ -7,9 +7,10 @@ release into a game: with a backup of every file it touches, a record of every c
 > **Upshift is a free, unofficial tool. It isn't made by or affiliated with the OptiScaler team, NVIDIA, AMD or
 > Intel.** Everything it installs is downloaded from each project's own GitHub releases; nothing is re-hosted.
 
-## Install
+## Download
 
-Download from the [latest release](https://github.com/PCVGS-CA/Upshift/releases/latest):
+Get Upshift from the [Releases page](https://github.com/PCVGS-CA/Upshift/releases). The
+[latest release](https://github.com/PCVGS-CA/Upshift/releases/latest) has two downloads:
 
 - **`Upshift-Setup-x64.exe`**: installs Upshift for your Windows account (no admin rights needed) into
   `%LocalAppData%\Upshift.App`, with a Start menu shortcut. Uninstall it from Windows Settings > Apps; it asks
@@ -19,18 +20,25 @@ Download from the [latest release](https://github.com/PCVGS-CA/Upshift/releases/
 Both update themselves: Upshift checks for a new version at start-up (when "Check for updates automatically" is on)
 and in Settings > About, and installs it when you choose **Restart to update**.
 
-The files aren't code-signed yet, so Windows SmartScreen may say "Windows protected your PC" (choose More info >
-Run anyway), and on PCs with Smart App Control turned on, Windows may block them.
+## First launch
+
+Upshift isn't code-signed yet, so the first time you run it Windows SmartScreen may say **"Windows protected your
+PC"**. Click **More info**, then **Run anyway**. On PCs with Smart App Control turned on, Windows may block it
+outright.
 
 ## Screenshots
 
-_Coming soon._
+**Library:** every game on the PC, with the upscalers each one ships with.
 
-<!--
 ![Library](docs/screenshots/library.png)
+
+**A game's details:** what's inside the game, suggestions, OptiScaler and its options.
+
 ![Game details](docs/screenshots/details.png)
+
+**Updates:** new versions of OptiScaler and the upscaler files, for all your games at once.
+
 ![Updates](docs/screenshots/updates.png)
--->
 
 ## What it does
 
@@ -106,7 +114,10 @@ touches your data unless you ask it to. In game folders, Upshift only writes the
 - `src/Upshift.App`: the WinUI 3 app (Library, Updates and Settings pages).
 
 `catalog.json` holds everything that changes more often than the app: pinned versions, asset patterns, DLSS names
-and the "Which one should I pick?" text. A newer catalog can be loaded from the "Catalog address" setting.
+and the "Which one should I pick?" text. At start-up Upshift downloads the copy on this repository's `main` branch
+and uses it from the next start when it's valid and newer than the one built into the app, so fixes reach everyone
+without an app update. When it can't be reached, the built-in copy is used. Settings > "Catalog address" can point
+to another catalog instead.
 
 ## Credits
 
@@ -133,6 +144,17 @@ Built with the [Windows App SDK](https://github.com/microsoft/WindowsAppSDK),
 (installer and updates). NVIDIA DLSS, AMD FidelityFX and Intel XeSS are
 trademarks of their owners.
 
+## Reporting a problem
+
+Use [Issues](https://github.com/PCVGS-CA/Upshift/issues/new/choose): "Bug report" for something that went wrong, or
+"Game not detected / wrong info" for a game Upshift misses or describes wrongly. Upshift keeps a log of every
+install, update, undo and repair in `%LocalAppData%\Upshift\logs`; attaching the day's log helps a lot.
+
 ## License
 
-Not chosen yet.
+Upshift is free and open source under the [MIT License](LICENSE). Copyright (c) 2026 PCVGS.
+
+---
+
+<sub>Upshift is provided as-is, without warranty. Changing game files is at your own risk. Never use it with online
+or anti-cheat games. Made by PCVGS, [pcvgs.com](https://pcvgs.com).</sub>

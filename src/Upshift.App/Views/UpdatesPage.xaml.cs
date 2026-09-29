@@ -100,7 +100,7 @@ public sealed partial class UpdatesPage : Page
 
         CatalogText.Text = AppServices.CatalogStatus
                            ?? (AppServices.UsingRemoteCatalog
-                               ? $"Using the catalog from your catalog address (updated {AppServices.Catalog.Updated})."
+                               ? $"Using the online catalog (updated {AppServices.Catalog.Updated})."
                                : $"Using the built-in catalog (updated {AppServices.Catalog.Updated}).");
 
         BuildGames(candidates);

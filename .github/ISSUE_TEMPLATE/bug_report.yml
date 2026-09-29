@@ -1,0 +1,67 @@
+name: Bug report
+description: Something went wrong in Upshift (a crash, an error, an install or update that didn't work).
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. Please don't use Upshift with online or anti-cheat games; it blocks them, and problems with them won't be looked at.
+  - type: input
+    id: version
+    attributes:
+      label: Upshift version
+      description: Shown in Settings > About, e.g. 1.0.0.
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: input
+    id: gpu
+    attributes:
+      label: Graphics card
+      description: Shown at the top of Settings, e.g. NVIDIA GeForce RTX 4070. The driver version helps too.
+      placeholder: "NVIDIA GeForce RTX 4070, driver 32.0.15.xxxx"
+    validations:
+      required: true
+  - type: input
+    id: game
+    attributes:
+      label: Game
+      description: The game it happened with, if any.
+      placeholder: "The Witcher 3: Wild Hunt"
+  - type: dropdown
+    id: store
+    attributes:
+      label: Store
+      description: Where the game comes from.
+      options:
+        - Steam
+        - Epic Games
+        - GOG
+        - Xbox app / Game Pass
+        - EA app
+        - Ubisoft Connect
+        - Battle.net
+        - Heroic
+        - itch.io
+        - Other / added by hand
+        - Not about a game
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead. Screenshots are welcome.
+      placeholder: |
+        1. Selected the game and clicked Install OptiScaler
+        2. ...
+        Expected: ...
+        What happened: ...
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: |
+        Upshift writes a log of every install, update, undo and repair to `%LocalAppData%\Upshift\logs` (paste that into the Explorer address bar). Attach or paste the file for the day it happened, `install-yyyy-MM-dd.log`. Remove anything you'd rather not share, such as your Windows user name in paths.
+      render: text

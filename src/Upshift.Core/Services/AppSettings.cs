@@ -12,8 +12,18 @@ public sealed class AppSettings
     /// <summary>Check GitHub for new releases at start-up (at most every 6 hours).</summary>
     public bool AutoCheckUpdates { get; set; } = true;
 
-    /// <summary>Optional address of a newer catalog.json. Empty means the built-in catalog is used.</summary>
+    /// <summary>Optional address of another catalog.json. Empty means Upshift's online catalog (DefaultCatalogUrl).</summary>
     public string CatalogUrl { get; set; } = "";
+
+    /// <summary>
+    /// Upshift's own catalog on GitHub (catalog.json on main), used when CatalogUrl is empty, so fixes and new entries
+    /// reach everyone with a commit. When it can't be reached, or isn't newer, the built-in copy is used.
+    /// </summary>
+    public const string DefaultCatalogUrl = "https://raw.githubusercontent.com/PCVGS-CA/Upshift/main/src/Upshift.Core/Catalog/catalog.json";
+
+    /// <summary>The address actually used: the user's own, or Upshift's online catalog.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string EffectiveCatalogUrl => string.IsNullOrWhiteSpace(CatalogUrl) ? DefaultCatalogUrl : CatalogUrl.Trim();
 
     public DateTime? LastUpdateCheckUtc { get; set; }
 

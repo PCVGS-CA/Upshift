@@ -60,7 +60,7 @@ public static class RemoteCatalog
             if (response.StatusCode == HttpStatusCode.NotModified && previous is not null)
                 return Describe(previous.Json, builtIn, "not modified");
             if (!response.IsSuccessStatusCode)
-                return $"The catalog address answered HTTP {(int)response.StatusCode}, so the built-in catalog is used.";
+                return $"The online catalog answered HTTP {(int)response.StatusCode}, so the built-in catalog is used.";
 
             var json = await response.Content.ReadAsStringAsync(ct);
             if (Validate(json, builtIn, out var catalog) is { } problem)
@@ -80,14 +80,14 @@ public static class RemoteCatalog
         }
         catch (TaskCanceledException) when (!ct.IsCancellationRequested)
         {
-            return "The catalog address didn't answer in time, so the built-in catalog is used.";
+            return "The online catalog didn't answer in time, so the built-in catalog is used.";
         }
     }
 
     private static string Describe(string json, UpscalerCatalog builtIn, string how) =>
         Validate(json, builtIn, out var catalog) is null && IsNewer(catalog!, builtIn)
-            ? $"Catalog from your address ({catalog!.Updated}): {how}."
-            : $"Catalog from your address: {how}; the built-in catalog is newer and is used.";
+            ? $"Online catalog ({catalog!.Updated}): {how}."
+            : $"Online catalog: {how}; the built-in catalog is newer and is used.";
 
     /// <summary>Null when the JSON is a usable catalog; otherwise what's wrong with it.</summary>
     public static string? Validate(string json, UpscalerCatalog builtIn, out UpscalerCatalog? catalog)

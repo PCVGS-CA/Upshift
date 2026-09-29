@@ -23,7 +23,9 @@ public sealed partial class SettingsPage : Page
         AutoCheckSwitch.Toggled += AutoCheck_Toggled;
         CatalogUrlBox.Text = AppServices.Settings.Current.CatalogUrl;
         CatalogStatusText.Text = AppServices.CatalogStatus
-            ?? (AppServices.UsingRemoteCatalog ? "Using the catalog from this address." : "Using the built-in catalog.");
+            ?? (AppServices.UsingRemoteCatalog
+                ? string.IsNullOrWhiteSpace(AppServices.Settings.Current.CatalogUrl) ? "Using Upshift's online catalog." : "Using the catalog from this address."
+                : "Using the built-in catalog (the online one isn't newer or couldn't be reached).");
         BuildUserFileRows();
 
         AboutLogo.Source = new Microsoft.UI.Xaml.Media.Imaging.SvgImageSource(
@@ -399,22 +401,14 @@ public sealed partial class SettingsPage : Page
         var url = CatalogUrlBox.Text.Trim();
         if (url.Length > 0 && !(Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps))
         {
-            CatalogStatusText.Text = "Enter an https:// address, or leave it empty to use the built-in catalog.";
+            CatalogStatusText.Text = "Enter an https:// address, or leave it empty to use Upshift's online catalog.";
             return;
         }
         var settings = AppServices.Settings.Current;
         settings.CatalogUrl = url;
         AppServices.Settings.Save(settings);
-        if (url.Length == 0)
-        {
-            AppServices.CatalogStatus = null;
-            CatalogStatusText.Text = AppServices.UsingRemoteCatalog
-                ? "Saved. The built-in catalog is used from the next start."
-                : "Saved. Using the built-in catalog.";
-            return;
-        }
         CatalogStatusText.Text = "Downloading the catalog…";
-        AppServices.CatalogStatus = await Core.Catalog.RemoteCatalog.RefreshAsync(AppServices.DataDir, url, AppServices.BuiltInCatalog, AppInfo.UserAgent, CancellationToken.None);
+        AppServices.CatalogStatus = await Core.Catalog.RemoteCatalog.RefreshAsync(AppServices.DataDir, settings.EffectiveCatalogUrl, AppServices.BuiltInCatalog, AppInfo.UserAgent, CancellationToken.None);
         CatalogStatusText.Text = AppServices.CatalogStatus;
     }
 

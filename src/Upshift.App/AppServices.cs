@@ -29,16 +29,16 @@ public static class AppServices
 
     public static UpscalerCatalog Catalog { get; } = LoadCatalog();
 
-    /// <summary>True when Catalog is the one downloaded from the "catalogUrl" setting rather than the built-in one.</summary>
+    /// <summary>True when Catalog is the downloaded online one (Upshift's, or the "catalogUrl" address) rather than the built-in one.</summary>
     public static bool UsingRemoteCatalog { get; private set; }
 
     /// <summary>
-    /// The catalog downloaded from the "catalogUrl" setting when it's valid and newer, otherwise the built-in one,
+    /// The online catalog (Upshift's, or the "catalogUrl" address) when it's valid and newer, otherwise the built-in one,
     /// with every web request identifying itself as "Upshift/&lt;version&gt;".
     /// </summary>
     private static UpscalerCatalog LoadCatalog()
     {
-        var remote = RemoteCatalog.LoadIfNewer(DataDir, Settings.Current.CatalogUrl, BuiltInCatalog);
+        var remote = RemoteCatalog.LoadIfNewer(DataDir, Settings.Current.EffectiveCatalogUrl, BuiltInCatalog);
         UsingRemoteCatalog = remote is not null;
         var catalog = remote ?? CatalogLoader.LoadBuiltIn();
         catalog.ArtworkSources.UserAgent = AppInfo.UserAgent;
@@ -59,7 +59,7 @@ public static class AppServices
     /// <summary>Release checks for every catalog component (GitHub, cached with ETags).</summary>
     public static UpdateChecker Updates { get; } = new(Components, Settings, Catalog.Components);
 
-    /// <summary>The last line about the "catalogUrl" catalog, for the Updates page (null when the setting is empty).</summary>
+    /// <summary>The last line about the online catalog, for Settings and the Updates page (null when there's nothing to say).</summary>
     public static string? CatalogStatus { get; set; }
 
     /// <summary>The official OptiScaler entry from the catalog (repo and pinned version).</summary>
