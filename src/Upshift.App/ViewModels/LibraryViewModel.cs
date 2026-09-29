@@ -68,7 +68,30 @@ public sealed partial class LibraryViewModel : ObservableObject
     public bool HasNoGames => GameCount == 0 && !IsBusy;
     public bool IsIdle => !IsBusy;
 
-    /// <summary>0 = All, 1 = Has upscalers, 2 = OptiScaler found, 3 = Blocked, 4 = Has suggestions, 5 = Updates available.</summary>
+    /// <summary>"DLSS 4.5 can be added to 3 of your games", after a new DLSS file finished downloading.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasDlssNotice))]
+    private string dlssNotice = "";
+
+    public bool HasDlssNotice => DlssNotice.Length > 0;
+
+    /// <summary>The DLSS name in the notice ("DLSS 4.5"), kept so the count can be refreshed after updates.</summary>
+    private string? _dlssNoticeName;
+
+    public void DismissDlssNotice()
+    {
+        _dlssNoticeName = null;
+        DlssNotice = "";
+    }
+
+    private void RefreshDlssNotice()
+    {
+        if (_dlssNoticeName is null) return;
+        var count = UpscalerUpdates.DlssCandidates().Count(c => !IsHidden(c.Game.Id));
+        DlssNotice = count == 0 ? "" : $"{_dlssNoticeName} can be added to {count} of your games";
+    }
+
+    /// <summary>0 = All, 1 = Has upscalers, 2 = OptiScaler found, 3 = Blocked, 4 = Has suggestions, 5 = Updates available, 6 = Upscaler update available.</summary>
     public int FilterIndex
     {
         get => _filterIndex;
@@ -90,7 +113,55 @@ public sealed partial class LibraryViewModel : ObservableObject
         GameUpdates.BusyChanged += () => _dispatcher.TryEnqueue(() => OnPropertyChanged(nameof(CanPlaySelected)));
         // A game updated, undone or repaired from the Updates page.
         GameUpdates.LibraryChanged += () => _dispatcher.TryEnqueue(() => SetGames(AppServices.Library.Current));
+        AppServices.HiddenGamesChanged += () => _dispatcher.TryEnqueue(() =>
+        {
+            SetGames(AppServices.Library.Current);
+            if (StatusText.Contains(" is hidden.", StringComparison.Ordinal)) StatusText = string.Empty;
+        });
+        // A newer DLSS file finished downloading: say how many games could use it.
+        UpscalerUpdates.DlssDownloaded += source => _dispatcher.TryEnqueue(() =>
+        {
+            _dlssNoticeName = Core.Catalog.DlssNames.Name(AppServices.Catalog.DlssVersionNames, source.Version) ?? $"DLSS {source.Version}";
+            RefreshDlssNotice();
+        });
     }
+
+    // ---------------- Hidden games ----------------
+
+    private static bool IsHidden(string gameId) => AppServices.Settings.Current.HiddenGames.ContainsKey(gameId);
+
+    /// <summary>Takes the game out of the Library; Settings > "Show hidden games" brings it back.</summary>
+    public void HideGame(GameCardViewModel card)
+    {
+        try
+        {
+            var settings = AppServices.Settings.Current;
+            settings.HiddenGames[card.Info.Id] = card.Name;
+            AppServices.Settings.Save(settings);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            StatusText = $"Couldn't hide {card.Name}: {ex.Message}";
+            return;
+        }
+        if (Selected == card) Selected = null;
+        SetGames(AppServices.Library.Current);
+        StatusText = $"{card.Name} is hidden. Settings > Hidden games brings it back.";
+    }
+
+    // ---------------- Upscaler files ----------------
+
+    /// <summary>Updates the listed files (all that can be when null), downloading them first if needed.</summary>
+    public Task<InstallResult?> UpdateUpscalerFilesAsync(GameCardViewModel card, IReadOnlyCollection<string>? paths) =>
+        RunGameUpdateAsync(card, p => UpscalerUpdates.UpdateAsync(card.Info, paths, p));
+
+    /// <summary>"Update DLSS": the game's DLSS Super Resolution and Ray Reconstruction files.</summary>
+    public Task<InstallResult?> UpdateDlssAsync(GameCardViewModel card) =>
+        UpdateUpscalerFilesAsync(card, UpscalerUpdates.DlssPaths(card.Info));
+
+    /// <summary>Puts back every original Upshift replaced in this game.</summary>
+    public Task<InstallResult?> RestoreUpscalerFilesAsync(GameCardViewModel card) =>
+        RunGameUpdateAsync(card, p => UpscalerUpdates.RestoreAsync(card.Info, null, p));
 
     partial void OnSearchTextChanged(string value) => ApplyFilter();
 
@@ -480,10 +551,11 @@ public sealed partial class LibraryViewModel : ObservableObject
     {
         var selectedId = Selected?.Info.Id;
         _all.Clear();
-        _all.AddRange(games.Select(g => new GameCardViewModel(g)));
+        _all.AddRange(games.Where(g => !IsHidden(g.Id)).Select(g => new GameCardViewModel(g)));
         SearchPlaceholder = _all.Count == 1 ? "Search 1 game" : $"Search {_all.Count} games";
         ApplyFilter();
         Selected = selectedId is null ? null : _all.FirstOrDefault(g => g.Info.Id == selectedId);
+        RefreshDlssNotice();
     }
 
     private void ApplyFilter()
@@ -498,6 +570,7 @@ public sealed partial class LibraryViewModel : ObservableObject
                 3 => g.HasAntiCheat,
                 4 => g.HasWikiSuggestions,
                 5 => g.HasUpdate,
+                6 => g.HasUpscalerUpdate,
                 _ => true
             });
 

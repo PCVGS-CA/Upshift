@@ -35,6 +35,12 @@
                                 <FontIcon Glyph="&#xE777;" />
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
+                        <MenuFlyoutSeparator />
+                        <MenuFlyoutItem Text="Hide from library" Tag="{x:Bind}" Click="HideGame_Click">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xED1A;" />
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
                     </MenuFlyout>
                 </StackPanel.ContextFlyout>
                 <Grid Height="196" CornerRadius="8" Background="{x:Bind TileBrush}" Opacity="{x:Bind TileOpacity}">
@@ -50,15 +56,18 @@
                             <ImageBrush ImageSource="{x:Bind Artwork, Mode=OneWay}" Stretch="UniformToFill" />
                         </Border.Background>
                     </Border>
-                    <Border Visibility="{x:Bind HasBadge}" Background="White" CornerRadius="11" Padding="8,2,8,3"
-                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="8">
-                        <TextBlock Text="{x:Bind BadgeText}" FontSize="11" FontWeight="Bold" Foreground="{x:Bind BadgeForeground}" />
-                    </Border>
-                    <!-- "Update" when a newer OptiScaler is available on the user's channel, "Needs repair" when files are missing or changed -->
-                    <Border Visibility="{x:Bind HasStatusBadge, Mode=OneWay}" Background="{StaticResource UpshiftAccentBrush}" CornerRadius="11"
-                            Padding="8,2,8,3" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8">
-                        <TextBlock Text="{x:Bind StatusBadgeText, Mode=OneWay}" FontSize="11" FontWeight="Bold" Foreground="White" />
-                    </Border>
+                    <!-- Badges, stacked at the top left so two never overlap on the narrow card:
+                         "OptiScaler" / "Blocked", then "Needs repair", "Update" (a newer OptiScaler on the user's channel)
+                         or "Upscaler update" (a newer DLSS, FSR or XeSS file can replace one of the game's) -->
+                    <StackPanel HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8" Spacing="4">
+                        <Border Visibility="{x:Bind HasBadge}" Background="White" CornerRadius="11" Padding="8,2,8,3" HorizontalAlignment="Left">
+                            <TextBlock Text="{x:Bind BadgeText}" FontSize="11" FontWeight="Bold" Foreground="{x:Bind BadgeForeground}" />
+                        </Border>
+                        <Border Visibility="{x:Bind HasStatusBadge, Mode=OneWay}" Background="{StaticResource UpshiftAccentBrush}" CornerRadius="11"
+                                Padding="8,2,8,3" HorizontalAlignment="Left" ToolTipService.ToolTip="{x:Bind StatusBadgeTip, Mode=OneWay}">
+                            <TextBlock Text="{x:Bind StatusBadgeText, Mode=OneWay}" FontSize="11" FontWeight="Bold" Foreground="White" />
+                        </Border>
+                    </StackPanel>
                     <!-- Play, shown while the pointer is over the card -->
                     <Button x:Name="PlayOverlay" Visibility="Collapsed" Tag="{x:Bind}" Click="CardPlay_Click"
                             Width="40" Height="40" CornerRadius="20" Padding="0" Margin="8"
@@ -95,21 +104,55 @@
                     <TextBlock Text="{x:Bind Feature}" FontWeight="SemiBold" />
                     <TextBlock Text="{x:Bind Subtitle}" FontSize="12"
                                Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap" />
+                    <!-- "Update available: 310.9.1 (DLSS 4.5)" -->
+                    <TextBlock Text="{x:Bind UpdateNote}" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap"
+                               Foreground="{StaticResource UpshiftAccentBrush}" Visibility="{x:Bind HasUpdateNote}" />
                 </StackPanel>
                 <TextBlock Grid.Column="2" Text="{x:Bind Version}" VerticalAlignment="Center" />
+            </Grid>
+        </DataTemplate>
+
+        <!-- One row of "Upscaler files": the file, what it is, current → newer version, and its Update button -->
+        <DataTemplate x:Key="UpscalerFileTemplate" x:DataType="vm:UpscalerFileRowViewModel">
+            <Grid ColumnSpacing="14" Padding="14,10" BorderBrush="{StaticResource HairlineBrush}" BorderThickness="0,0,0,1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="80" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Border Background="{x:Bind Chip.Background}" CornerRadius="4" Padding="6,1,6,2"
+                        HorizontalAlignment="Left" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="3">
+                        <TextBlock Text="{x:Bind Chip.Text}" FontSize="12" FontWeight="SemiBold" Foreground="{x:Bind Chip.Foreground}" />
+                        <FontIcon Glyph="&#xE74A;" FontSize="9" FontWeight="Bold" Foreground="{x:Bind Chip.Foreground}" VerticalAlignment="Center"
+                                  Visibility="{x:Bind Chip.Updated}" ToolTipService.ToolTip="Updated by Upshift" />
+                    </StackPanel>
+                </Border>
+                <StackPanel Grid.Column="1" Spacing="2">
+                    <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <!-- "3.1.1 (DLSS 3) → 310.9.1 (DLSS 4.5)" -->
+                    <TextBlock Text="{x:Bind VersionText}" TextWrapping="Wrap" />
+                    <TextBlock Text="{x:Bind Path}" FontFamily="Consolas" FontSize="11" TextWrapping="Wrap" IsTextSelectionEnabled="True"
+                               Foreground="{StaticResource SubtleTextBrush}" />
+                    <TextBlock Text="{x:Bind Status}" FontSize="12" TextWrapping="Wrap"
+                               Foreground="{StaticResource SubtleTextBrush}" Visibility="{x:Bind HasStatus}" />
+                </StackPanel>
+                <Button Grid.Column="2" Content="{x:Bind UpdateLabel}" Tag="{x:Bind}" Click="UpdateFile_Click" VerticalAlignment="Center"
+                        Visibility="{x:Bind CanUpdate}" AutomationProperties.Name="{x:Bind UpdateName}" />
             </Grid>
         </DataTemplate>
     </Page.Resources>
 
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="660" />
+            <ColumnDefinition Width="670" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
         <!-- ================= Game grid ================= -->
         <Grid Padding="24,16,12,0" RowSpacing="12">
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -145,20 +188,34 @@
                 </SplitButton>
             </Grid>
 
-            <TextBox Grid.Row="1"
+            <!-- After a newer DLSS file finished downloading: how many games could use it -->
+            <InfoBar Grid.Row="1" IsOpen="{x:Bind ViewModel.HasDlssNotice, Mode=OneWay}" Severity="Success"
+                     Title="{x:Bind ViewModel.DlssNotice, Mode=OneWay}" Closed="DlssNotice_Closed"
+                     Visibility="{x:Bind ViewModel.HasDlssNotice, Mode=OneWay}" AutomationProperties.Name="DLSS notice">
+                <InfoBar.ActionButton>
+                    <Button Content="Review" Click="DlssNoticeReview_Click" />
+                </InfoBar.ActionButton>
+            </InfoBar>
+
+            <TextBox Grid.Row="2"
                      PlaceholderText="{x:Bind ViewModel.SearchPlaceholder, Mode=OneWay}"
                      Text="{x:Bind ViewModel.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
 
-            <SelectorBar Grid.Row="2" x:Name="FilterBar" SelectionChanged="FilterBar_SelectionChanged">
-                <SelectorBarItem Text="All" IsSelected="True" />
-                <SelectorBarItem Text="Has upscalers" />
-                <SelectorBarItem Text="OptiScaler found" />
-                <SelectorBarItem Text="Blocked" />
-                <SelectorBarItem Text="Has suggestions" />
-                <SelectorBarItem Text="Updates available" />
-            </SelectorBar>
+            <!-- Scrolls sideways when the window is narrow -->
+            <ScrollViewer Grid.Row="3" HorizontalScrollMode="Auto" HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled">
+                <SelectorBar x:Name="FilterBar" SelectionChanged="FilterBar_SelectionChanged">
+                    <SelectorBarItem Text="All" IsSelected="True" />
+                    <SelectorBarItem Text="Upscalers" ToolTipService.ToolTip="Games with DLSS, FSR or XeSS" />
+                    <SelectorBarItem Text="OptiScaler" ToolTipService.ToolTip="Games with OptiScaler found in their folder" />
+                    <SelectorBarItem Text="Blocked" ToolTipService.ToolTip="Games with anti-cheat: nothing is installed or updated" />
+                    <SelectorBarItem Text="Suggestions" ToolTipService.ToolTip="Games with suggestions from the OptiScaler wiki" />
+                    <SelectorBarItem Text="Updates" ToolTipService.ToolTip="Updates available: a newer OptiScaler can be installed" />
+                    <SelectorBarItem Text="Upscaler update available" ToolTipService.ToolTip="A newer DLSS, FSR or XeSS file can replace one of the game's" />
+                </SelectorBar>
+            </ScrollViewer>
 
-            <Grid Grid.Row="3" ColumnSpacing="10">
+            <Grid Grid.Row="4" ColumnSpacing="10">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
@@ -172,14 +229,14 @@
                         Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay}" />
             </Grid>
 
-            <GridView Grid.Row="4" x:Name="GamesGrid"
+            <GridView Grid.Row="5" x:Name="GamesGrid"
                       ItemsSource="{x:Bind ViewModel.Games}"
                       ItemTemplate="{StaticResource GameCardTemplate}"
                       SelectionMode="Single"
                       SelectionChanged="GamesGrid_SelectionChanged"
                       Padding="0,0,0,24" />
 
-            <StackPanel Grid.Row="4" Visibility="{x:Bind ViewModel.HasNoGames, Mode=OneWay}"
+            <StackPanel Grid.Row="5" Visibility="{x:Bind ViewModel.HasNoGames, Mode=OneWay}"
                         VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8" MaxWidth="320">
                 <TextBlock Text="No games to show" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" />
                 <TextBlock TextWrapping="Wrap" TextAlignment="Center" Foreground="{StaticResource SubtleTextBrush}"
@@ -302,6 +359,16 @@
                                  Severity="Warning" Title="Installs are blocked for this game"
                                  Message="{x:Bind ViewModel.Selected.AntiCheatMessage, Mode=OneWay}" />
 
+                        <!-- A newer DLSS file for this game: "DLSS 4.5 (310.9.1) is ready for this game. It has 3.1.1 (DLSS 3)…" -->
+                        <InfoBar IsOpen="{x:Bind ViewModel.Selected.HasDlssBar, Mode=OneWay}" IsClosable="False" Severity="Success"
+                                 Title="DLSS update" Message="{x:Bind ViewModel.Selected.DlssBarText, Mode=OneWay}"
+                                 Visibility="{x:Bind ViewModel.Selected.HasDlssBar, Mode=OneWay}" AutomationProperties.Name="DLSS update">
+                            <InfoBar.ActionButton>
+                                <Button Content="Update DLSS" Style="{StaticResource AccentButtonStyle}" Click="UpdateDlss_Click"
+                                        IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}" />
+                            </InfoBar.ActionButton>
+                        </InfoBar>
+
                         <StackPanel Spacing="8">
                             <TextBlock Text="Upscalers in this game" FontWeight="SemiBold" />
                             <!-- Suggestion only: which upscaler and frame generation suit this card, and what the wiki says to pick in-game -->
@@ -342,6 +409,42 @@
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
                             </Expander>
+                        </StackPanel>
+
+                        <!-- ================= Upscaler files: newer DLSS / FSR / XeSS files for the ones the game ships ================= -->
+                        <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.Selected.HasUpscalerFiles, Mode=OneWay}">
+                            <TextBlock Text="Upscaler files" FontWeight="SemiBold" />
+                            <InfoBar IsOpen="{x:Bind ViewModel.Selected.HasRestoredByGame, Mode=OneWay}" IsClosable="False" Severity="Warning"
+                                     Title="{x:Bind ViewModel.Selected.RestoredTitle, Mode=OneWay}"
+                                     Message="{x:Bind ViewModel.Selected.RestoredText, Mode=OneWay}"
+                                     Visibility="{x:Bind ViewModel.Selected.HasRestoredByGame, Mode=OneWay}">
+                                <InfoBar.ActionButton>
+                                    <Button Content="Re-apply" Click="Reapply_Click"
+                                            IsEnabled="{x:Bind ViewModel.Selected.CanReapply, Mode=OneWay}" />
+                                </InfoBar.ActionButton>
+                            </InfoBar>
+                            <Border CornerRadius="8" Background="{StaticResource CardSurfaceBrush}"
+                                    BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1"
+                                    Visibility="{x:Bind ViewModel.Selected.HasUpscalerFileRows, Mode=OneWay}">
+                                <ItemsControl ItemsSource="{x:Bind ViewModel.Selected.UpscalerFiles, Mode=OneWay}"
+                                              ItemTemplate="{StaticResource UpscalerFileTemplate}"
+                                              IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}" />
+                            </Border>
+                            <TextBlock Text="{x:Bind ViewModel.Selected.OptiScalerFilesNote, Mode=OneWay}" FontSize="12" TextWrapping="Wrap"
+                                       Visibility="{x:Bind ViewModel.Selected.HasOptiScalerFilesNote, Mode=OneWay}" />
+                            <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
+                                       Visibility="{x:Bind ViewModel.Selected.HasDlssFrameGenFile, Mode=OneWay}"
+                                       Text="nvngx_dlssg.dll (DLSS Frame Generation) isn't updated: it's paired with the game's own Streamline version." />
+
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Button Content="{x:Bind ViewModel.Selected.UpdateAllText, Mode=OneWay}" Style="{StaticResource AccentButtonStyle}"
+                                        Click="UpdateAllFiles_Click" IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
+                                        Visibility="{x:Bind ViewModel.Selected.CanUpdateAnyFile, Mode=OneWay}" AutomationProperties.Name="Update all" />
+                                <Button Content="Restore original files" Click="RestoreFiles_Click" IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
+                                        Visibility="{x:Bind ViewModel.Selected.CanRestoreFiles, Mode=OneWay}" />
+                            </StackPanel>
+                            <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
+                                       Text="Newer files come straight from NVIDIA's, AMD's and Intel's GitHub pages and must carry their digital signature. Only files the game already has are replaced, and each original is backed up in the game's .upshift folder first." />
                         </StackPanel>
 
                         <views:SuggestionsView x:Name="SuggestionsPanel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />

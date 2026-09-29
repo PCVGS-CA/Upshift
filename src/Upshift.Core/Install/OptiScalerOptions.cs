@@ -177,7 +177,7 @@ public static class OptiScalerOptions
         var byId = presets.ToDictionary(p => p.Id);
         var list = new List<DlssModelChoice>
         {
-            new("default", "Game default", "Whatever the game and its DLSS file pick.", true, DefaultPresetSettings())
+            new("default", "Game default", "Let the game decide.", true, DefaultPresetSettings())
         };
 
         if (byId.TryGetValue("K", out var k) && byId.TryGetValue("L", out var l) && byId.TryGetValue("M", out var m))

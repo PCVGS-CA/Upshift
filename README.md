@@ -45,6 +45,10 @@ _Coming soon._
 - **Installs OptiScaler** the way its own setup does, under the loading name you choose (dxgi.dll by default).
   Every game file it overwrites is backed up first, and everything is recorded in `.upshift\manifest.json` in the
   game folder. Uninstall removes only the files it added (if unchanged) and puts the originals back.
+- **Upscaler files:** updates the DLSS, FSR and XeSS DLLs a game ships with to newer ones from NVIDIA's, AMD's and
+  Intel's own GitHub pages (for example DLSS 3.x to 310.9.1, DLSS 4.5, which unlocks the DLSS 4 and 4.5 models).
+  Only swaps known to work are offered, only files the game already has are replaced, every new file must carry its
+  vendor's digital signature, and "Restore original files" puts the exact originals back.
 - **OptiScaler options** per game: upscaler, frame generation, DLSS model and FSR 4 (INT8), each with a
   "Which one should I pick?" guide.
 - **Updates:** checks each component's GitHub releases (cached, with ETags), lets you pick Stable or Beta, updates

@@ -22,7 +22,7 @@ public class ComponentDownloadException : Exception
 /// gives one (or the git blob hash for a file read straight from a repo). The two most recently downloaded versions
 /// of each component are kept; older ones are removed.
 /// </summary>
-public sealed class ComponentStore : IDisposable
+public sealed partial class ComponentStore : IDisposable
 {
     private const string CompleteMarker = ".upshift-complete.json";
     /// <summary>The marker's name before the app was renamed; caches made then are still used.</summary>

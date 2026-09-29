@@ -21,6 +21,40 @@ public sealed class UpscalerCatalog
 
     /// <summary>DLSS DLL version → marketing name ("310.9.1" is DLSS 4.5), checked in order.</summary>
     public List<DlssVersionName> DlssVersionNames { get; set; } = new();
+
+    /// <summary>Newer copies of the DLSS, FSR and XeSS files games ship, and which game files each may replace.</summary>
+    public UpscalerFileCatalog UpscalerFiles { get; set; } = new();
+}
+
+public sealed class UpscalerFileCatalog
+{
+    /// <summary>Per family, the signer names (certificate O or CN) a new file must be signed by.</summary>
+    public Dictionary<UpscalerFamily, List<string>> Signers { get; set; } = new();
+    public List<UpscalerFileSource> Sources { get; set; } = new();
+}
+
+/// <summary>
+/// One DLL a game's file of the same name can be updated to. It replaces a game file whose version is at least
+/// MinVersion and below BelowVersion (when set), and older than Version.
+/// </summary>
+public sealed class UpscalerFileSource
+{
+    public string File { get; set; } = "";
+    public UpscalerFamily Family { get; set; }
+    /// <summary>The file's own version (not the SDK's), e.g. "310.9.1" or "2.0.2.68".</summary>
+    public string Version { get; set; } = "";
+    public string? MinVersion { get; set; }
+    public string? BelowVersion { get; set; }
+    /// <summary>The catalog component (repo) it comes from.</summary>
+    public string ComponentId { get; set; } = "";
+    /// <summary>The release tag (or git tag) it's read at.</summary>
+    public string Tag { get; set; } = "";
+    /// <summary>Read straight from the repository at Tag (checked against GitHub's git blob hash).</summary>
+    public string? RepoPath { get; set; }
+    /// <summary>Or: the path inside the release's zip (the component's assetPattern picks the zip).</summary>
+    public string? ArchivePath { get; set; }
+
+    [JsonIgnore] public string Key => $"{ComponentId}/{Tag}/{File}".ToLowerInvariant();
 }
 
 /// <summary>"Which one should I pick?" text for the option dropdowns, kept in the catalog so it can change without a new app.</summary>

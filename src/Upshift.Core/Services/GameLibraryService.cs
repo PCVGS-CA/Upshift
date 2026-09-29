@@ -49,7 +49,8 @@ public sealed class GameLibraryService
         {
             await using var stream = File.OpenRead(_cachePath);
             var list = await JsonSerializer.DeserializeAsync<List<GameInfo>>(stream, CatalogLoader.JsonOptions) ?? new();
-            _current = list.Where(g => PathUtil.SafeDirectoryExists(g.InstallDir)).ToList();
+            // Launchers found by older scans (REDlauncher…) are dropped too; newer scans don't add them.
+            _current = list.Where(g => PathUtil.SafeDirectoryExists(g.InstallDir) && !IsLauncher(g.Name, g.Source)).ToList();
         }
         catch (Exception ex) when (ex is JsonException or IOException)
         {
@@ -451,6 +452,7 @@ public sealed class GameLibraryService
         var accepted = new List<(DiscoveredGame Game, string Norm)>();
         foreach (var game in found.OrderBy(g => g.Source))
         {
+            if (IsLauncher(game.Name, game.Source)) continue;
             var norm = PathUtil.Normalize(game.InstallDir);
             if (accepted.Any(a => a.Norm == norm)) continue;
 
@@ -462,6 +464,10 @@ public sealed class GameLibraryService
         }
         return accepted.Select(a => a.Game).ToList();
     }
+
+    /// <summary>A launcher or store app, not a game. Folders the user added themselves are always kept.</summary>
+    private static bool IsLauncher(string name, GameSourceKind source) =>
+        source != GameSourceKind.Manual && Fingerprints.IsLauncherName(name);
 
     private List<string> LoadManualFolders()
     {

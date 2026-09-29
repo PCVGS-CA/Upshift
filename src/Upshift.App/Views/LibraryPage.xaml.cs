@@ -23,6 +23,7 @@ public sealed partial class LibraryPage : Page
         SuggestionsPanel.ShowDialog = ShowDialogAsync;
         OptionsPanel.Library = ViewModel;
         OptionsPanel.ShowDialog = ShowDialogAsync;
+        OptionsPanel.UpdateDlss = UpdateDlssAsync;
 
         // Keep the grid's highlight in step when the view model changes the selection (after a rescan, say).
         ViewModel.PropertyChanged += (_, e) =>
@@ -330,6 +331,75 @@ public sealed partial class LibraryPage : Page
             await ShowMessageAsync("OptiScaler removed, with files left behind", text);
         }
     }
+
+    // ---------------- Upscaler files ----------------
+
+    private async void UpdateFile_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is not UpscalerFileRowViewModel { CanUpdate: true } row) return;
+        await ReportAsync(ViewModel.UpdateUpscalerFilesAsync(row.Card, new[] { row.Item.RelativePath }), $"{row.Item.FileName} wasn't updated");
+    }
+
+    private async void UpdateAllFiles_Click(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.Selected is not { CanUpdateAnyFile: true } card) return;
+        await ReportAsync(ViewModel.UpdateUpscalerFilesAsync(card, card.UpdatablePaths), "The files weren't updated");
+    }
+
+    /// <summary>The DLSS bar's "Update DLSS" (and the same action from the DLSS model dropdown).</summary>
+    private async void UpdateDlss_Click(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.Selected is { HasDlssBar: true } card) await UpdateDlssAsync(card);
+    }
+
+    private Task UpdateDlssAsync(GameCardViewModel card) => ReportAsync(ViewModel.UpdateDlssAsync(card), "DLSS wasn't updated");
+
+    private async void Reapply_Click(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.Selected is not { CanReapply: true } card) return;
+        await ReportAsync(ViewModel.UpdateUpscalerFilesAsync(card, card.RestoredPaths), "The update wasn't re-applied");
+    }
+
+    private async void RestoreFiles_Click(object sender, RoutedEventArgs e)
+    {
+        if (_dialogOpen || ViewModel.Selected is not { CanRestoreFiles: true } card) return;
+        var confirm = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = $"Put back {card.Name}'s original files?",
+            Content = new TextBlock
+            {
+                TextWrapping = TextWrapping.Wrap,
+                Text = "Every DLSS, FSR and XeSS file Upshift updated in this game goes back to the game's own copy, checked byte for byte. " +
+                       "A file that changed after Upshift updated it (a game update, say) is left as it is."
+            },
+            PrimaryButtonText = "Restore",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close
+        };
+        if (await ShowDialogAsync(confirm) != ContentDialogResult.Primary) return;
+        if (await ViewModel.RestoreUpscalerFilesAsync(card) is { } result && (!result.Success || result.KeptChanged.Count > 0))
+            await ShowMessageAsync(result.Success ? "Originals restored, with files left in place" : "The originals weren't restored", result.Message);
+    }
+
+    /// <summary>Waits for an upscaler file action; failures get a message box, success shows on the status line.</summary>
+    private async Task ReportAsync(Task<InstallResult?> action, string failTitle)
+    {
+        if (await action is { Success: false } result) await ShowMessageAsync(failTitle, result.Message);
+    }
+
+    private void HideGame_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is GameCardViewModel card) ViewModel.HideGame(card);
+    }
+
+    private void DlssNoticeReview_Click(object sender, RoutedEventArgs e)
+    {
+        ViewModel.DismissDlssNotice();
+        (App.MainAppWindow as MainWindow)?.ShowPage("updates");
+    }
+
+    private void DlssNotice_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.DismissDlssNotice();
 
     private void OpenIni_Click(object sender, RoutedEventArgs e)
     {

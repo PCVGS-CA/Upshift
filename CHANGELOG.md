@@ -20,6 +20,19 @@ The first public release.
 - Per-game options: upscaler, frame generation, DLSS model and FSR 4 (INT8), with "Which one should I pick?" guides.
 - Game folders that need admin rights are changed through a one-off UAC prompt; the main window never runs as admin.
 
+### Upscaler files
+
+- Updates the DLSS, FSR and XeSS files games ship with to newer ones from NVIDIA's, AMD's and Intel's own GitHub pages: DLSS Super Resolution and Ray Reconstruction to 310.9.1 (DLSS 4.5), FSR 3.1 to 3.1.4 (and FidelityFX SDK 2.x files to 2.3.0), and XeSS within its major version.
+- Only files the game already has are replaced, 64-bit for 64-bit, and every new file must carry a valid NVIDIA, AMD or Intel signature. Each original is backed up in the game's `.upshift` folder, and "Restore original files" brings the exact originals back.
+- A "DLSS update" bar shows what a newer DLSS unlocks, the DLSS model list offers "Update DLSS to unlock", and the Updates page can update DLSS in all your games at once. Games with anti-cheat are never changed.
+- If a game update puts its old file back, Upshift says so and can re-apply the update.
+- Files that OptiScaler installed are labelled as OptiScaler's and left to OptiScaler.
+
+### Library
+
+- "Hide from library" on a game's right-click menu, and "Show hidden games" in Settings.
+- Launchers such as REDlauncher no longer show up as games.
+
 ### Updates
 
 - Checks each component's GitHub releases, with Stable or Beta, a version picker and "Keep updated".

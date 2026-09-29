@@ -38,6 +38,12 @@
                 <StackPanel x:Name="GamesPanel" Spacing="6" />
             </Border>
 
+            <!-- Games whose DLSS file is older than the newest one Upshift offers (anti-cheat games left out) -->
+            <Border x:Name="DlssBorder" CornerRadius="8" Padding="16,12" Background="{StaticResource CardSurfaceBrush}"
+                    BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1">
+                <StackPanel x:Name="DlssPanel" Spacing="6" />
+            </Border>
+
             <TextBlock Text="Used now" FontWeight="SemiBold" Margin="0,8,0,0" />
             <StackPanel x:Name="UsedNowPanel" Spacing="6" />
 

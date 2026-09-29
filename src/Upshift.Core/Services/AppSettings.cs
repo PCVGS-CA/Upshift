@@ -17,6 +17,9 @@ public sealed class AppSettings
 
     public DateTime? LastUpdateCheckUtc { get; set; }
 
+    /// <summary>Games the user hid from the Library ("Hide from library"), by game id, with the name for Settings.</summary>
+    public Dictionary<string, string> HiddenGames { get; set; } = new();
+
     /// <summary>Per component (by catalog id): the chosen channel and whether to download new releases automatically.</summary>
     public Dictionary<string, ComponentPreference> Components { get; set; } = new();
 

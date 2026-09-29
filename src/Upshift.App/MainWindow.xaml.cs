@@ -86,6 +86,12 @@ public sealed partial class MainWindow : Window
         });
     }
 
+    /// <summary>Selects a page in the navigation ("library", "updates" or "settings").</summary>
+    public void ShowPage(string tag)
+    {
+        if (Nav.MenuItems.OfType<NavigationViewItem>().FirstOrDefault(i => (string)i.Tag == tag) is { } item) Nav.SelectedItem = item;
+    }
+
     private void NavigateTo(Type page)
     {
         if (ContentFrame.CurrentSourcePageType != page) ContentFrame.Navigate(page);

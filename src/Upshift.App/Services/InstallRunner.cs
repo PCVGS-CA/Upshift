@@ -28,7 +28,7 @@ public static class InstallRunner
     private static async Task<InstallResult> RunCoreAsync(InstallPlan plan)
     {
         var log = new InstallLog(AppServices.DataDir);
-        if (OptiScalerInstaller.CanWrite(plan.TargetDir))
+        if (FoldersToWrite(plan).All(OptiScalerInstaller.CanWrite))
             return await Task.Run(() => Apply(plan, log));
 
         log.Write($"{plan.Operation.ToString().ToUpperInvariant()} {plan.GameName}: folder needs admin rights, asking via UAC");
@@ -112,8 +112,26 @@ public static class InstallRunner
         InstallOperation.Update => OptiScalerInstaller.Update(plan, log),
         InstallOperation.UndoUpdate => OptiScalerInstaller.UndoUpdate(plan, log),
         InstallOperation.Repair => OptiScalerInstaller.Repair(plan, log),
+        // Signers come from the catalog compiled into the app, never from a downloaded catalog or the plan.
+        InstallOperation.UpdateUpscalerFiles => UpscalerFiles.Update(plan, Core.Catalog.CatalogLoader.LoadBuiltIn().UpscalerFiles.Signers, log),
+        InstallOperation.RestoreUpscalerFiles => UpscalerFiles.Restore(plan, log),
         _ => OptiScalerInstaller.Uninstall(plan, log)
     };
+
+    /// <summary>
+    /// The folders a plan writes to: the exe folder for OptiScaler; for upscaler files, each file's folder and the
+    /// install folder (for .upshift). All must be writable to skip the UAC helper.
+    /// </summary>
+    private static IEnumerable<string> FoldersToWrite(InstallPlan plan)
+    {
+        yield return plan.TargetDir;
+        if (plan.Operation is not (InstallOperation.UpdateUpscalerFiles or InstallOperation.RestoreUpscalerFiles)) yield break;
+        var paths = plan.UpscalerFiles.Count > 0
+            ? plan.UpscalerFiles.Select(j => j.Path)
+            : UpscalerFiles.ReadRecord(plan.TargetDir)?.Files.Select(f => f.Path) ?? Enumerable.Empty<string>();
+        foreach (var dir in paths.Select(p => Path.GetDirectoryName(Path.Combine(plan.TargetDir, p))!).Distinct(StringComparer.OrdinalIgnoreCase))
+            if (Directory.Exists(dir)) yield return dir;
+    }
 
     /// <summary>Files a settings change may copy in or take out: only the user-supplied ones the app knows.</summary>
     private static readonly string[] UserFileNames = OptiScalerInstaller.UserFileNames;
@@ -125,7 +143,15 @@ public static class InstallRunner
     private static string? Validate(InstallPlan plan, string dataDir)
     {
         if (!Directory.Exists(plan.TargetDir)) return "The game folder in the plan doesn't exist.";
-        if (plan.Operation is InstallOperation.Uninstall or InstallOperation.UndoUpdate) return null;
+        if (plan.Operation is InstallOperation.Uninstall or InstallOperation.UndoUpdate or InstallOperation.RestoreUpscalerFiles) return null;
+        if (plan.Operation == InstallOperation.UpdateUpscalerFiles)
+        {
+            // Only DLLs from the app's own download folder; UpscalerFiles.Update checks names, signatures and paths.
+            var store = Path.GetFullPath(Path.Combine(dataDir, "components", "upscaler-files")) + Path.DirectorySeparatorChar;
+            return plan.UpscalerFiles.All(j => j.SourceFile is not null && Path.GetFullPath(j.SourceFile).StartsWith(store, StringComparison.OrdinalIgnoreCase))
+                ? null
+                : "The plan points at files outside the app's download folder, so nothing was done.";
+        }
         if (plan.Operation == InstallOperation.Configure)
         {
             var userFiles = Path.GetFullPath(Path.Combine(dataDir, "user-files")) + Path.DirectorySeparatorChar;

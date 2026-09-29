@@ -66,6 +66,9 @@ public sealed class GameInfo
     /// <summary>Files of an OptiScaler this app installed that are missing or changed (found by the last scan).</summary>
     public List<string> RepairProblems { get; set; } = new();
 
+    /// <summary>Upscaler files Upshift updated that the game has put its old copy back into (found by the last scan).</summary>
+    public List<string> UpscalerFilesRestoredByGame { get; set; } = new();
+
     /// <summary>Cover art found automatically: Steam's local cache or a file downloaded into the artwork folder.</summary>
     public string? ArtworkPath { get; set; }
 

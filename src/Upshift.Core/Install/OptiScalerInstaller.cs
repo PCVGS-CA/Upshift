@@ -6,7 +6,7 @@ using Upshift.Core.Detection;
 
 namespace Upshift.Core.Install;
 
-public enum InstallOperation { Install, Uninstall, Configure, Update, UndoUpdate, Repair }
+public enum InstallOperation { Install, Uninstall, Configure, Update, UndoUpdate, Repair, UpdateUpscalerFiles, RestoreUpscalerFiles }
 
 /// <summary>Everything needed to install or uninstall, so an elevated copy of the app can carry it out from a file.</summary>
 public sealed class InstallPlan
@@ -35,6 +35,12 @@ public sealed class InstallPlan
     public string? AddFileAs { get; set; }
     /// <summary>Configure only: a file this app added earlier to take out again (the game's own copy comes back if it had one).</summary>
     public string? RemoveFile { get; set; }
+
+    /// <summary>
+    /// Upscaler file updates and restores: the files, relative to TargetDir, which for these operations is the game's
+    /// install folder (not the exe folder), since DLLs can sit anywhere in the game.
+    /// </summary>
+    public List<UpscalerFileJob> UpscalerFiles { get; set; } = new();
 }
 
 /// <summary>An OptiScaler.ini value this app changed, and what it was before, so it can be put back.</summary>
@@ -419,8 +425,18 @@ public static partial class OptiScalerInstaller
             var stateDir = Path.Combine(target, StateFolder);
             if (!keepBackups && result.KeptChanged.Count == 0)
             {
-                Directory.Delete(stateDir, recursive: true);
-                log.Write($"  removed {StateFolder}");
+                // Everything in .upshift except the record of upscaler files Upshift updated (when the exe folder is
+                // also the install folder, that record and its originals live here too, and outlast OptiScaler).
+                foreach (var entry in Directory.EnumerateFileSystemEntries(stateDir))
+                {
+                    var name = Path.GetFileName(entry);
+                    if (name.Equals(UpscalerFiles.RecordName, StringComparison.OrdinalIgnoreCase)
+                        || name.Equals(UpscalerFiles.OriginalsFolder, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (Directory.Exists(entry)) Directory.Delete(entry, recursive: true);
+                    else File.Delete(entry);
+                }
+                TryRemoveEmptyFolder(stateDir);
+                log.Write(Directory.Exists(stateDir) ? $"  removed OptiScaler's records from {StateFolder} (upscaler file records kept)" : $"  removed {StateFolder}");
             }
             else
             {

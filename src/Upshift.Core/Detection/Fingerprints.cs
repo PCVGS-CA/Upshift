@@ -68,6 +68,25 @@ public static class Fingerprints
 
     private static readonly string[] LauncherExeWords = { "launcher", "prelauncher", "config", "settings" };
 
+    /// <summary>Store apps and game launchers that show up in Programs and Features but aren't games themselves.</summary>
+    private static readonly HashSet<string> LauncherNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "redlauncher", "redprelauncher", "redupdater", "goggalaxy", "galaxyclient", "epicgameslauncher", "steam",
+        "ubisoftconnect", "uplay", "eaapp", "ea", "origin", "battlenet", "rockstargameslauncher", "amazongames",
+        "itch", "heroicgameslauncher", "legendary", "playnite", "paradoxlauncher", "bethesdanetlauncher",
+        "riotclient", "xbox", "gamingservices", "wargaminggamecenter", "ealauncher", "2klauncher"
+    };
+
+    /// <summary>
+    /// True for game launchers and store apps rather than games: REDlauncher, REDprelauncher, GOG Galaxy, the EA app,
+    /// Paradox Launcher and the like (any name that is only a launcher, ending in "launcher" or "prelauncher").
+    /// </summary>
+    public static bool IsLauncherName(string name)
+    {
+        var compact = new string(name.ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray());
+        return compact.Length > 0 && (LauncherNames.Contains(compact) || compact.EndsWith("prelauncher") || compact.EndsWith("launcher"));
+    }
+
     /// <summary>Negative for things that are clearly not the game; lower for launchers.</summary>
     public static int ExeNamePenalty(string lowerNameWithoutExtension)
     {

@@ -113,17 +113,26 @@ public static class GameUpdates
             });
         });
 
-    private static async Task<InstallResult> RunAsync(GameInfo game, IProgress<string>? progress, Func<InstallManifest, Task<InstallResult>> work)
+    private static Task<InstallResult> RunAsync(GameInfo game, IProgress<string>? progress, Func<InstallManifest, Task<InstallResult>> work)
     {
         if (game.TargetDir is null || OptiScalerInstaller.ReadManifest(game.TargetDir) is not { Removed: false } manifest)
-            return Fail("OptiScaler isn't installed in this game by this app.");
+            return Task.FromResult(Fail("OptiScaler isn't installed in this game by this app."));
+        return RunExclusiveAsync(game, () => work(manifest));
+    }
+
+    /// <summary>
+    /// Runs one change to a game folder, never two at once: Play is off for the game meanwhile, and the game is
+    /// looked at again afterwards. Download problems come back as a failed result.
+    /// </summary>
+    public static async Task<InstallResult> RunExclusiveAsync(GameInfo game, Func<Task<InstallResult>> work)
+    {
         if (!await Gate.WaitAsync(0)) return Fail("Another install or update is still running.");
         BusyGameId = game.Id;
         BusyChanged?.Invoke();
         try
         {
             InstallResult result;
-            try { result = await work(manifest); }
+            try { result = await work(); }
             catch (ComponentDownloadException ex) { result = Fail(ex.Message); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
             {

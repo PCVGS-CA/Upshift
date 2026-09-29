@@ -72,7 +72,7 @@
       "description": "NVIDIA's own DLSS files, for updating the DLSS a game shipped with.",
       "repo": "NVIDIA/DLSS",
       "repoFilePath": "lib/Windows_x86_64/rel/nvngx_dlss.dll",
-      "notes": "The DLL is read from the repository at the release tag (release files are only demos) and checked against the git blob hash GitHub reports."
+      "notes": "The DLLs are read from the repository at the release tag (release files are only demos) and checked against the git blob hash GitHub reports. lib/Windows_x86_64/rel has nvngx_dlss.dll (SR), nvngx_dlssd.dll (RR) and nvngx_dlssg.dll (FG); dev/ has watermarked builds, never used."
     },
     {
       "id": "amd-fidelityfx",
@@ -81,8 +81,7 @@
       "description": "AMD's FidelityFX SDK, for updating FSR 3.1+ files a game shipped with.",
       "repo": "GPUOpen-LibrariesAndSDKs/FidelityFX-SDK",
       "assetPattern": "(?i)^FidelityFX-(SDK-v[\\d.]+|Samples-v[\\d.]+-prebuilt)\\.zip$",
-      "notes": "v2.3.0 only ships FidelityFX-Samples-…-prebuilt.zip, v2.0.0 ships FidelityFX-SDK-….zip and v2.1.x ship no files.",
-      "verifyBeforeRelease": "Confirm which files inside the zip are the signed DLLs before offering FSR updates in games."
+      "notes": "Game files come straight from the repo (upscalerFiles): the signed DLLs are in PrebuiltSignedDLL/ (v1.x) and Kits/FidelityFX/signedbin/ (v2.x), so the 130-470 MB zips aren't needed. v2.3.0 only ships FidelityFX-Samples-…-prebuilt.zip, v2.0.0 ships FidelityFX-SDK-….zip and v2.1.x ship no files."
     },
     {
       "id": "intel-xess",
@@ -90,10 +89,33 @@
       "kind": "upscaler",
       "description": "Intel's XeSS SDK, for updating XeSS files a game shipped with.",
       "repo": "intel/xess",
-      "assetPattern": "(?i)^XeSS_SDK_[\\d.]+\\.zip$",
-      "verifyBeforeRelease": "Confirm where libxess.dll sits inside XeSS_SDK_….zip before offering XeSS updates in games."
+      "assetPattern": "(?i)^XeSS_SDK[_-][\\d.]+\\.zip$",
+      "notes": "The SDK version isn't the DLLs' version: SDK 3.0.2 has libxess.dll 2.0.2.68, libxess_fg.dll 1.3.1.78 and libxell.dll 1.3.2.10. SDK 1.3.1's zip is XeSS_SDK-1.3.1.zip with the files under XeSS_SDK-1.3.1/bin/."
     }
   ],
+
+  "upscalerFiles": {
+    "notes": "Newer copies of upscaler DLLs that games ship. A game's file is only replaced by one with the same name, never added, and only when its version is in [minVersion, belowVersion) and older than 'version'. Checked 2026-09-28: DLSS 2.0+ SR and 3.5+ RR use the same NGX interface (DLSS 1.x doesn't). FSR 3.1's amd_fidelityfx_dx12/vk.dll (1.0.x) go to 3.1.4, the last single-DLL release; SDK 2.x's loader needs the separate upscaler DLL next to it, which would mean adding files. XeSS stays within its major version (Intel: a major version 'indicates a new API, and potentially a break'), and XeSS 1.x only from 1.3 (1.3 changed the resolution scaling). DLSS Frame Generation isn't offered: it's paired with the game's Streamline version. All sources are 64-bit.",
+    "signers": {
+      "Dlss": [ "NVIDIA Corporation" ],
+      "Fsr": [ "Advanced Micro Devices", "Advanced Micro Devices, Inc.", "Advanced Micro Devices Inc." ],
+      "Xess": [ "Intel Corporation" ]
+    },
+    "sources": [
+      { "file": "nvngx_dlss.dll", "family": "Dlss", "version": "310.9.1", "minVersion": "2.0", "componentId": "nvidia-dlss", "tag": "v310.9.1", "repoPath": "lib/Windows_x86_64/rel/nvngx_dlss.dll" },
+      { "file": "nvngx_dlssd.dll", "family": "Dlss", "version": "310.9.1", "minVersion": "3.5", "componentId": "nvidia-dlss", "tag": "v310.9.1", "repoPath": "lib/Windows_x86_64/rel/nvngx_dlssd.dll" },
+      { "file": "amd_fidelityfx_dx12.dll", "family": "Fsr", "version": "1.0.1.41314", "minVersion": "1.0", "belowVersion": "2.0", "componentId": "amd-fidelityfx", "tag": "v1.1.4", "repoPath": "PrebuiltSignedDLL/amd_fidelityfx_dx12.dll" },
+      { "file": "amd_fidelityfx_vk.dll", "family": "Fsr", "version": "1.0.1.41314", "minVersion": "1.0", "belowVersion": "2.0", "componentId": "amd-fidelityfx", "tag": "v1.1.4", "repoPath": "PrebuiltSignedDLL/amd_fidelityfx_vk.dll" },
+      { "file": "amd_fidelityfx_loader_dx12.dll", "family": "Fsr", "version": "2.3.0.2740", "minVersion": "2.0", "belowVersion": "3.0", "componentId": "amd-fidelityfx", "tag": "v2.3.0", "repoPath": "Kits/FidelityFX/signedbin/amd_fidelityfx_loader_dx12.dll" },
+      { "file": "amd_fidelityfx_upscaler_dx12.dll", "family": "Fsr", "version": "4.1.1.2740", "minVersion": "4.0", "belowVersion": "5.0", "componentId": "amd-fidelityfx", "tag": "v2.3.0", "repoPath": "Kits/FidelityFX/signedbin/amd_fidelityfx_upscaler_dx12.dll" },
+      { "file": "amd_fidelityfx_framegeneration_dx12.dll", "family": "Fsr", "version": "4.0.1.2740", "minVersion": "4.0", "belowVersion": "5.0", "componentId": "amd-fidelityfx", "tag": "v2.3.0", "repoPath": "Kits/FidelityFX/signedbin/amd_fidelityfx_framegeneration_dx12.dll" },
+      { "file": "libxess.dll", "family": "Xess", "version": "1.3.1.32", "minVersion": "1.3", "belowVersion": "2.0", "componentId": "intel-xess", "tag": "v1.3.1", "archivePath": "XeSS_SDK-1.3.1/bin/libxess.dll" },
+      { "file": "libxess.dll", "family": "Xess", "version": "2.0.2.68", "minVersion": "2.0", "belowVersion": "3.0", "componentId": "intel-xess", "tag": "v3.0.2", "archivePath": "bin/libxess.dll" },
+      { "file": "libxess_dx11.dll", "family": "Xess", "version": "2.0.2.68", "minVersion": "2.0", "belowVersion": "3.0", "componentId": "intel-xess", "tag": "v3.0.2", "archivePath": "bin/libxess_dx11.dll" },
+      { "file": "libxess_fg.dll", "family": "Xess", "version": "1.3.1.78", "minVersion": "1.0", "belowVersion": "2.0", "componentId": "intel-xess", "tag": "v3.0.2", "archivePath": "bin/libxess_fg.dll" },
+      { "file": "libxell.dll", "family": "Xess", "version": "1.3.2.10", "minVersion": "1.0", "belowVersion": "2.0", "componentId": "intel-xess", "tag": "v3.0.2", "archivePath": "bin/libxell.dll" }
+    ]
+  },
 
   "neuralBackends": [
     {

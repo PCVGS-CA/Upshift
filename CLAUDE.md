@@ -12,7 +12,11 @@ downloaded from each project's own GitHub releases.
 
 - WinUI 3, unpackaged (`WindowsPackageType None`, self-contained), .NET 8 (`net8.0-windows10.0.19041.0`), x64 only.
 - **Windows App SDK 1.8 (1.8.260921001). Stay on 1.8, not 2.x.** (1.6 crashed with heap corruption, 0xc0000374.)
-- Packages: CommunityToolkit.Mvvm 8.3.2, SharpCompress 1.0.0 (OptiScaler ships as .7z), System.Management 8.0.0.
+  - Referenced as its components at the metapackage's pinned versions: WinUI, Foundation, InteractiveExperiences,
+    DWrite, Base. Not the metapackage, AI, ML, Widgets or Runtime: the Runtime package makes a self-contained build
+    unpack the whole framework MSIX (onnxruntime, DirectML…). This cut the published app from 211.6 to 164.1 MB.
+- Packages: CommunityToolkit.Mvvm 8.3.2, SharpCompress 1.0.0 (OptiScaler ships as .7z), System.Management 8.0.0,
+  Velopack 1.2.158.
 
 ## Build (x64)
 
@@ -51,18 +55,32 @@ errors and no warnings.
     - `catalog.json` (embedded resource) holds components with pinned versions and asset patterns, `installable`,
       `bundledIn`, `groupWith`, DLSS presets, `dlssVersionNames`, `guides` ("Which one should I pick?" text), FSR 4
       support, wiki sources and artwork sources.
+    - `upscalerFiles` in `catalog.json`: the signers per family, and one source per DLL. Each source gives the file,
+      its own version (not the SDK's), minVersion/belowVersion for the game files it may replace, component, tag,
+      and `repoPath` or `archivePath`. The notes there explain which swaps are allowed and why.
     - `RemoteCatalog` loads a newer catalog from the `catalogUrl` setting.
     - `DlssNames` turns a DLSS version into its name, e.g. "310.9.1 (DLSS 4.5)".
   - `Components/`:
     - `GitHubClient` reads the releases API with an ETag cache and handles the rate limit.
     - `ComponentStore` downloads and verifies releases (size, SHA-256 digest, or git blob hash) into
       `components\{id}-{tag}` and keeps the 2 most recent.
+      - `ComponentStore.UpscalerFiles.cs` fetches single upscaler DLLs into `components\upscaler-files\{id}-{tag}\`.
+        DLSS and FidelityFX DLLs come straight from the repo (git blob hash); XeSS comes out of the release zip,
+        which is deleted afterwards.
+      - Each DLL must have the catalog's version and a valid vendor signature.
     - `UpdateChecker` works out Stable (pinned) and Beta (newest), ordered by publish date.
   - `Install/`:
     - `OptiScalerInstaller.cs`: install, uninstall, configure (ini), and the manifest classes.
     - `OptiScalerUpdates.cs`: update with ini merge, undo, repair, and `Verify` (used by scans).
     - `OptiScalerChanges.cs`: the "Changes Upshift made to this game" list.
     - `OptiScalerOptions.cs`: upscaler, frame generation and DLSS model choices.
+    - `UpscalerFiles.cs`: updating the DLSS / FSR / XeSS DLLs games ship, and restoring the originals.
+      - `Items` gives each file's state: game file, update available, updated by Upshift, game restored its old
+        file, changed since, or OptiScaler's copy.
+      - `Update` checks everything first: same name, the file already there, inside the game, 64-bit, newer,
+        vendor signature, hash. It then backs up each original once and rolls back on failure.
+      - `Restore` puts the originals back, checked by SHA-256.
+    - `SignatureCheck.cs`: WinVerifyTrust (no online revocation) plus the signer's O/CN against the catalog's list.
     - `IniFile.cs`.
   - `Launch/GameLauncher.cs`: Play through each store; never elevated.
   - `Wiki/`: PCGamingWiki (MediaWiki API, 30-day cache) and the OptiScaler wiki (compatibility list and game pages).
@@ -88,17 +106,25 @@ errors and no warnings.
     "Restart to update", and not while an install or game update is running.
   - `Services/InstallRunner.cs`: runs installs in-process, or through a UAC helper (`Upshift.exe --apply plan.json`)
     for folders like Program Files.
-  - `Services/GameUpdates.cs`: update, undo and repair for games, plus the start-up check.
+  - `Services/GameUpdates.cs`: update, undo and repair for games, plus the start-up check. `RunExclusiveAsync` is
+    the one-change-at-a-time gate that upscaler updates share.
+  - `Services/UpscalerUpdates.cs`: upscaler file update, restore and re-apply for the Library and the Updates page,
+    the DLSS candidates, and the "DLSS downloaded" event behind the Library notice.
   - `Views/`: Library (details pane, Play, options, suggestions, changes), Updates (compact rows, "Used now" /
     "Used in a later version"), Settings.
-- **In each game folder** Upshift writes only the OptiScaler files and `.upshift\`:
-  - `manifest.json`: what was added or replaced, hashes, sizes, ini changes, last update and repair.
-  - `backup<stamp>\`: the game's original files.
-  - `undo<stamp>\`: the copy for "Undo last update".
-  - `repair<stamp>\`: safety copies of files repair replaced.
+- **In each game folder** Upshift writes only the OptiScaler files, the upscaler DLLs it updates, and `.upshift\`:
+  - In the exe folder (OptiScaler):
+    - `manifest.json`: what was added or replaced, hashes, sizes, ini changes, last update and repair.
+    - `backup<stamp>\`: the game's original files.
+    - `undo<stamp>\`: the copy for "Undo last update".
+    - `repair<stamp>\`: safety copies of files repair replaced.
+  - In the game's install folder (upscaler files, which can sit anywhere in the game):
+    - `upscaler-files.json`: each file Upshift updated, its original hash, version and size, and Upshift's copy.
+    - `originals\<relative path>`: the game's original of each.
+    - OptiScaler's uninstall leaves these two alone when both records share a folder.
   - Older installs use `.pcvgs\`, which is moved to `.upshift\` on the next change.
 - **App data:** `%LocalAppData%\Upshift`.
-  - Files: `settings.json`, `library.json`, `launch-options.json`, `wiki-cache.json`.
+  - Files: `settings.json` (also `HiddenGames`), `library.json`, `launch-options.json`, `wiki-cache.json`.
   - Folders: `components\` (plus `components\github-cache\`), `artwork\`, `optiscaler-wiki\`, `user-files\`,
     `pending\` (UAC plans) and `logs\install-yyyy-MM-dd.log` (every install, update, undo and repair).
   - Data from the old name (`%LocalAppData%\PCVGS\UpscalerManager`) is migrated once.
@@ -111,8 +137,11 @@ errors and no warnings.
 - **Game folders:** only modify The Witcher 3 and Silent Hill 2, and only for testing. Before any test, check the
   folder is in the expected state (the user installs things between sessions) and stop if it isn't. Record hashes of
   every file before and after, and compare them.
-  - Witcher 3: `C:\Program Files\GOG Galaxy\Games\The Witcher 3 Wild Hunt GOTY\bin\x64_dx12`
-  - Silent Hill 2: `C:\Program Files\GOG Galaxy\Games\Silent Hill 2\SHProto\Binaries\Win64`
+  - Witcher 3: `C:\Program Files\GOG Galaxy\Games\The Witcher 3 Wild Hunt GOTY\bin\x64_dx12`, and the game root's
+    `.upshift\` for upscaler files.
+  - Silent Hill 2: `C:\Program Files\GOG Galaxy\Games\Silent Hill 2\SHProto\Binaries\Win64`, plus
+    `SHProto\Plugins\DLSS|XeSS\Binaries\ThirdParty\Win64` and the root's `.upshift\` for upscaler files.
+  - GOG's folders are writable without admin here, so these tests don't go through the UAC helper.
 - **Never download or bundle `nvngx_dlssnr.dll` or the FSR 4.0.2c INT8 file (`amdxcffx64.dll`).** The user supplies
   them in Settings.
 - **Games with anti-cheat stay blocked:** no install, update or repair.
@@ -149,6 +178,39 @@ errors and no warnings.
   - "Updated by Upshift" rows with a chip arrow.
   - A dated "Changes Upshift made to this game" list.
   - README.md and .gitignore.
+- **Phase 2 step 3 (2026-09-28): upscaler files.**
+  - **Research:**
+    - DLSS v310.9.1 has `nvngx_dlss/dlssd/dlssg.dll` in `lib/Windows_x86_64/rel`.
+    - FidelityFX's signed DLLs are in the repo: v1.1.4 `PrebuiltSignedDLL/` (FSR 3.1.4, 1.0.1.41314) and v2.3.0
+      `Kits/FidelityFX/signedbin/` (loader 2.3.0, upscaler 4.1.1, frame generation 4.0.1).
+    - XeSS SDK zips: 1.3.1 has `libxess` 1.3.1.32; 2.1.1 and 3.0.2 have `libxess` and `libxess_dx11` 2.0.2.68;
+      3.0.2 has `libxess_fg` 1.3.1.78 and `libxell` 1.3.2.10.
+    - None of them contain a 32-bit DLL or `amdxcffx64.dll`.
+  - **Swaps allowed:**
+    - DLSS Super Resolution 2.0+ and Ray Reconstruction 3.5+ → 310.9.1.
+    - FSR 3.1 API DLLs 1.0.x → 3.1.4.
+    - SDK 2.x DLLs → 2.3.0.
+    - XeSS within its major file version, and XeSS 1.x only from 1.3.
+  - **Swaps not offered:**
+    - FSR 3.1 → SDK 2.x: it needs the upscaler DLL added.
+    - XeSS 1.x → 2.x: Intel says a major version may break.
+    - DLSS Frame Generation: it's paired with Streamline.
+    - DLSS 1.x and FSR 2.
+  - **UI:**
+    - The DLSS bar and "Upscaler files" section, per-file Update, Update all, Restore original files, Re-apply.
+    - "Update DLSS to unlock" in the DLSS model list, and the Library notice after a DLSS download.
+    - The "Upscaler update" badge and the "Upscaler update available" filter.
+    - "Update DLSS in all games" on the Updates page.
+    - Corrected "who changed this file" wording, and the chip arrow only for Upshift's updates.
+  - **Also:**
+    - Plain-English DLSS model help.
+    - Launchers (REDlauncher…) filtered out of the Library.
+    - "Hide from library" and "Show hidden games".
+    - The smaller Windows App SDK footprint.
+  - **Tested on both games** (hash snapshots `G0`–`G5` in the scratchpad):
+    - Update, then Restore exact: 0 of 2,897 entries differed from before.
+    - Update again. The Witcher 3 also went through a simulated "game put its old file back" → warning → Re-apply.
+    - Silent Hill 2 also did DLSS + XeSS 1.3.0.28 → 1.3.1.32 → restore exact, before the final DLSS-only update.
 - **Installer and self-updates (2026-09-28):**
   - Velopack 1.2.158: installer, portable zip, uninstall question, and self-updates from GitHub Releases.
   - "Check for app updates" and "Restart to update" in Settings > About, plus an "Update for Upshift" bar in the
@@ -165,25 +227,36 @@ errors and no warnings.
     the user from Visual Studio.
   - Push to `origin main` only at the end of each finished and tested step, or when the user asks. Never force-push.
   - No LICENSE yet (MIT or GPL-3.0 still to be chosen).
-- **Current game state:**
+- **Current game state** (2026-09-28, after the step 3 test):
   - Witcher 3 has OptiScaler v0.9.4 (updated from v0.9.3), with an undo copy in `.upshift\undo20260927-225122`.
+    - DLSS was updated by Upshift: 3.1.1 → 310.9.1, with the original in the root's `.upshift\originals\`.
+    - Its OptiScaler.ini has `Dx12Upscaler=dlss`, set at 18:12 that day by an Upshift session that wasn't
+      Claude's (pid 18620).
   - Silent Hill 2 has OptiScaler v0.9.4, installed by the user.
+    - DLSS (`SHProto\Plugins\DLSS\…`) was updated by Upshift: 3.7.0 → 310.9.1, with the original in the root's
+      `.upshift\originals\`.
+    - Its XeSS plugin file is the game's original 1.3.0.28.
 
 ## Next
 
-1. **Phase 2 step 3:** updating DLSS / FSR / XeSS files in games. The NVIDIA DLSS, FidelityFX and XeSS components
-   and their asset patterns are already in the catalog. Several are marked `verifyBeforeRelease`: check which files
-   inside each download are the right DLLs.
-2. **DLSS 5 support:** the OptiScaler DLSSNR fork, the AMD-NR fork and its runtime, and `NeuralSelector`.
-3. **Code signing** for the installer and app (Azure Trusted Signing or a certificate): `vpk pack` takes
+1. **DLSS 5 support:** the OptiScaler DLSSNR fork, the AMD-NR fork and its runtime, and `NeuralSelector`.
+2. **Code signing** for the installer and app (Azure Trusted Signing or a certificate): `vpk pack` takes
    `--signParams` / `--azureTrustedSignFile`. Unsigned files trigger SmartScreen and can be blocked by Smart App
    Control.
 
 ## Known open items
 
-- Filter out REDlauncher / REDprelauncher and similar launchers. Play runs the store's reported exe, and for
-  The Witcher 3 GOG reports the launcher.
-- Plain-English help text for the DLSS models (the dropdown descriptions and preset notes).
+- Play still runs the store's reported exe, which for The Witcher 3 (GOG) is REDprelauncher. Launchers are now kept
+  out of the Library.
+- Upscaler files, not tested:
+  - FSR updates: no test game has FSR files of its own; both have only OptiScaler's.
+  - Ray Reconstruction (`nvngx_dlssd.dll`).
+  - Upscaler updates through the UAC helper (GOG's folders are writable).
+  - The 32-bit refusal and the anti-cheat block in the UI.
+  - "Update selected" on the Updates page: it would change other games.
+  - A remote catalog with `upscalerFiles`.
+- The card's chips can be a little wider than the card when one has the up-arrow (e.g. The Witcher 3's "TAAU" is
+  clipped).
 - Installer test (2026-09-28), results:
   - Tested:
     - Setup installs per user without admin, with a Start menu shortcut and an uninstall entry.
@@ -197,8 +270,11 @@ errors and no warnings.
     - The portable zip.
     - A real self-update. This needs two releases, and the updater can't read releases while the repo is private.
       Velopack's `GithubSource` has no token, so the repo or its releases must be public.
-- Size: about 94 MB Setup, 212 MB installed. Windows App SDK 1.8's ML runtime (onnxruntime and DirectML, 39 MB)
-  comes in with the `Microsoft.WindowsAppSDK` metapackage. Referencing only the needed 1.8 sub-packages could drop it.
+- Size, after the Windows App SDK trim:
+  - Setup: 75.1 MB (was 94.6).
+  - Portable zip: 67.9 MB (was 87.3).
+  - Installed: 164.1 MB (was 211.6).
+  - The installed build hasn't been run since the trim; the published folder was.
 - Untested:
   - Play for EA, Ubisoft, Battle.net, Heroic and Xbox.
   - Play being disabled while a game is busy, and the launch-error box.
@@ -232,13 +308,20 @@ errors and no warnings.
   - `publish\` (212 MB) and `releases\` (about 270 MB).
   - Scripts: `snap.ps1` (hashes of the data folder and both game folders), `uninstall.ps1` (runs the registry
     uninstall string and answers the question), `ui.ps1` (copied from the old scratch folder).
-  - Snapshots (`*.json`) and screenshots (`t1-library.png`, `t2-about.png`).
+  - Snapshots (`*.json`) and screenshots (`t1-library.png` … `t10-updates.png`).
+  - From the step 3 session:
+    - `research\` (391 MB): the XeSS 1.3.1, 2.1.1 and 3.0.2 SDK zips, FidelityFX 2.3.0 samples zip, and
+      FSR 3.1.4 DLLs.
+    - `gsnap.ps1` (game folder snapshots G0–G5), `link.ps1`, `menu.ps1`.
 - **Installer leftovers:**
   - `%TEMP%\velopack\` (Velopack's own temp folder).
   - The vpk 1.2.158 tool, in the NuGet cache (`%UserProfile%\.nuget\packages\vpk`).
   - `%LocalAppData%\Upshift.App` was removed by the uninstall test and no longer exists.
-- **App data created by tests** in `%LocalAppData%\Upshift`: `components\optiscaler-v0.9.3\` (downloaded for the
-  update test) and `launch-options.json` (now empty). The rest is the app's normal data.
+- **App data created by tests** in `%LocalAppData%\Upshift`:
+  - `components\optiscaler-v0.9.3\` (downloaded for the update test) and `launch-options.json` (now empty).
+  - `components\upscaler-files\nvidia-dlss-v310.9.1\` (56 MB), used by both games' DLSS updates.
+  - `components\upscaler-files\intel-xess-v1.3.1\` (64 MB), from the XeSS test.
+  - The rest is the app's normal data.
 - **Claude's memory for this project:**
   `%USERPROFILE%\.claude\projects\C--Users-%USERNAME%-Downloads-PcvgsUpscaler-phase1\memory\`. Two notes: decide small
   choices; check the game folder before tests. It's keyed to the old folder path, so a session in the new folder

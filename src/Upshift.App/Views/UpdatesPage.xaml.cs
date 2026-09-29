@@ -104,6 +104,7 @@ public sealed partial class UpdatesPage : Page
                                : $"Using the built-in catalog (updated {AppServices.Catalog.Updated}).");
 
         BuildGames(candidates);
+        BuildDlss();
 
         // ---- Used now: what the app installs today, each followed by what ships inside it ----
         UsedNowPanel.Children.Clear();
@@ -194,6 +195,88 @@ public sealed partial class UpdatesPage : Page
         {
             _updatingGames = false;
             _gamesMessage = string.Join("\n", lines);
+            Rebuild();
+        }
+    }
+
+    // ---------------- Update DLSS in all games ----------------
+
+    private readonly HashSet<string> _dlssUnchecked = new();
+    private string? _dlssMessage;
+    private bool _updatingDlss;
+
+    private void BuildDlss()
+    {
+        DlssPanel.Children.Clear();
+        var candidates = UpscalerUpdates.DlssCandidates()
+            .Where(c => !AppServices.Settings.Current.HiddenGames.ContainsKey(c.Game.Id)).ToList();
+        DlssBorder.Visibility = candidates.Count == 0 && _dlssMessage is null ? Visibility.Collapsed : Visibility.Visible;
+
+        DlssPanel.Children.Add(new TextBlock { Text = "Update DLSS in all games", FontWeight = FontWeights.SemiBold });
+        if (candidates.Count > 0)
+        {
+            var target = candidates[0].Target;
+            var name = Core.Catalog.DlssNames.Name(AppServices.Catalog.DlssVersionNames, target) ?? "The newest DLSS";
+            DlssPanel.Children.Add(Subtle(
+                $"{name} ({target}) can replace the older DLSS file in {(candidates.Count == 1 ? "1 game" : $"{candidates.Count} games")}. " +
+                "Games with anti-cheat are left out."));
+        }
+
+        var boxes = new List<(CheckBox Box, DlssCandidate Candidate)>();
+        foreach (var c in candidates)
+        {
+            var box = new CheckBox
+            {
+                Content = $"{c.Game.Name}: {Helpers.Ui.DlssLabel(c.Current)} → {Helpers.Ui.DlssLabel(c.Target)}",
+                IsChecked = !_dlssUnchecked.Contains(c.Game.Id),
+                IsEnabled = !_updatingDlss
+            };
+            box.Checked += (_, _) => _dlssUnchecked.Remove(c.Game.Id);
+            box.Unchecked += (_, _) => _dlssUnchecked.Add(c.Game.Id);
+            boxes.Add((box, c));
+            DlssPanel.Children.Add(box);
+        }
+
+        if (candidates.Count > 0)
+        {
+            var update = new Button
+            {
+                Content = "Update selected",
+                Style = (Style)Application.Current.Resources["AccentButtonStyle"],
+                IsEnabled = !_updatingDlss && !GameUpdates.IsBusy
+            };
+            AutomationName(update, "Update selected DLSS");
+            update.Click += async (_, _) => await UpdateDlssAsync(boxes.Where(b => b.Box.IsChecked == true).Select(b => b.Candidate).ToList());
+            DlssPanel.Children.Add(update);
+            DlssPanel.Children.Add(Subtle("Each game's original DLSS files are backed up first; \"Restore original files\" in the Library puts them back."));
+        }
+        if (_dlssMessage is not null)
+            DlssPanel.Children.Add(new TextBlock { Text = _dlssMessage, FontSize = 12, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true });
+    }
+
+    private async Task UpdateDlssAsync(List<DlssCandidate> selected)
+    {
+        if (_updatingDlss || selected.Count == 0) return;
+        _updatingDlss = true;
+        var lines = new List<string>();
+        try
+        {
+            foreach (var c in selected)
+            {
+                _dlssMessage = string.Join("\n", lines.Append($"{c.Game.Name}: updating DLSS…"));
+                Rebuild();
+                var result = await UpscalerUpdates.UpdateAsync(c.Game, UpscalerUpdates.DlssPaths(c.Game), new Progress<string>(s =>
+                {
+                    _dlssMessage = string.Join("\n", lines.Append($"{c.Game.Name}: {s}"));
+                    Rebuild();
+                }));
+                lines.Add($"{c.Game.Name}: {result.Message}");
+            }
+        }
+        finally
+        {
+            _updatingDlss = false;
+            _dlssMessage = string.Join("\n", lines);
             Rebuild();
         }
     }

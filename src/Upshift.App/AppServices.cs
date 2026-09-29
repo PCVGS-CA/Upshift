@@ -100,6 +100,11 @@ public static class AppServices
 
     public static void RaiseArtworkSettingsChanged() => ArtworkSettingsChanged?.Invoke();
 
+    /// <summary>Raised when Settings shows a hidden game again, so the Library can bring its card back.</summary>
+    public static event Action? HiddenGamesChanged;
+
+    public static void RaiseHiddenGamesChanged() => HiddenGamesChanged?.Invoke();
+
     private static Task<IReadOnlyList<GpuInfo>>? _gpus;
 
     /// <summary>Runs GPU detection once, in the background, and reuses the answer.</summary>

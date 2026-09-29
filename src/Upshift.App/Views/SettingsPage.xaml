@@ -80,6 +80,15 @@
             </StackPanel>
 
             <StackPanel Spacing="8">
+                <TextBlock Text="Hidden games" FontWeight="SemiBold" />
+                <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
+                           Text="Games you hid with right-click, Hide from library. They're still scanned; they just don't show up." />
+                <Expander x:Name="HiddenExpander" Header="Show hidden games" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <StackPanel x:Name="HiddenRows" Spacing="6" />
+                </Expander>
+            </StackPanel>
+
+            <StackPanel Spacing="8">
                 <TextBlock Text="About" FontWeight="SemiBold" />
                 <Border CornerRadius="8" Padding="16,14" Background="{StaticResource CardSurfaceBrush}"
                         BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1">

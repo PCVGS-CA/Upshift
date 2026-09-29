@@ -28,6 +28,9 @@ public sealed class OptiScalerOptionsView : UserControl
     public LibraryViewModel? Library { get; set; }
     public Func<ContentDialog, Task<ContentDialogResult>>? ShowDialog { get; set; }
 
+    /// <summary>"Update DLSS" for the game (the Library page's, so results are shown the same way).</summary>
+    public Func<GameCardViewModel, Task>? UpdateDlss { get; set; }
+
     /// <summary>True while controls are being filled in, so setting their initial values doesn't write anything.</summary>
     private bool _building;
 
@@ -118,12 +121,13 @@ public sealed class OptiScalerOptionsView : UserControl
         var models = OptiScalerOptions.DlssModels(presets, gameDlss);
         var currentId = OptiScalerOptions.CurrentDlssModel(ini, models);
 
-        // Each model with its one-line description from the guide under its name.
+        // Each model with its one-line description from the guide under its name. Models the game's DLSS file is too
+        // old for are greyed out, with an "Update DLSS to unlock" link when Upshift can update the file.
         var guide = AppServices.Catalog.Guides.DlssModel;
-        var items = models.Select(m => DescribedItem(m.Id,
-            m.Available ? m.Label : $"{m.Label} — update this game's DLSS file to unlock",
-            guide.Rows.FirstOrDefault(r => r.Id == m.Id)?.TextFor(gpu.Vendor, gpu.Generation),
-            m.Available)).ToList();
+        var canUpdateDlss = Services.UpscalerUpdates.DlssUpdate(card.Info) is not null && UpdateDlss is not null;
+        var items = models.Select(m => m.Available
+            ? DescribedItem(m.Id, m.Label, guide.Rows.FirstOrDefault(r => r.Id == m.Id)?.TextFor(gpu.Vendor, gpu.Generation))
+            : LockedItem(m.Id, m.Label, canUpdateDlss ? () => UpdateDlss!(card) : null)).ToList();
         items.Add(Item("advanced", "Advanced (one model per quality mode)"));
         var box = Combo("DLSS model", items);
         box.SelectedItem = items.FirstOrDefault(i => (string)i.Tag == currentId) ?? items[0];
@@ -132,9 +136,19 @@ public sealed class OptiScalerOptionsView : UserControl
         var advanced = AdvancedPresets(card, ini, presets, gameDlss);
         advanced.Visibility = currentId == "advanced" ? Visibility.Visible : Visibility.Collapsed;
 
+        var previous = box.SelectedItem;
         box.SelectionChanged += async (_, _) =>
         {
             if (_building || box.SelectedItem is not ComboBoxItem { Tag: string id }) return;
+            if (models.FirstOrDefault(m => m.Id == id) is { Available: false })
+            {
+                // Picked with the keyboard: a locked model can't be used until the DLSS file is updated.
+                _building = true;
+                box.SelectedItem = previous;
+                _building = false;
+                return;
+            }
+            previous = box.SelectedItem;
             if (id == "advanced")
             {
                 advanced.Visibility = Visibility.Visible;
@@ -145,12 +159,45 @@ public sealed class OptiScalerOptionsView : UserControl
         };
 
         var dlssFile = card.Info.Upscalers.FirstOrDefault(u => u.FileName.Equals("nvngx_dlss.dll", StringComparison.OrdinalIgnoreCase))?.Version;
-        var version = dlssFile is null ? "This game has no DLSS file of its own." : $"This game's DLSS file: {Helpers.Ui.DlssLabel(dlssFile)}.";
-        var locked = models.Any(m => !m.Available)
-            ? " Newer models need a newer nvngx_dlss.dll in the game; update this game's DLSS file to unlock them."
-            : "";
-        return Group(WithGuide(box, guide, models.Select(m => (m.Id, m.Label)), gpu), note, advanced, Subtle(version + locked),
-            Subtle("If you've set a DLSS override for this game in the NVIDIA App, it may win over this setting."));
+        FrameworkElement? locked = null;
+        if (dlssFile is null)
+            locked = Subtle("This game has no DLSS file of its own.");
+        else if (models.Any(m => !m.Available))
+        {
+            var text = Subtle($"This game has DLSS {dlssFile}, which is too old for the DLSS 4 and 4.5 models. Update its DLSS file to unlock them.");
+            if (canUpdateDlss)
+            {
+                var link = new HyperlinkButton { Content = "Update DLSS to unlock", Padding = new Thickness(0), FontSize = 12 };
+                link.Click += async (_, _) => await UpdateDlss!(card);
+                locked = Group(text, link);
+            }
+            else locked = text;
+        }
+        return Group(WithGuide(box, guide, models.Select(m => (m.Id, m.Label)), gpu), note, advanced, locked,
+            Subtle("If you've set a DLSS override for this game in the NVIDIA App, the app's setting may be used instead of this one."));
+    }
+
+    /// <summary>
+    /// A model the game's DLSS file is too old for: greyed out, with "Update DLSS to unlock" under it. The item itself
+    /// stays enabled so the link can be clicked; choosing the model is refused in SelectionChanged.
+    /// </summary>
+    private static ComboBoxItem LockedItem(string id, string label, Func<Task>? unlock)
+    {
+        var content = new StackPanel { Spacing = 1, Opacity = 0.9 };
+        content.Children.Add(new TextBlock { Text = label, Foreground = Res("SubtleTextBrush") });
+        if (unlock is not null)
+        {
+            var link = new HyperlinkButton { Content = "Update DLSS to unlock", Padding = new Thickness(0), FontSize = 12 };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(link, $"Update DLSS to unlock {label}");
+            link.Click += async (_, _) => await unlock();
+            content.Children.Add(link);
+        }
+        else
+        {
+            content.Children.Add(new TextBlock { Text = "Needs a newer DLSS file in the game", FontSize = 12, Foreground = Res("SubtleTextBrush") });
+        }
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(content, $"{label} (locked)");
+        return new ComboBoxItem { Tag = id, Content = content };
     }
 
     /// <summary>One dropdown per quality mode (DLAA … Ultra Performance), each "Game default" or a preset.</summary>

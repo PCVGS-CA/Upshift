@@ -9,7 +9,7 @@ namespace Upshift.App.ViewModels;
 /// <summary>One row of "Upscalers in this game".</summary>
 public sealed class UpscalerRowViewModel
 {
-    public UpscalerRowViewModel(UpscalerRow row, GameInfo game, InstallManifest? manifest)
+    public UpscalerRowViewModel(UpscalerRow row, GameInfo game, InstallManifest? manifest, IReadOnlyList<UpscalerFileItem> items)
     {
         Feature = row.Feature;
         // A DLSS file's own version gets its marketing name; PCGamingWiki's "3.5" already is one.
@@ -18,27 +18,34 @@ public sealed class UpscalerRowViewModel
             : row.Version;
         Subtitle = row.FileName ?? "Built into the game";
 
-        // Files Upshift put in the game (and that are still as it left them).
-        if (manifest is { Removed: false } && game.TargetDir is not null && row.RelativePath is not null)
+        var item = row.RelativePath is null ? null : items.FirstOrDefault(i => i.RelativePath.Equals(row.RelativePath, StringComparison.OrdinalIgnoreCase));
+        if (item is not null)
         {
+            // Who changed the file: Upshift's update, OptiScaler's own copy, or the game putting its old one back.
+            if (UpscalerFileText.Subtitle(item) is { } who) Subtitle = $"{row.FileName} · {who}";
+            Updated = item.State == UpscalerFileState.UpdatedByUpshift;
+            if (item.Target is { } target) UpdateNote = $"Update available: {Ui.VersionLabel(target.Version, item.FileName)}";
+        }
+        else if (manifest is { Removed: false } && game.TargetDir is not null && row.RelativePath is not null)
+        {
+            // Other files OptiScaler's install put in the game (and that are still as it left them).
             var full = Path.GetFullPath(Path.Combine(game.InstallDir, row.RelativePath));
             ManifestFile? Match(IEnumerable<ManifestFile> files) =>
                 files.FirstOrDefault(f => Path.GetFullPath(Path.Combine(game.TargetDir, f.Path)).Equals(full, StringComparison.OrdinalIgnoreCase));
 
             if (Match(manifest.Replaced) is { } replaced && OptiScalerInstaller.IsUnchanged(game.TargetDir, replaced))
             {
-                Updated = true;
                 var backup = replaced.Backup is null ? null : Path.Combine(game.TargetDir, replaced.Backup);
                 var original = backup is not null && File.Exists(backup) ? FileVersions.Read(backup) : null;
-                Subtitle = original is null
-                    ? "Updated by Upshift · original backed up"
-                    : $"Updated by Upshift · original {Ui.VersionLabel(original, row.FileName!)} backed up";
+                Subtitle = OptiScalerInstaller.UserFileNames.Contains(replaced.Path, StringComparer.OrdinalIgnoreCase)
+                    ? $"{row.FileName} · your own file, added through Upshift · the game's copy backed up"
+                    : $"{row.FileName} · replaced by OptiScaler {manifest.Version}'s copy · original {(original is null ? "" : Ui.VersionLabel(original, row.FileName!) + " ")}backed up";
             }
             else if (Match(manifest.Added) is { } added && OptiScalerInstaller.IsUnchanged(game.TargetDir, added))
             {
                 Subtitle = OptiScalerInstaller.UserFileNames.Contains(added.Path, StringComparer.OrdinalIgnoreCase)
                     ? $"{row.FileName} · added by you through Upshift"
-                    : $"{row.FileName} · added by Upshift with OptiScaler (not the game's own)";
+                    : $"{row.FileName} · added by OptiScaler {manifest.Version} (not the game's own)";
             }
         }
         Chip = UpscalerSectionViewModel.Chip(row.Tech, row.Family);
@@ -46,6 +53,10 @@ public sealed class UpscalerRowViewModel
 
     /// <summary>Upshift replaced this row's file with a newer one (the game's original is backed up).</summary>
     public bool Updated { get; }
+
+    /// <summary>"Update available: 310.9.1 (DLSS 4.5)", shown in the accent colour; empty when there's none.</summary>
+    public string UpdateNote { get; } = "";
+    public bool HasUpdateNote => UpdateNote.Length > 0;
 
     public ChipViewModel Chip { get; }
     public string Feature { get; }
@@ -61,12 +72,12 @@ public sealed class UpscalerSectionViewModel
 {
     private const string WikiSearch = "https://www.pcgamingwiki.com/w/index.php?search=";
 
-    public UpscalerSectionViewModel(GameInfo game, WikiEntry? wiki, bool checking)
+    public UpscalerSectionViewModel(GameInfo game, WikiEntry? wiki, bool checking, IReadOnlyList<UpscalerFileItem> items)
     {
         var rows = UpscalerList.Build(game.Upscalers, wiki);
         CoreRows = rows;
         var manifest = game.TargetDir is null ? null : OptiScalerInstaller.ReadManifest(game.TargetDir);
-        Rows = rows.Select(r => new UpscalerRowViewModel(r, game, manifest)).ToList();
+        Rows = rows.Select(r => new UpscalerRowViewModel(r, game, manifest, items)).ToList();
         Chips = UpscalerList.Techs(rows)
             .Select(t => Chip(t.Tech, t.Family, Rows.Any(r => r.Updated && r.Chip.Text.Equals(t.Tech, StringComparison.OrdinalIgnoreCase))))
             .ToList();

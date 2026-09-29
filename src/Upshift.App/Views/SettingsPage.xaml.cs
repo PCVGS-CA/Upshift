@@ -27,9 +27,44 @@ public sealed partial class SettingsPage : Page
             new Uri(Path.Combine(AppInfo.AssetsDir, "Upshift.svg")));
         AboutVersionText.Text = $"Version {AppInfo.Version}";
         ReleasesLink.NavigateUri = new Uri(AppInfo.RepoUrl + "/releases");
+        BuildHiddenRows();
         ShowAppUpdate();
         AppUpdates.Changed += AppUpdates_Changed;
         Unloaded += (_, _) => AppUpdates.Changed -= AppUpdates_Changed;
+    }
+
+    // ---------------- Hidden games ----------------
+
+    private void BuildHiddenRows()
+    {
+        HiddenRows.Children.Clear();
+        var hidden = AppServices.Settings.Current.HiddenGames.OrderBy(h => h.Value, StringComparer.CurrentCultureIgnoreCase).ToList();
+        HiddenExpander.Header = hidden.Count == 0 ? "Show hidden games (none)" : $"Show hidden games ({hidden.Count})";
+        if (hidden.Count == 0)
+        {
+            HiddenRows.Children.Add(new TextBlock { Text = "No games are hidden.", FontSize = 12, Foreground = Brush("SubtleTextBrush") });
+            return;
+        }
+        foreach (var (id, name) in hidden)
+        {
+            var row = new Grid { ColumnSpacing = 12 };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.Children.Add(new TextBlock { Text = name, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap });
+            var show = new Button { Content = "Show in Library" };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(show, $"Show {name} in Library");
+            show.Click += (_, _) =>
+            {
+                var settings = AppServices.Settings.Current;
+                settings.HiddenGames.Remove(id);
+                AppServices.Settings.Save(settings);
+                AppServices.RaiseHiddenGamesChanged();
+                BuildHiddenRows();
+            };
+            Grid.SetColumn(show, 1);
+            row.Children.Add(show);
+            HiddenRows.Children.Add(row);
+        }
     }
 
     // ---------------- App updates (About) ----------------

@@ -77,6 +77,33 @@ public sealed partial class GameCardViewModel : ObservableObject
         TileOpacity = info.HasAntiCheat ? 0.55 : 1.0;
 
         RefreshArtwork();
+
+        // "Upscaler files": each DLSS, FSR and XeSS file this game has, and any newer one on offer.
+        _fileItems = Services.UpscalerUpdates.Items(info);
+        // One row per file that is the game's (or Upshift's update of it). OptiScaler's own copies get one line:
+        // OptiScaler keeps them up to date itself, so Upshift doesn't compete with it.
+        UpscalerFiles = _fileItems.Where(i => i.State != UpscalerFileState.OptiScalerCopy).Select(i => new UpscalerFileRowViewModel(i, this)).ToList();
+        var optiCopies = _fileItems.Where(i => i.State == UpscalerFileState.OptiScalerCopy).Select(i => i.FileName).Distinct().ToList();
+        OptiScalerFilesNote = optiCopies.Count == 0 ? ""
+            : $"OptiScaler uses its own {(optiCopies.Count == 1 ? "copy" : "copies")} of {string.Join(", ", optiCopies)}, so Upshift leaves {(optiCopies.Count == 1 ? "it" : "them")} to OptiScaler's updates.";
+        CanUpdateAnyFile = !info.HasAntiCheat && _fileItems.Any(i => i.CanUpdate);
+        UpdatableFileCount = _fileItems.Count(i => i.CanUpdate);
+        CanRestoreFiles = Core.Install.UpscalerFiles.ReadRecord(info.InstallDir) is { Files.Count: > 0 };
+        if (Services.UpscalerUpdates.DlssUpdate(info) is { } dlss && dlss.CurrentVersion is { } dlssNow)
+        {
+            HasDlssBar = true;
+            DlssBarText = UpscalerFileText.DlssBar(dlssNow, dlss.Target!.Version);
+        }
+        var restored = _fileItems.Where(i => i.State == UpscalerFileState.GameRestoredOld).ToList();
+        if (restored.Count > 0)
+        {
+            HasRestoredByGame = true;
+            RestoredTitle = restored.All(r => r.Family == UpscalerFamily.Dlss) ? "Game restored its old DLSS file" : "Game restored its old upscaler files";
+            RestoredText = string.Join(" ", restored.Select(r =>
+                $"{r.FileName} is back to {(r.CurrentVersion is null ? "the game's old version" : Ui.VersionLabel(r.CurrentVersion, r.FileName))}, probably after a game update."));
+            _restoredPaths = restored.Where(r => r.CanUpdate).Select(r => r.RelativePath).ToList();
+        }
+
         ApplyWiki(AppServices.WikiCache.Get(info.Id));
 
         if (info.HasAntiCheat)
@@ -114,10 +141,14 @@ public sealed partial class GameCardViewModel : ObservableObject
         HasMods = Mods.Count > 0;
         RefreshUpdate();
 
-        // "Changes Upshift made to this game", newest first.
-        Changes = manifest is null || info.TargetDir is null
-            ? new List<ChangeViewModel>()
-            : OptiScalerInstaller.Changes(info.TargetDir, manifest, Ui.VersionLabel).Select(c => new ChangeViewModel(c)).ToList();
+        // "Changes Upshift made to this game", newest first: OptiScaler's record and the upscaler files Upshift updated.
+        var optiChanges = manifest is null || info.TargetDir is null
+            ? new List<ChangeEntry>()
+            : OptiScalerInstaller.Changes(info.TargetDir, manifest, Ui.VersionLabel);
+        Changes = optiChanges.Concat(Core.Install.UpscalerFiles.Changes(info.InstallDir, Ui.VersionLabel))
+            .OrderByDescending(c => c.Utc ?? DateTime.MinValue)
+            .Select(c => new ChangeViewModel(c))
+            .ToList();
 
         launchOptions = AppServices.LaunchOptions.Get(info.Id);
         (TakesLaunchOptions, LaunchOptionsNote) = Core.Launch.GameLauncher.LaunchOptionsSupport(info);
@@ -128,6 +159,47 @@ public sealed partial class GameCardViewModel : ObservableObject
 
     public List<ChangeViewModel> Changes { get; }
     public bool HasChanges => Changes.Count > 0;
+
+    // ---------------- Upscaler files ----------------
+
+    private readonly List<UpscalerFileItem> _fileItems;
+    private readonly List<string> _restoredPaths = new();
+
+    public List<UpscalerFileRowViewModel> UpscalerFiles { get; }
+    public bool HasUpscalerFileRows => UpscalerFiles.Count > 0;
+    public bool HasUpscalerFiles => UpscalerFiles.Count > 0 || OptiScalerFilesNote.Length > 0;
+
+    /// <summary>"OptiScaler uses its own copies of libxess.dll, …, so Upshift leaves them to OptiScaler's updates."</summary>
+    public string OptiScalerFilesNote { get; } = "";
+    public bool HasOptiScalerFilesNote => OptiScalerFilesNote.Length > 0;
+
+    /// <summary>The game ships DLSS Frame Generation, which Upshift deliberately doesn't update.</summary>
+    public bool HasDlssFrameGenFile => Info.Upscalers.Any(u => u.FileName.Equals("nvngx_dlssg.dll", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>At least one file has a newer version on offer (never for games with anti-cheat).</summary>
+    public bool CanUpdateAnyFile { get; }
+    public int UpdatableFileCount { get; }
+    public string UpdateAllText => UpdatableFileCount > 1 ? $"Update all ({UpdatableFileCount})" : "Update all";
+
+    /// <summary>Upshift has updated files here whose originals it can put back.</summary>
+    public bool CanRestoreFiles { get; }
+
+    /// <summary>The bar above "Upscalers in this game" when a newer DLSS file is on offer.</summary>
+    public bool HasDlssBar { get; }
+    public string DlssBarText { get; } = "";
+
+    /// <summary>The game put its own old file back over Upshift's update.</summary>
+    public bool HasRestoredByGame { get; }
+    public string RestoredTitle { get; } = "";
+    public string RestoredText { get; } = "";
+    public IReadOnlyList<string> RestoredPaths => _restoredPaths;
+    public bool CanReapply => _restoredPaths.Count > 0 && !Info.HasAntiCheat;
+
+    /// <summary>For the card badge and the "Upscaler update available" filter.</summary>
+    public bool HasUpscalerUpdate => CanUpdateAnyFile;
+
+    /// <summary>The files that can be updated, for "Update all".</summary>
+    public IReadOnlyList<string> UpdatablePaths => _fileItems.Where(i => i.CanUpdate).Select(i => i.RelativePath).ToList();
 
     /// <summary>Launch options for Play (saved per game).</summary>
     [ObservableProperty]
@@ -154,7 +226,7 @@ public sealed partial class GameCardViewModel : ObservableObject
 
     /// <summary>The newer release on the user's channel this install can be updated to; null when up to date.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasUpdate), nameof(UpdateButtonText), nameof(StatusBadgeText), nameof(HasStatusBadge))]
+    [NotifyPropertyChangedFor(nameof(HasUpdate), nameof(UpdateButtonText), nameof(StatusBadgeText), nameof(HasStatusBadge), nameof(StatusBadgeTip))]
     private string? updateVersion;
 
     public bool HasUpdate => UpdateVersion is not null;
@@ -165,8 +237,13 @@ public sealed partial class GameCardViewModel : ObservableObject
     public bool NeedsRepair { get; }
     public string RepairText { get; }
 
-    /// <summary>The card's second badge: "Needs repair" or "Update".</summary>
-    public string StatusBadgeText => NeedsRepair ? "Needs repair" : HasUpdate ? "Update" : "";
+    /// <summary>The card's second badge: "Needs repair", "Update" (OptiScaler) or "Upscaler update".</summary>
+    public string StatusBadgeText => NeedsRepair ? "Needs repair" : HasUpdate ? "Update" : HasUpscalerUpdate ? "Upscaler update" : "";
+
+    /// <summary>The badge's tooltip.</summary>
+    public string StatusBadgeTip => NeedsRepair ? "Some OptiScaler files are missing or changed"
+        : HasUpdate ? $"OptiScaler {UpdateVersion} is available"
+        : HasUpscalerUpdate ? "Upscaler update available: a newer DLSS, FSR or XeSS file can replace one of this game's" : "";
     public bool HasStatusBadge => StatusBadgeText.Length > 0;
 
     /// <summary>Works out UpdateVersion again after an update check or a change of channel. Call on the UI thread.</summary>
@@ -205,7 +282,7 @@ public sealed partial class GameCardViewModel : ObservableObject
     /// <summary>Rebuilds the merged list with what PCGamingWiki said (or why it couldn't say). Call on the UI thread.</summary>
     public void ApplyWiki(Core.Wiki.WikiEntry? entry, bool checking = false)
     {
-        Upscalers = new UpscalerSectionViewModel(Info, entry, checking);
+        Upscalers = new UpscalerSectionViewModel(Info, entry, checking, _fileItems);
         Tags = Upscalers.Chips;
         RefreshSuggestions();
     }

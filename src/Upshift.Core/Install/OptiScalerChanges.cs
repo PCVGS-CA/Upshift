@@ -45,7 +45,9 @@ public static partial class OptiScalerInstaller
             var now = Version(Path.Combine(targetDir, file.Path), name);
             var changedSince = !IsUnchanged(targetDir, file);
             list.Add(new(when,
-                UpscalerList.IsUpscalerFile(name) ? $"Updated {file.Path}: {original} → {now}" : $"Replaced the game's {file.Path}",
+                IsUserFile(file.Path) ? $"Replaced the game's {file.Path} with your own file"
+                : UpscalerList.IsUpscalerFile(name) ? $"OptiScaler replaced the game's {file.Path}: {original} → OptiScaler's {now}"
+                : $"OptiScaler replaced the game's {file.Path}",
                 (IsUserFile(file.Path) ? "Added from the options. " : "")
                 + $"The original ({original}) is backed up in {Path.GetDirectoryName(file.Backup) ?? StateFolder} and comes back on uninstall."
                 + (changedSince ? " The file has changed since (a game update?)." : "")));

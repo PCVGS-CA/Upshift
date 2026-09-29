@@ -28,7 +28,17 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260921001" />
+    <!--
+      Windows App SDK 1.8 (the metapackage 1.8.260921001's exact versions; move them together), only the parts
+      Upshift uses. The metapackage also brings AI, ML (onnxruntime, DirectML) and Widgets, and its Runtime package
+      makes a self-contained build unpack the whole framework MSIX, all of that included. Without them, the build
+      copies only these components' files.
+    -->
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="1.8.260803003" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" Version="1.8.260803002" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" Version="1.8.260708001" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.DWrite" Version="1.8.25122902" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Base" Version="1.8.251216001" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.4654" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
     <!-- Installer, uninstaller and self-updates from GitHub Releases. -->
