@@ -34,7 +34,7 @@ The first public release.
 ### DLSS 5 (Neural Rendering, experimental)
 
 - A DLSS 5 section per game: whether your card can use it and why, then "Switch to the DLSS 5 build of OptiScaler" (the OptiScaler DLSSNR fork on NVIDIA, AMD-NR on AMD). Your OptiScaler settings are kept, and "Switch back" returns the game folder to exactly what it was.
-- Once switched: Neural Rendering on/off, Strength and Model resolution, the in-game hotkey, and AMD-NR's runtime, preselected for your card so the game doesn't ask on first launch.
+- Once switched: "DLSS 5 is set up (your modified file)" or "(official NVIDIA file)", Neural Rendering on/off with a hotkey picker, Detail strength and Colour strength (the fork's own names, each with Reset), Model resolution, and AMD-NR's runtime, preselected for your card so the game doesn't ask on first launch. A tip explains the fork's white-point scan for games that supply no exposure.
 - Checks with plain messages: NVIDIA driver too old, DirectX 11 / Vulkan games needing a "w/Dx12" upscaler, anti-cheat games blocked, and a performance note on RTX 40 and older.
 - Your nvngx_dlssnr.dll (Settings > Optional files you supply) is checked: "Official NVIDIA file (signed, version …)" or "Modified file: not signed by NVIDIA, can't be verified as safe", with the rule for your card. Upshift never downloads or bundles it. Removing it offers to switch the games that use it back to regular OptiScaler.
 - The DLSS 5 builds are updated from the Updates page like OptiScaler.

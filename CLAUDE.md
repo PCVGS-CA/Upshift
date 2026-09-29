@@ -243,10 +243,17 @@ errors and no warnings.
       `nvngx.dll_dlssnr.dll`, and DLLs under `OptiScaler\`. It ships no `nvngx_dlssnr.dll`, and needs driver 616.56+.
     - AMD-NR (`3zwr1/AMD-NR---OptiScaler` Alpha0.3.2): the same layout plus `LmxxfNrRuntime.dll/.pak`. Its danielblnc
       runtime comes from the separate `amd-nr-runtime` zip. It ships no `amdxcffx64.dll`.
-  - **Settings, all `[DlssNr]`:**
-    - `Enabled`, `ToggleKey` (DLSSNR: unbound; AMD-NR: Home 0x24).
-    - `TransferStrength` (the "Strength" slider, 0-150%) and `ColourStrength`.
-    - `WorkingScale` (the "Model resolution" slider, 50-100%).
+  - **Settings, all `[DlssNr]`** (checked in the fork's `Config.cpp` and `DlssNr_Menu.cpp` at v0.2.0-dlssnr):
+    - `Enabled`.
+    - `ToggleKey`: a Windows virtual-key code, read as an int and written decimal; −1/auto means unbound for
+      DLSSNR, Home 0x24 for AMD-NR. Upshift has a "Set key…" picker and "Default".
+    - `TransferStrength`: the fork's menu calls it "Detail strength" (slider 0-2, Reset 1.0). The fork's log shows
+      it loaded, e.g. Silent Hill 2's `DlssNr.TransferStrength: 0.75`.
+    - `ColourStrength`: "Colour strength" (slider 0-4 in the fork, 0-2 in Upshift, Reset 1.0).
+    - `WorkingScale`: model resolution (50-100% in Upshift). Upshift's Reset buttons write `auto`.
+    - `WhitePointSource` (0 paper white, 1 the game's exposure (default), 2 a scanned buffer): for games without
+      exposure, the fork's menu says "paper white is in use. Try the scan instead". Upshift shows that as a tip, and
+      mentions when `OptiScaler.log` shows `ExposureScan::Adopt` candidates.
     - AMD-NR also has `NrBackend = daniel | lmxxf`. It ships commented out, so it's allow-listed in
       `IsAddableIniKey`.
   - **Switching:**

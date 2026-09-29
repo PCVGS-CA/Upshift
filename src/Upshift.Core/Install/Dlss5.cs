@@ -122,17 +122,12 @@ public static class Dlss5
         value is null ? autoPicks
         : value.EndsWith("_12", StringComparison.OrdinalIgnoreCase) || (autoPicks && value.Equals("auto", StringComparison.OrdinalIgnoreCase));
 
-    /// <summary>
-    /// The in-game toggle key as text: the ini's ToggleKey, or the build's default when it's "auto" (Home for AMD-NR,
-    /// none for DLSSNR).
-    /// </summary>
-    public static string HotkeyText(IniFile? ini, NeuralBackend? backend)
+    /// <summary>The toggle key's name ("Home", "F9"), or null when none is set.</summary>
+    public static string? HotkeyName(IniFile? ini, NeuralBackend? backend)
     {
         var raw = ini?.Get(Section, "ToggleKey");
         int? code = raw is null || raw.Equals("auto", StringComparison.OrdinalIgnoreCase) ? backend?.ToggleKey : ParseKey(raw);
-        return code is null or 0
-            ? "No key yet: in the game, press Insert, then set one under Keybinds, \"Neural Rendering\"."
-            : $"Press {KeyName(code.Value)} in the game to turn Neural Rendering on and off.";
+        return code is null or <= 0 ? null : KeyName(code.Value);
     }
 
     private static int? ParseKey(string raw) =>

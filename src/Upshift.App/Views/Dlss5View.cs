@@ -105,10 +105,19 @@ public sealed class Dlss5View : UserControl
                 Message = $"Pretending this PC has an {gpu!.Name}. Nothing is installed or changed while this is on (Settings, developer options)."
             });
 
-        // Can this card use it, and why.
-        body.Children.Add(Line(option.Status == NeuralStatus.Unavailable ? "" : "", option.Title,
-            option.Status == NeuralStatus.Unavailable ? "SubtleTextBrush" : "UpshiftAccentBrush", strong: true));
-        body.Children.Add(Subtle($"{gpu?.Name ?? "This PC's card"}: {option.Message}"));
+        // Can this card use it, and why; once switched, what's set up (from the DLSS 5 file actually in the game).
+        if (installedByUs && manifest!.Switch is not null && !pretend)
+        {
+            var (title, detail) = SetUpText(dir!, manifest);
+            body.Children.Add(Line("", title, "UpshiftAccentBrush", strong: true));
+            body.Children.Add(Subtle(detail));
+        }
+        else
+        {
+            body.Children.Add(Line(option.Status == NeuralStatus.Unavailable ? "" : "", option.Title,
+                option.Status == NeuralStatus.Unavailable ? "SubtleTextBrush" : "UpshiftAccentBrush", strong: true));
+            body.Children.Add(Subtle($"{gpu?.Name ?? "This PC's card"}: {option.Message}"));
+        }
 
         if (!installedByUs)
         {
@@ -120,10 +129,11 @@ public sealed class Dlss5View : UserControl
             return;
         }
 
-        foreach (var blocker in status.Blockers.Distinct().Where(b => b != option.Message)) body.Children.Add(Line("", blocker, "#8A2B12"));
-        foreach (var warning in status.Warnings) body.Children.Add(Line("", warning, null));
-
         var switched = manifest!.Switch is not null;
+        // Blockers are about switching; once switched only the warnings still matter.
+        if (!switched)
+            foreach (var blocker in status.Blockers.Distinct().Where(b => b != option.Message)) body.Children.Add(Line("", blocker, "#8A2B12"));
+        foreach (var warning in status.Warnings) body.Children.Add(Line("", warning, null));
         if (!switched)
             BuildSwitchTo(body, card, status, manifest, pretend);
         else
@@ -164,11 +174,12 @@ public sealed class Dlss5View : UserControl
 
     private void BuildSwitched(StackPanel body, GameCardViewModel card, Dlss5Status status, InstallManifest manifest, IniFile? ini, bool pretend)
     {
-        var fork = GameUpdates.ComponentFor(manifest.ComponentId);
-        body.Children.Add(new TextBlock { Text = $"Using {fork.Name} {manifest.Version}", FontWeight = FontWeights.SemiBold });
+        // (Which build and file is in use is said in the header above.)
         var canEdit = ini is not null && !pretend && !card.Info.HasAntiCheat;
 
-        // On / off
+        var backend = BackendFor(manifest.ComponentId) ?? status.Option.Backend;
+
+        // On / off, with the in-game hotkey beside it ([DlssNr] ToggleKey, a Windows key code).
         var enabled = Bool(ini?.Get(Dlss5.Section, "Enabled"));
         var toggle = new ToggleSwitch { Header = "Neural Rendering", IsOn = enabled, IsEnabled = canEdit, OnContent = "On", OffContent = "Off" };
         AutomationProperties.SetName(toggle, "Neural Rendering");
@@ -177,16 +188,26 @@ public sealed class Dlss5View : UserControl
             if (_building) return;
             await Save(card, new IniSetting(Dlss5.Section, "Enabled", toggle.IsOn ? "true" : "false"));
         };
-        body.Children.Add(toggle);
-        body.Children.Add(Subtle(Dlss5.HotkeyText(ini, status.Option.Backend ?? BackendFor(manifest.ComponentId))));
+        var toggleRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 24 };
+        toggleRow.Children.Add(toggle);
+        toggleRow.Children.Add(HotkeyPicker(card, ini, backend, canEdit));
+        body.Children.Add(toggleRow);
 
-        // Strength (TransferStrength) and Model resolution (WorkingScale)
-        var strength = Number(ini?.Get(Dlss5.Section, "TransferStrength"), 1.0);
-        body.Children.Add(SliderRow("Strength", "TransferStrength", strength * 100, 0, 150, 5, canEdit, card,
-            "How far the picture moves toward the model's: 0% is the game's own image, 100% the model's."));
+        // Detail strength ([DlssNr] TransferStrength) and Colour strength (ColourStrength): the names and 1.0 defaults
+        // the fork's own menu uses. Model resolution is WorkingScale.
+        body.Children.Add(SliderRow("Detail strength", "TransferStrength", Number(ini?.Get(Dlss5.Section, "TransferStrength"), 1.0),
+            0, 2, 0.05, 1.0, v => v.ToString("0.00", CultureInfo.InvariantCulture), canEdit, card,
+            "How far the picture moves toward the model's: 0 is the game's own image, 1 the model's."));
+        body.Children.Add(SliderRow("Colour strength", "ColourStrength", Number(ini?.Get(Dlss5.Section, "ColourStrength"), 1.0),
+            0, 2, 0.05, 1.0, v => v.ToString("0.00", CultureInfo.InvariantCulture), canEdit, card,
+            "0 keeps the game's own colours, 1 takes the model's; above 1 over-saturates."));
         var scale = Number(ini?.Get(Dlss5.Section, "WorkingScale"), 1.0);
-        body.Children.Add(SliderRow("Model resolution", "WorkingScale", scale * 100, 50, Math.Max(100, scale * 100), 5, canEdit, card,
-            "Lower is faster; below 75% can cause artifacts around hair and fine detail."));
+        body.Children.Add(SliderRow("Model resolution", "WorkingScale", scale, 0.5, Math.Max(1, scale), 0.05, 1.0,
+            v => $"{v * 100:0}%", canEdit, card, "Lower is faster; below 75% can cause artifacts around hair and fine detail."));
+
+        // The fork's advice when a game hands it no exposure (its menu then says "paper white is in use").
+        if (manifest.ComponentId == "optiscaler-dlssnr" && !string.Equals(ini?.Get(Dlss5.Section, "WhitePointSource"), "2", StringComparison.Ordinal))
+            body.Children.Add(Line("", WhitePointTip(card.Info.TargetDir!), null));
 
         // AMD-NR: which runtime (the game asks on first launch when it isn't set)
         if (status.IsAmd && status.Option.Runtimes.Count > 0)
@@ -217,30 +238,132 @@ public sealed class Dlss5View : UserControl
         body.Children.Add(Subtle($"Returns to OptiScaler {manifest.Switch!.FromVersion} exactly as before the switch; settings you changed since are kept."));
     }
 
-    private FrameworkElement SliderRow(string header, string key, double percent, double min, double max, double step, bool enabled,
-        GameCardViewModel card, string note)
+    /// <summary>
+    /// A slider for one [DlssNr] value (as the ini stores it, e.g. 0.75), with its value shown and a Reset button that
+    /// returns it to the fork's default (by writing "auto", as a fresh ini has it).
+    /// </summary>
+    private FrameworkElement SliderRow(string header, string key, double current, double min, double max, double step, double fallback,
+        Func<double, string> format, bool enabled, GameCardViewModel card, string note)
     {
-        var value = new TextBlock { Text = $"{percent:0}%", VerticalAlignment = VerticalAlignment.Center, MinWidth = 44 };
+        var value = new TextBlock { Text = format(current), VerticalAlignment = VerticalAlignment.Center, MinWidth = 44 };
         var slider = new Slider
         {
-            Minimum = min, Maximum = max, StepFrequency = step, Value = Math.Clamp(percent, min, max), Width = 280,
-            IsEnabled = enabled, IsThumbToolTipEnabled = false
+            Minimum = min, Maximum = Math.Max(max, current), StepFrequency = step, Value = Math.Clamp(current, min, Math.Max(max, current)),
+            Width = 260, IsEnabled = enabled, IsThumbToolTipEnabled = false
         };
         AutomationProperties.SetName(slider, header);
         slider.ValueChanged += (_, e) =>
         {
-            value.Text = $"{e.NewValue:0}%";
+            value.Text = format(e.NewValue);
             if (_building) return;
             // Written once the slider rests, not on every step.
-            _pendingSliders[key] = (e.NewValue / 100).ToString("0.##", CultureInfo.InvariantCulture);
+            _pendingSliders[key] = Math.Round(e.NewValue, 2).ToString("0.##", CultureInfo.InvariantCulture);
             _sliderTimer ??= CreateTimer(card);
             _sliderTimer.Stop();
             _sliderTimer.Start();
         };
+        var reset = new Button { Content = "Reset", IsEnabled = enabled && Math.Abs(current - fallback) > 0.001, Padding = new Thickness(10, 3, 10, 4) };
+        AutomationProperties.SetName(reset, $"Reset {header}");
+        ToolTipService.SetToolTip(reset, $"Back to the default, {format(fallback)}");
+        reset.Click += async (_, _) =>
+        {
+            _pendingSliders.Remove(key);
+            _building = true;
+            slider.Value = fallback;
+            _building = false;
+            await Save(card, new IniSetting(Dlss5.Section, key, "auto"));
+        };
         var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
         row.Children.Add(slider);
         row.Children.Add(value);
+        row.Children.Add(reset);
         return new StackPanel { Spacing = 2, Children = { new TextBlock { Text = header }, row, Subtle(note) } };
+    }
+
+    /// <summary>
+    /// The header once switched: "DLSS 5 is set up (your modified file)" / "(official NVIDIA file)" from the DLSS 5
+    /// file in the game folder, or "(AMD-NR)"; and a line on which build and file.
+    /// </summary>
+    private static (string Title, string Detail) SetUpText(string targetDir, InstallManifest manifest)
+    {
+        var fork = GameUpdates.ComponentFor(manifest.ComponentId);
+        var backend = BackendFor(manifest.ComponentId);
+        if (backend?.NeedsNvidiaDll != true) return ($"DLSS 5 is set up ({fork.Name})", $"Using {fork.Name} {manifest.Version}.");
+
+        var path = Path.Combine(targetDir, Dlss5.NvidiaFileName);
+        if (!File.Exists(path))
+            return ("DLSS 5 build installed, but nvngx_dlssnr.dll is missing",
+                $"Using {fork.Name} {manifest.Version}. Add your DLSS 5 file in Settings, then switch back and to DLSS 5 again.");
+        var file = Dlss5.CheckFile(path, AppServices.Catalog);
+        return (file.OfficialNvidia ? "DLSS 5 is set up (official NVIDIA file)" : "DLSS 5 is set up (your modified file)",
+            $"Using {fork.Name} {manifest.Version} with {file.Label.ToLowerInvariant().Replace("nvidia", "NVIDIA")}.");
+    }
+
+    /// <summary>
+    /// "Hotkey: Home" with "Set key…" (press any key to use it in the game) and "Default". The fork reads a Windows
+    /// virtual-key code from [DlssNr] ToggleKey; "auto" is its default (none for DLSSNR, Home for AMD-NR).
+    /// </summary>
+    private FrameworkElement HotkeyPicker(GameCardViewModel card, IniFile? ini, NeuralBackend? backend, bool enabled)
+    {
+        var panel = new StackPanel { Spacing = 4, VerticalAlignment = VerticalAlignment.Top };
+        panel.Children.Add(new TextBlock { Text = "Hotkey" });
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        var name = Dlss5.HotkeyName(ini, backend);
+        row.Children.Add(new TextBlock { Text = name ?? "None", VerticalAlignment = VerticalAlignment.Center, MinWidth = 60, FontWeight = FontWeights.SemiBold });
+        var set = new Button { Content = "Set key…", IsEnabled = enabled };
+        AutomationProperties.SetName(set, "Set Neural Rendering hotkey");
+        set.Click += async (_, _) =>
+        {
+            if (await CaptureKeyAsync() is { } vk) await Save(card, new IniSetting(Dlss5.Section, "ToggleKey", vk.ToString(CultureInfo.InvariantCulture)));
+        };
+        var reset = new Button { Content = "Default", IsEnabled = enabled && !string.Equals(ini?.Get(Dlss5.Section, "ToggleKey") ?? "auto", "auto", StringComparison.OrdinalIgnoreCase) };
+        AutomationProperties.SetName(reset, "Default Neural Rendering hotkey");
+        ToolTipService.SetToolTip(reset, backend?.ToggleKey is { } k ? $"Back to {Dlss5.KeyName(k)}" : "Back to no key");
+        reset.Click += async (_, _) => await Save(card, new IniSetting(Dlss5.Section, "ToggleKey", "auto"));
+        row.Children.Add(set);
+        row.Children.Add(reset);
+        panel.Children.Add(row);
+        panel.Children.Add(Subtle(name is null ? "Or bind one in the game: Insert, then Keybinds." : "Turns Neural Rendering on and off in the game."));
+        return panel;
+    }
+
+    /// <summary>Asks for a key press; returns its Windows key code, or null when cancelled (Esc or the button).</summary>
+    private async Task<int?> CaptureKeyAsync()
+    {
+        if (ShowDialog is null) return null;
+        int? captured = null;
+        var text = new TextBlock { Text = "Press the key to use in the game (Esc cancels).", TextWrapping = TextWrapping.Wrap };
+        var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "Neural Rendering hotkey", Content = text, CloseButtonText = "Cancel" };
+        dialog.PreviewKeyDown += (_, e) =>
+        {
+            e.Handled = true;
+            var vk = (int)e.Key;
+            if (vk == 0x1B) { dialog.Hide(); return; }                      // Esc
+            if (vk is 0x10 or 0x11 or 0x12 or 0x5B or 0x5C) return;          // Shift, Ctrl, Alt, Windows: need a real key
+            captured = vk;
+            dialog.Hide();
+        };
+        await ShowDialog(dialog);
+        return captured;
+    }
+
+    /// <summary>
+    /// The fork's own advice for a game that hands it no exposure (its menu then says "paper white is in use. Try the
+    /// scan instead"), with what its OptiScaler.log says the scan found in this game.
+    /// </summary>
+    private static string WhitePointTip(string targetDir)
+    {
+        var tip = "Tip: if the game's menu says \"This game supplies no exposure -- paper white is in use\", brightness can drift " +
+                  "between dark and bright scenes. The fork suggests the scan: in the game press Insert, then under White point " +
+                  "choose \"A buffer the scan found\", and press Anchor once where the picture looks right.";
+        try
+        {
+            var log = Path.Combine(targetDir, "OptiScaler.log");
+            if (File.Exists(log) && File.ReadLines(log).Any(l => l.Contains("ExposureScan::Adopt", StringComparison.Ordinal)))
+                tip += " Its log shows the scan found candidates in this game.";
+        }
+        catch (IOException) { }
+        return tip;
     }
 
     private DispatcherQueueTimer CreateTimer(GameCardViewModel card)
