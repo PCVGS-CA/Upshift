@@ -58,7 +58,10 @@ errors and no warnings.
     - `upscalerFiles` in `catalog.json`: the signers per family, and one source per DLL. Each source gives the file,
       its own version (not the SDK's), minVersion/belowVersion for the game files it may replace, component, tag,
       and `repoPath` or `archivePath`. The notes there explain which swaps are allowed and why.
-    - `RemoteCatalog` loads a newer catalog from the `catalogUrl` setting.
+    - `RemoteCatalog` loads a newer catalog from the online address: `AppSettings.DefaultCatalogUrl` (the raw
+      `catalog.json` on `main` of PCVGS-CA/Upshift) unless the `catalogUrl` setting names another. It's used from
+      the next start when valid and newer; otherwise the built-in copy is used. **Bump `"updated"` in catalog.json
+      whenever it changes**, or installed copies won't pick the change up.
     - `DlssNames` turns a DLSS version into its name, e.g. "310.9.1 (DLSS 4.5)".
   - `Components/`:
     - `GitHubClient` reads the releases API with an ETag cache and handles the rate limit.
@@ -300,8 +303,29 @@ errors and no warnings.
   - `.gitattributes` keeps LF endings (`* text=auto eol=lf`), whatever `core.autocrlf` says.
   - Remote `origin` is the private GitHub repo `PCVGS-CA/Upshift` (https://github.com/PCVGS-CA/Upshift), created by
     the user from Visual Studio.
-  - Push to `origin main` only at the end of each finished and tested step, or when the user asks. Never force-push.
-  - No LICENSE yet (MIT or GPL-3.0 still to be chosen).
+  - Push to `origin main` only at the end of each finished and tested step, or when the user asks. **Never
+    force-push.**
+    - The one exception, already used: on 2026-09-29 the user allowed a single history rewrite and force-push to
+      remove their Windows user name from CLAUDE.md in every commit. It was done with `git filter-branch
+      --index-filter` (only the CLAUDE.md blob changed; every other file and the final tree are identical), and
+      the old commits were pruned locally. That permission is used up.
+    - The pre-rewrite history is backed up as a git bundle: `%USERPROFILE%\Documents\Upshift-history-backup-20260929.bundle`.
+    - Never write the user name into the repo: use `%USERPROFILE%`, `%LocalAppData%` or `%USERNAME%` in paths.
+  - License: MIT, "Copyright (c) 2026 PCVGS" (`LICENSE`).
+- **1.0 release prep (2026-09-29):**
+  - MIT `LICENSE`; Settings > About ends with the license line and the as-is disclaimer ("Made by PCVGS,
+    pcvgs.com"); the README ends with the same.
+  - The online catalog is on by default (see `RemoteCatalog` above). While the repo is private the raw URL returns
+    404, so every install uses the built-in catalog until the repo is public.
+  - README: Download (Releases page), First launch (SmartScreen: More info > Run anyway), 3 screenshots in
+    `docs/screenshots` (library, details, updates), Reporting a problem, License.
+  - Issue templates in `.github/ISSUE_TEMPLATE`: Bug report, Game not detected / wrong info, plus a link to
+    OptiScaler's own issues.
+  - CHANGELOG 1.0.0 shortened to a user-facing list.
+  - Final check, all passed: Release x64 build with no warnings, `build\package.ps1`, Setup installs and the app
+    starts with the existing 21 games and settings, uninstall with "No" leaves `%LocalAppData%\Upshift` and both game
+    folders hash-identical, and the portable zip runs (1.0.0). Smart App Control didn't block anything this time.
+  - No tag or release exists yet; the user will publish it.
 - **Current game state** (2026-09-28, after the step 3 test):
   - Witcher 3 has OptiScaler v0.9.4 (updated from v0.9.3), with an undo copy in `.upshift\undo20260927-225122`.
     - DLSS was updated by Upshift: 3.1.1 → 310.9.1, with the original in the root's `.upshift\originals\`.
@@ -355,10 +379,11 @@ errors and no warnings.
       folder and the game folders hash-identical (the 25 s timeout path; no button was pressed).
     - The published build (the same files as `current\`) finds the existing data (22 games, covers, data path),
       and About shows 1.0.0.
-  - Not tested, because Smart App Control blocked the rebuilt Setup:
-    - The installed app actually starting.
-    - The uninstall question's "No" and "Yes" buttons.
-    - The portable zip.
+  - Tested on 2026-09-29 (Setup wasn't blocked that time): the installed app starting, the uninstall question's
+    "No", and the portable zip. After the question, Velopack shows an "Uninstall Complete" box, and the program
+    folder is removed only once it's closed with OK.
+  - Still not tested:
+    - The uninstall question's "Yes".
     - A real self-update. This needs two releases, and the updater can't read releases while the repo is private.
       Velopack's `GithubSource` has no token, so the repo or its releases must be public.
 - Size, after the Windows App SDK trim:
@@ -370,7 +395,7 @@ errors and no warnings.
   - Play for EA, Ubisoft, Battle.net, Heroic and Xbox.
   - Play being disabled while a game is busy, and the launch-error box.
   - "Keep updated".
-  - A real `catalogUrl`.
+  - A real online catalog (the default address 404s until the repo is public).
   - The Upscaler and Frame generation guide flyouts.
 - OptiScaler.ini changes made before 2026-09-28 show "Date not recorded".
 - The card's FSR chip can come from files OptiScaler added (their rows say so, but the chip doesn't).
@@ -410,6 +435,12 @@ errors and no warnings.
     - Scripts: `preview.ps1`, `pickfile.ps1`, `dlss5set.ps1`.
     - Snapshots D0–D4 and screenshots `p0`–`p6`, `r1`, `w*`, `u-updates`.
   - App data: `components\optiscaler-dlssnr-v0.2.0-dlssnr\` (downloaded for the switch test).
+  - From the 1.0 release session: `rel10\` (about 510 MB: publish, releases and the extracted portable copy),
+    `rel-*.png` screenshots and `rel-*.json` snapshots.
+- **Outside the scratch folder (1.0 release session):**
+  - `%USERPROFILE%\Documents\Upshift-history-backup-20260929.bundle` (1.9 MB): the full history before the rewrite.
+    Keep it until you're sure it isn't needed; it still contains the old paths.
+  - `%TEMP%\upshift\` (`scrub.py`, `indexfilter.sh`): the rewrite scripts, disposable.
 - **Installer leftovers:**
   - `%TEMP%\velopack\` (Velopack's own temp folder).
   - The vpk 1.2.158 tool, in the NuGet cache (`%UserProfile%\.nuget\packages\vpk`).
