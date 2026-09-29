@@ -134,7 +134,8 @@ errors and no warnings.
 - **Don't stop for small decisions.** Pick sensible defaults and list what you chose at the end.
 - **Ask first** before touching files outside the project folder, deleting anything, or changing how the app
   installs into games.
-- **Game folders:** only modify The Witcher 3 and Silent Hill 2, and only for testing. Before any test, check the
+- **Game folders:** only modify The Witcher 3 and Silent Hill 2 (and other games only with the user's OK for that
+  test), and only for testing. Before any test, check the
   folder is in the expected state (the user installs things between sessions) and stop if it isn't. Record hashes of
   every file before and after, and compare them.
   - Witcher 3: `C:\Program Files\GOG Galaxy\Games\The Witcher 3 Wild Hunt GOTY\bin\x64_dx12`, and the game root's
@@ -216,6 +217,16 @@ errors and no warnings.
     - **Hand changes:** the first original is never replaced; a copy changed outside Upshift goes to
       `.upshift\set-aside\<stamp>\` before Upshift replaces or restores it.
     - **Section layout:** collapsed, titled "Upscaler files (advanced)", with a summary.
+    - **Specific badges:**
+      - The card badge says "DLSS update", "XeSS update" or "DLSS + FSR + XeSS updates" (it wraps on the card). Its
+        tooltip lists each file as current → new.
+      - The filter label names the technologies ("DLSS+FSR+XeSS updates"); its tooltip lists the games.
+      - A release that isn't downloaded yet says "XeSS 3.0.2 available (downloads when you update)"; Update
+        downloads it.
+    - **Fresh cards:** `GameAnalyzer.RefreshQuick` runs when every card is built. It re-reads DLL versions, the mods
+      next to the exe (the OptiScaler badge) and changed files, so cards don't depend on `library.json`.
+      - Two Upshift windows at once each keep their own library in memory and overwrite `library.json`. The user's
+        sessions at 20:27 and 20:51 on 2026-09-28 ran alongside Claude's, and their cache writes didn't last.
   - **Tested on both games** (hash snapshots `G0`–`G5` in the scratchpad):
     - Update, then Restore exact: 0 of 2,897 entries differed from before.
     - Update again. The Witcher 3 also went through a simulated "game put its old file back" → warning → Re-apply.
@@ -248,12 +259,17 @@ errors and no warnings.
     - Its OptiScaler.ini has `Dx12Upscaler=dlss`, set at 18:12 that day by an Upshift session that wasn't
       Claude's (pid 18620).
     - DLSS model M (set by the user, 20:37).
-    - The root's `.upshift\set-aside\20260928-204743\` holds a 51 MB 3.7.0 DLL from Claude's hand-change test. It's
-      safe to delete, but waiting for the user's OK.
+    - The hand-change test's set-aside copy was deleted with the user's OK; `.upshift` holds only `originals` and
+      the record.
   - Silent Hill 2 has OptiScaler v0.9.4, installed by the user.
     - DLSS (`SHProto\Plugins\DLSS\…`) was updated by Upshift: 3.7.0 → 310.9.1.
     - XeSS in `Plugins\XeSS` was updated by the user through Upshift: 1.3.0.28 → 1.3.1.32.
     - Both originals are in the root's `.upshift\originals\`, and DLSS model M is set.
+  - RoboCop: Rogue City (changed for a test with the user's OK on 2026-09-28):
+    - The user installed OptiScaler v0.9.4 there and updated DLSS 3.7.20 → 310.9.1 through Upshift.
+    - Claude updated the game's own XeSS `libxess.dll` 2.0.0.18 → 2.0.2.68 and left it updated. The original is in
+      the root `.upshift\originals\`, and its folder snapshots are R0 and R1.
+    - Two XeSS updates remain there: `libxell` and `libxess_fg`.
   - Resident Evil Requiem (not a test game) was changed by the user through Upshift on 2026-09-28, with no OptiScaler
     there:
     - DLSS and Ray Reconstruction 310.3.0 → 310.9.1.

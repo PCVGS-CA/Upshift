@@ -63,9 +63,10 @@
                         <Border Visibility="{x:Bind HasBadge}" Background="White" CornerRadius="11" Padding="8,2,8,3" HorizontalAlignment="Left">
                             <TextBlock Text="{x:Bind BadgeText}" FontSize="11" FontWeight="Bold" Foreground="{x:Bind BadgeForeground}" />
                         </Border>
-                        <Border Visibility="{x:Bind HasStatusBadge, Mode=OneWay}" Background="{StaticResource UpshiftAccentBrush}" CornerRadius="11"
-                                Padding="8,2,8,3" HorizontalAlignment="Left" ToolTipService.ToolTip="{x:Bind StatusBadgeTip, Mode=OneWay}">
-                            <TextBlock Text="{x:Bind StatusBadgeText, Mode=OneWay}" FontSize="11" FontWeight="Bold" Foreground="White" />
+                        <!-- Wraps onto a second line on the narrow card, e.g. "DLSS + FSR + XeSS updates" -->
+                        <Border Visibility="{x:Bind HasStatusBadge, Mode=OneWay}" Background="{StaticResource UpshiftAccentBrush}" CornerRadius="10"
+                                Padding="8,2,8,3" HorizontalAlignment="Left" MaxWidth="126" ToolTipService.ToolTip="{x:Bind StatusBadgeTip, Mode=OneWay}">
+                            <TextBlock Text="{x:Bind StatusBadgeText, Mode=OneWay}" FontSize="11" FontWeight="Bold" Foreground="White" TextWrapping="Wrap" />
                         </Border>
                     </StackPanel>
                     <!-- Play, shown while the pointer is over the card -->
@@ -211,7 +212,9 @@
                     <SelectorBarItem Text="Blocked" ToolTipService.ToolTip="Games with anti-cheat: nothing is installed or updated" />
                     <SelectorBarItem Text="Suggestions" ToolTipService.ToolTip="Games with suggestions from the OptiScaler wiki" />
                     <SelectorBarItem Text="Updates" ToolTipService.ToolTip="Updates available: a newer OptiScaler can be installed" />
-                    <SelectorBarItem Text="Upscaler update available" ToolTipService.ToolTip="A newer DLSS, FSR or XeSS file can replace one of the game's" />
+                    <!-- Names what's out of date across the library, e.g. "DLSS + XeSS updates (7)" -->
+                    <SelectorBarItem Text="{x:Bind ViewModel.UpscalerFilterLabel, Mode=OneWay}"
+                                     ToolTipService.ToolTip="{x:Bind ViewModel.UpscalerFilterTip, Mode=OneWay}" />
                 </SelectorBar>
             </ScrollViewer>
 

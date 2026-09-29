@@ -148,6 +148,23 @@ public static class GameAnalyzer
         return info;
     }
 
+    /// <summary>
+    /// Re-reads the quick facts that change when a game folder is changed (by Upshift, another Upshift window, a game
+    /// update or by hand), without a full scan: each upscaler DLL's version (dropping files that are gone), the mods
+    /// next to the exe (OptiScaler…), and upscaler files a game or the user put back or changed.
+    /// </summary>
+    public static void RefreshQuick(GameInfo info)
+    {
+        Install.UpscalerFiles.RefreshVersions(info);
+        if (info.TargetDir is { } target && Directory.Exists(target))
+            info.ExistingMods = ModDetector.Detect(target);
+        if (Directory.Exists(info.InstallDir))
+        {
+            info.UpscalerFilesRestoredByGame = Install.UpscalerFiles.RestoredByGame(info.InstallDir);
+            info.UpscalerFilesChangedByHand = Install.UpscalerFiles.ChangedOutsideUpshift(info.InstallDir);
+        }
+    }
+
     private static string? PickExe(DiscoveredGame game, List<string> exes, HashSet<string> upscalerDirs)
     {
         // Unreal games often launch through a small exe at the top that starts the real one in Binaries\Win64.

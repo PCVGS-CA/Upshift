@@ -54,6 +54,8 @@ public sealed partial class GameCardViewModel : ObservableObject
 
     public GameCardViewModel(GameInfo info)
     {
+        // Fresh from the game folder, not the last scan: versions, OptiScaler and other mods, changed files.
+        Core.Detection.GameAnalyzer.RefreshQuick(info);
         Info = info;
         Name = info.Name;
         SourceText = SourceName(info.Source);
@@ -80,7 +82,6 @@ public sealed partial class GameCardViewModel : ObservableObject
 
         // "Upscaler files": each DLSS, FSR and XeSS file this game has, and any newer one on offer. Versions come from
         // the files on disk, not the last scan, so the bar, badge, filter and buttons match what's really there.
-        Core.Install.UpscalerFiles.RefreshVersions(info);
         _fileItems = Services.UpscalerUpdates.Items(info);
         // One row per file that is the game's (or Upshift's update of it). OptiScaler's own copies get one line:
         // OptiScaler keeps them up to date itself, so Upshift doesn't compete with it.
@@ -94,7 +95,7 @@ public sealed partial class GameCardViewModel : ObservableObject
         if (Services.UpscalerUpdates.DlssUpdate(info) is { } dlss && dlss.CurrentVersion is { } dlssNow)
         {
             HasDlssBar = true;
-            DlssBarText = UpscalerFileText.DlssBar(dlssNow, dlss.Target!.Version);
+            DlssBarText = UpscalerFileText.DlssBar(dlssNow, dlss.Target!.Version, Services.UpscalerUpdates.IsOnThisPc(dlss.Target));
         }
         var restored = _fileItems.Where(i => i.State == UpscalerFileState.GameRestoredOld).ToList();
         if (restored.Count > 0)
@@ -262,13 +263,25 @@ public sealed partial class GameCardViewModel : ObservableObject
     public bool NeedsRepair { get; }
     public string RepairText { get; }
 
-    /// <summary>The card's second badge: "Needs repair", "Update" (OptiScaler) or "Upscaler update".</summary>
-    public string StatusBadgeText => NeedsRepair ? "Needs repair" : HasUpdate ? "Update" : HasUpscalerUpdate ? "Upscaler update" : "";
+    /// <summary>
+    /// The card's second badge: "Needs repair", "Update" (OptiScaler), or what's out of date among the game's own
+    /// upscaler files: "DLSS update", "XeSS update", "DLSS + XeSS updates".
+    /// </summary>
+    public string StatusBadgeText => NeedsRepair ? "Needs repair" : HasUpdate ? "Update" : UpscalerBadgeText;
 
-    /// <summary>The badge's tooltip.</summary>
+    /// <summary>The badge's tooltip; for upscaler updates, each file with its current and new version.</summary>
     public string StatusBadgeTip => NeedsRepair ? "Some OptiScaler files are missing or changed"
-        : HasUpdate ? $"OptiScaler {UpdateVersion} is available"
-        : HasUpscalerUpdate ? "Upscaler update available: a newer DLSS, FSR or XeSS file can replace one of this game's" : "";
+        : HasUpdate ? $"OptiScaler {UpdateVersion} is available" + (HasUpscalerUpdate ? $"\n\n{UpscalerBadgeText}:\n{UpscalerUpdateList}" : "")
+        : HasUpscalerUpdate ? UpscalerUpdateList : "";
+
+    /// <summary>"DLSS update", "XeSS update", "DLSS + XeSS updates" (empty when nothing is out of date).</summary>
+    public string UpscalerBadgeText => UpscalerFileText.BadgeText(_fileItems);
+
+    /// <summary>The technologies with a file to update, for the Library filter's label.</summary>
+    public IReadOnlyList<string> UpscalerUpdateFamilies => UpscalerFileText.FamiliesWithUpdates(_fileItems);
+
+    /// <summary>"libxess.dll: 2.0.0.18 → 2.0.2.68 (downloads when you update)", one line per file.</summary>
+    public string UpscalerUpdateList => UpscalerFileText.UpdateList(_fileItems);
     public bool HasStatusBadge => StatusBadgeText.Length > 0;
 
     /// <summary>Works out UpdateVersion again after an update check or a change of channel. Call on the UI thread.</summary>

@@ -75,6 +75,28 @@ public sealed partial class LibraryViewModel : ObservableObject
 
     public bool HasDlssNotice => DlssNotice.Length > 0;
 
+    /// <summary>The filter's label, naming what's out of date across the library: "DLSS + XeSS updates (7)".</summary>
+    [ObservableProperty]
+    private string upscalerFilterLabel = "Upscaler updates";
+
+    /// <summary>The filter's tooltip: each technology with the games that have an update for it.</summary>
+    [ObservableProperty]
+    private string upscalerFilterTip = "No DLSS, FSR or XeSS file in your games has a newer version";
+
+    private void RefreshUpscalerFilter()
+    {
+        var withUpdates = _all.Where(c => c.HasUpscalerUpdate).ToList();
+        var families = withUpdates.SelectMany(c => c.UpscalerUpdateFamilies).Distinct()
+            .OrderBy(f => f switch { "DLSS" => 0, "FSR" => 1, _ => 2 }).ToList();
+        // Compact, so it fits the filter bar: "XeSS updates", "DLSS+XeSS updates"; the tooltip has the count and games.
+        UpscalerFilterLabel = withUpdates.Count == 0 ? "Upscaler updates" : $"{string.Join("+", families)} updates";
+        UpscalerFilterTip = withUpdates.Count == 0
+            ? "No DLSS, FSR or XeSS file in your games has a newer version"
+            : $"Upscaler update available in {(withUpdates.Count == 1 ? "1 game" : $"{withUpdates.Count} games")}:\n"
+              + string.Join("\n", families.Select(f =>
+                  $"{f}: {string.Join(", ", withUpdates.Where(c => c.UpscalerUpdateFamilies.Contains(f)).Select(c => c.Name))}"));
+    }
+
     /// <summary>The DLSS name in the notice ("DLSS 4.5"), kept so the count can be refreshed after updates.</summary>
     private string? _dlssNoticeName;
 
@@ -556,6 +578,7 @@ public sealed partial class LibraryViewModel : ObservableObject
         ApplyFilter();
         Selected = selectedId is null ? null : _all.FirstOrDefault(g => g.Info.Id == selectedId);
         RefreshDlssNotice();
+        RefreshUpscalerFilter();
     }
 
     private void ApplyFilter()

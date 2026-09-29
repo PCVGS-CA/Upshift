@@ -24,7 +24,9 @@ public sealed class UpscalerRowViewModel
             // Who changed the file: Upshift's update, OptiScaler's own copy, or the game putting its old one back.
             if (UpscalerFileText.Subtitle(item) is { } who) Subtitle = $"{row.FileName} · {who}";
             Updated = item.State == UpscalerFileState.UpdatedByUpshift;
-            if (item.Target is { } target) UpdateNote = $"Update available: {Ui.VersionLabel(target.Version, item.FileName)}";
+            if (item.Target is { } target)
+                UpdateNote = $"Update available: {Ui.VersionLabel(target.Version, item.FileName)}"
+                             + (Services.UpscalerUpdates.IsOnThisPc(target) ? "" : $" · {UpscalerFileText.ReleaseName(target)} (downloads when you update)");
         }
         else if (manifest is { Removed: false } && game.TargetDir is not null && row.RelativePath is not null)
         {
