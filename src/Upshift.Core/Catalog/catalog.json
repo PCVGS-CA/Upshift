@@ -22,7 +22,9 @@
       "description": "OptiScaler fork that adds NVIDIA DLSS 5 Neural Rendering. Needs the user's own nvngx_dlssnr.dll.",
       "repo": "Dagherbou/OptiScaler_DLSSNR",
       "assetPattern": "(?i)^OptiScaler-DLSSNR-.*\\.zip$",
-      "pinnedVersion": "v0.2.0-dlssnr"
+      "pinnedVersion": "v0.2.0-dlssnr",
+      "installable": true,
+      "notes": "Checked v0.2.0-dlssnr (2026-09-28): OptiScaler.dll, OptiScaler.ini, the forwarder nvngx.dll_dlssnr.dll, and the FSR/XeSS DLLs under OptiScaler\\. No nvngx_dlssnr.dll (the author won't ship it). Settings in [DlssNr]: Enabled (default off), ToggleKey (unbound), TransferStrength, ColourStrength, WorkingScale (model resolution, up to 2.0). Needs driver 616.56+."
     },
     {
       "id": "amd-nr",
@@ -31,7 +33,9 @@
       "description": "OptiScaler fork that runs DLSS 5 Neural Rendering on AMD RX 7000 and RX 9000 cards. Includes the lmxxf runtime.",
       "repo": "3zwr1/AMD-NR---OptiScaler",
       "assetPattern": "(?i)^AMDNR-v.*\\.zip$",
-      "pinnedVersion": "Alpha0.3.2"
+      "pinnedVersion": "Alpha0.3.2",
+      "installable": true,
+      "notes": "Checked Alpha0.3.2 (2026-09-28): 516 MB zip with OptiScaler.dll/ini, LmxxfNrRuntime.dll + .pak (the lmxxf runtime) and the FSR/XeSS DLLs under OptiScaler\\. No amdxcffx64.dll or nvngx_dlssnr.dll. Same [DlssNr] keys as DLSSNR, plus NrBackend = daniel | lmxxf (asked on first launch when unset) and ToggleKey default Home (0x24)."
     },
     {
       "id": "amd-nr-runtime",
@@ -126,9 +130,10 @@
       "generations": [ "RDNA 4", "RDNA 3" ],
       "needsNvidiaDll": false,
       "runtimes": [
-        { "id": "lmxxf", "name": "lmxxf", "generations": [ "RDNA 4" ], "componentId": null },
-        { "id": "danielblnc", "name": "danielblnc", "generations": [ "RDNA 4", "RDNA 3" ], "componentId": "amd-nr-runtime" }
+        { "id": "lmxxf", "name": "lmxxf", "iniValue": "lmxxf", "generations": [ "RDNA 4" ], "componentId": null },
+        { "id": "danielblnc", "name": "danielblnc", "iniValue": "daniel", "generations": [ "RDNA 4", "RDNA 3" ], "componentId": "amd-nr-runtime" }
       ],
+      "toggleKey": 36,
       "summary": "Uses the AMD-NR fork of OptiScaler. No NVIDIA file needed. Press Home in-game to turn it on and off."
     },
     {
@@ -139,6 +144,7 @@
       "generations": [ "Blackwell" ],
       "needsNvidiaDll": true,
       "requiresSignedDll": true,
+      "minNvidiaDriver": "616.56",
       "summary": "Uses the NVIDIA DLSS 5 fork of OptiScaler with your own DLSS 5 file (nvngx_dlssnr.dll)."
     },
     {
@@ -149,6 +155,7 @@
       "generations": [ "Ada Lovelace", "Ampere", "Turing" ],
       "needsNvidiaDll": true,
       "requiresSignedDll": false,
+      "minNvidiaDriver": "616.56",
       "summary": "NVIDIA's official DLSS 5 file only runs on RTX 50 cards for now. It works on this card with a modified file you supply, which can't be verified as safe. RTX 40 support is expected from NVIDIA this fall."
     }
   ],

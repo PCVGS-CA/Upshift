@@ -23,10 +23,17 @@ public static partial class OptiScalerInstaller
 
     private static bool IsUserFile(string relative) => UserFileNames.Contains(relative, StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>True when the last update can be undone (its saved copy is still there).</summary>
+    /// <summary>
+    /// True when the last update can be undone (its saved copy is still there). While a DLSS 5 build is switched in,
+    /// the update from before the switch can't be: "Switch back" is the way back.
+    /// </summary>
     public static bool CanUndo(string targetDir) =>
-        ReadManifest(targetDir) is { Removed: false, LastUpdate.UndoFolder: { } undo }
-        && File.Exists(Path.Combine(targetDir, undo, ManifestName));
+        ReadManifest(targetDir) is { Removed: false, LastUpdate.UndoFolder: { } undo } manifest
+        && File.Exists(Path.Combine(targetDir, undo, ManifestName))
+        && !(manifest.Switch is not null && manifest.LastUpdate!.UpdatedUtc < manifest.Switch.SwitchedUtc);
+
+    private const string IniAfterSwitchName = "ini-after-switch.ini";
+    private const string OriginalManifestName = "manifest.original.json";
 
     // ---------------- check (during scans) ----------------
 
@@ -87,18 +94,28 @@ public static partial class OptiScalerInstaller
         log.Write($"UPDATE {plan.GameName} | to {plan.ComponentId} {plan.Version} | in {target}");
         if (MoveLegacyState(target, log) is { } moveProblem) return Refuse(log, moveProblem);
 
+        // A switch (to a DLSS 5 build) is an update to another component that also saves an exact return point:
+        // the previous "Undo last update" copy stays, and "Switch back" restores everything from before the switch.
+        var isSwitch = plan.Operation == InstallOperation.SwitchBuild;
         var manifest = ReadManifest(target);
         if (manifest is null or { Removed: true }) return Refuse(log, "OptiScaler isn't installed here by this app, so it wasn't updated.");
-        if (manifest.Version == plan.Version) return Refuse(log, $"OptiScaler {plan.Version} is already installed here.");
+        if (isSwitch && manifest.Switch is not null) return Refuse(log, "This game already uses a DLSS 5 build of OptiScaler; switch back first.");
+        if (!isSwitch && manifest.Version == plan.Version && manifest.ComponentId == plan.ComponentId)
+            return Refuse(log, $"OptiScaler {plan.Version} is already installed here.");
         if (!File.Exists(Path.Combine(source, "OptiScaler.dll"))) return Refuse(log, "The downloaded OptiScaler is missing OptiScaler.dll.");
 
         var oldManifestJson = JsonSerializer.Serialize(manifest, Json);
-        var undoRelative = Path.Combine(StateFolder, "undo" + DateTime.Now.ToString("yyyyMMdd-HHmmss"));
+        var undoRelative = Path.Combine(StateFolder, (isSwitch ? "switch" : "undo") + DateTime.Now.ToString("yyyyMMdd-HHmmss"));
         var undoDir = Path.Combine(target, undoRelative);
         var previousUndo = manifest.LastUpdate?.UndoFolder;
+        // While switched, the undo copy from before the switch belongs to the return point, so it's never deleted.
+        var keepPreviousUndo = isSwitch || manifest.Switch is not null;
+        var fromComponent = manifest.ComponentId;
         var proxy = manifest.ProxyName;
 
-        var newFiles = FilesToCopy(source, proxy).ToList();
+        var newFiles = FilesToCopy(source, proxy)
+            .Concat(plan.ExtraSourceDir is { } extra && Directory.Exists(extra) ? FilesToCopy(extra, proxy) : Enumerable.Empty<(string From, string Relative)>())
+            .ToList();
         var newSet = newFiles.Select(f => f.Relative).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var oldSource = plan.OldSourceDir is { } old && File.Exists(Path.Combine(old, "OptiScaler.dll")) ? old : null;
         // The files the old release brought. Without its download, everything but user-supplied files counts.
@@ -131,9 +148,12 @@ public static partial class OptiScalerInstaller
                 snapshot.Add(new SnapshotFile { Path = file.Path, Sha256 = hash });
             }
             var saved = JsonSerializer.Deserialize<InstallManifest>(oldManifestJson, Json)!;
-            if (saved.LastUpdate is not null) saved.LastUpdate.UndoFolder = null; // only the latest update can be undone
+            // Only the latest update can be undone. A switch keeps it: switching back returns to exactly this state.
+            if (!isSwitch && saved.LastUpdate is not null) saved.LastUpdate.UndoFolder = null;
             File.WriteAllText(Path.Combine(undoDir, ManifestName), JsonSerializer.Serialize(saved, Json));
             File.WriteAllText(Path.Combine(undoDir, SnapshotName), JsonSerializer.Serialize(snapshot, Json));
+            // A switch also keeps the manifest file itself, so switching back restores it byte for byte (time included).
+            if (isSwitch) File.Copy(Path.Combine(target, StateFolder, ManifestName), Path.Combine(undoDir, OriginalManifestName), overwrite: true);
             snapshotSaved = true;
             log.Write($"  saved {snapshot.Count} file(s) and the manifest in {undoRelative}");
 
@@ -205,13 +225,33 @@ public static partial class OptiScalerInstaller
                 }
             }
 
+            // 5. A switch: the settings chosen for it (e.g. AMD-NR's runtime) and the user's DLSS 5 file.
+            if (isSwitch)
+            {
+                if (plan.IniSettings.Count > 0 && File.Exists(iniPath))
+                {
+                    var ours = manifest.Added.FirstOrDefault(f => IsIni(f.Path)) is { } entry && Sha256(iniPath) == entry.Sha256;
+                    ApplyIni(target, manifest, plan.IniSettings, log, ours);
+                }
+                if (plan.AddFileFrom is { } userFile && plan.AddFileAs is { } userName)
+                    AddUserFile(target, manifest, userFile, userName, log);
+                if (File.Exists(iniPath)) File.Copy(iniPath, Path.Combine(undoDir, IniAfterSwitchName), overwrite: true);
+            }
+
             manifest.Version = plan.Version;
             manifest.ComponentId = plan.ComponentId;
-            manifest.LastUpdate = record;
+            if (isSwitch)
+                manifest.Switch = new SwitchRecord
+                {
+                    FromComponentId = fromComponent, FromVersion = record.FromVersion, SwitchedUtc = DateTime.UtcNow, ReturnFolder = undoRelative
+                };
+            else manifest.LastUpdate = record;
             WriteManifest(target, manifest);
-            if (previousUndo is not null) TryDeleteFolder(Path.Combine(target, previousUndo));
+            if (previousUndo is not null && !keepPreviousUndo) TryDeleteFolder(Path.Combine(target, previousUndo));
 
-            var message = $"OptiScaler updated from {record.FromVersion} to {plan.Version} (still loading as {proxy}).";
+            var message = isSwitch
+                ? $"Switched to {plan.ComponentName ?? plan.ComponentId} {plan.Version} (still loading as {proxy}). \"Switch back\" returns to OptiScaler {record.FromVersion} exactly."
+                : $"OptiScaler updated from {record.FromVersion} to {plan.Version} (still loading as {proxy}).";
             if (record.KeptIniValues.Count > 0)
                 message += $" Kept your settings: {string.Join(", ", record.KeptIniValues.Select(c => $"{c.Key}={c.Current}"))}.";
             if (record.NewIniOptions.Count > 0) message += $" {record.NewIniOptions.Count} new setting(s) start at their defaults.";
@@ -300,6 +340,7 @@ public static partial class OptiScalerInstaller
         if (manifest is not { Removed: false, LastUpdate.UndoFolder: { } undoRelative }
             || !File.Exists(Path.Combine(target, undoRelative, ManifestName)))
             return Refuse(log, "There's no update to undo here.");
+        if (!CanUndo(target)) return Refuse(log, "This game uses a DLSS 5 build of OptiScaler: use \"Switch back\" instead.");
 
         var undoDir = Path.Combine(target, undoRelative);
         try
@@ -318,6 +359,103 @@ public static partial class OptiScalerInstaller
             log.Write($"  FAILED: {ex.Message}");
             return new InstallResult { Message = $"Undo failed: {ex.Message} The saved copy is still in {undoRelative}." };
         }
+    }
+
+    // ---------------- switch back (from a DLSS 5 build) ----------------
+
+    /// <summary>
+    /// Returns from a DLSS 5 build to the OptiScaler that was there before the switch: every file, OptiScaler.ini and
+    /// the manifest come back byte for byte from the return point (the DLSS 5 build's files and the user's DLSS 5 file
+    /// go). Settings the user changed while switched are carried over when the regular build has them too, so with no
+    /// changes the folder ends up exactly as it was.
+    /// </summary>
+    public static InstallResult SwitchBack(InstallPlan plan, InstallLog log)
+    {
+        var target = plan.TargetDir;
+        log.Write($"SWITCH BACK {plan.GameName} | in {target}");
+        var manifest = ReadManifest(target);
+        if (manifest is not { Removed: false, Switch: { } sw }) return Refuse(log, "This game isn't using a DLSS 5 build of OptiScaler.");
+        var returnDir = Path.Combine(target, sw.ReturnFolder);
+        if (!File.Exists(Path.Combine(returnDir, ManifestName))) return Refuse(log, $"The return point ({sw.ReturnFolder}) is missing, so nothing was changed.");
+
+        var iniPath = Path.Combine(target, IniName);
+        var iniNow = File.Exists(iniPath) ? IniFile.Load(iniPath) : null;
+        var afterSwitchPath = Path.Combine(returnDir, IniAfterSwitchName);
+        var iniAfterSwitch = File.Exists(afterSwitchPath) ? IniFile.Load(afterSwitchPath) : null;
+        var buildUndo = manifest.LastUpdate?.UndoFolder;
+
+        try
+        {
+            var (problems, restored) = RestoreSnapshot(target, returnDir, manifest, log);
+            if (problems.Count > 0)
+                return new InstallResult { Message = $"Switching back stopped part-way: {string.Join(", ", problems)} couldn't be put back. The return point is still in {sw.ReturnFolder}, so you can try again." };
+
+            // The manifest file exactly as it was (the snapshot restore rewrote it with the same content).
+            var originalManifest = Path.Combine(returnDir, OriginalManifestName);
+            if (File.Exists(originalManifest)) File.Copy(originalManifest, Path.Combine(target, StateFolder, ManifestName), overwrite: true);
+
+            // Settings changed while switched (compared with right after the switch), where the regular build has them.
+            if (iniNow is not null && iniAfterSwitch is not null && File.Exists(iniPath))
+            {
+                var regular = IniFile.Load(iniPath);
+                var carried = iniNow.Entries()
+                    .Where(e => regular.Has(e.Section, e.Key) && !string.Equals(iniAfterSwitch.Get(e.Section, e.Key), e.Value, StringComparison.Ordinal))
+                    .Select(e => new IniSetting(e.Section, e.Key, e.Value))
+                    .ToList();
+                if (carried.Count > 0)
+                {
+                    var ours = restored!.Added.FirstOrDefault(f => IsIni(f.Path)) is { } entry && Sha256(iniPath) == entry.Sha256;
+                    ApplyIni(target, restored, carried, log, ours);
+                    WriteManifest(target, restored);
+                    log.Write($"  kept {carried.Count} setting(s) changed while switched");
+                }
+            }
+
+            // An update of the DLSS 5 build made while switched had its own undo copy; the regular build can't use it.
+            if (buildUndo is not null && buildUndo != restored!.LastUpdate?.UndoFolder) TryDeleteFolder(Path.Combine(target, buildUndo));
+            TryDeleteFolder(returnDir);
+            var message = $"OptiScaler {restored!.Version} is back, as it was before the switch to DLSS 5.";
+            log.Write("  done: " + message);
+            return new InstallResult { Success = true, Manifest = restored, Message = message };
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            log.Write($"  FAILED: {ex.Message}");
+            return new InstallResult { Message = $"Switching back failed: {ex.Message} The return point is still in {sw.ReturnFolder}." };
+        }
+    }
+
+    /// <summary>
+    /// Copies a user-supplied file (from the app's user-files folder) into the game under its known name, recorded in
+    /// the manifest: Added, or Replaced with the game's copy backed up when the game already had one.
+    /// </summary>
+    private static void AddUserFile(string target, InstallManifest manifest, string from, string name, InstallLog log)
+    {
+        var path = Path.Combine(target, name);
+        if (AllEntries(manifest).Any(f => f.Path.Equals(name, StringComparison.OrdinalIgnoreCase)))
+        {
+            // Already Upshift's (e.g. copied in before): refresh it with the user's current copy.
+            var existing = AllEntries(manifest).First(f => f.Path.Equals(name, StringComparison.OrdinalIgnoreCase));
+            File.Copy(from, path, overwrite: true);
+            Stamp(existing, path, Sha256(path));
+        }
+        else if (File.Exists(path))
+        {
+            var backupRelative = Path.Combine(manifest.BackupFolder, name);
+            var backup = Path.Combine(target, backupRelative);
+            Directory.CreateDirectory(Path.GetDirectoryName(backup)!);
+            File.Copy(path, backup, overwrite: false);
+            var originalHash = Sha256(path);
+            File.Copy(from, path, overwrite: true);
+            manifest.Replaced.Add(Stamp(new ManifestFile { Path = name, Backup = backupRelative, OriginalSha256 = originalHash }, path, Sha256(path)));
+        }
+        else
+        {
+            File.Copy(from, path, overwrite: false);
+            manifest.Added.Add(Stamp(new ManifestFile { Path = name }, path, Sha256(path)));
+        }
+        if (Sha256(path) != Sha256(from)) throw new IOException($"{name} didn't copy correctly.");
+        log.Write($"  added your {name}");
     }
 
     /// <summary>

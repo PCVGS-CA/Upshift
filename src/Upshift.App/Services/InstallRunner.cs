@@ -115,6 +115,8 @@ public static class InstallRunner
         // Signers come from the catalog compiled into the app, never from a downloaded catalog or the plan.
         InstallOperation.UpdateUpscalerFiles => UpscalerFiles.Update(plan, Core.Catalog.CatalogLoader.LoadBuiltIn().UpscalerFiles.Signers, log),
         InstallOperation.RestoreUpscalerFiles => UpscalerFiles.Restore(plan, log),
+        InstallOperation.SwitchBuild => OptiScalerInstaller.Update(plan, log),
+        InstallOperation.SwitchBack => OptiScalerInstaller.SwitchBack(plan, log),
         _ => OptiScalerInstaller.Uninstall(plan, log)
     };
 
@@ -143,7 +145,20 @@ public static class InstallRunner
     private static string? Validate(InstallPlan plan, string dataDir)
     {
         if (!Directory.Exists(plan.TargetDir)) return "The game folder in the plan doesn't exist.";
-        if (plan.Operation is InstallOperation.Uninstall or InstallOperation.UndoUpdate or InstallOperation.RestoreUpscalerFiles) return null;
+        if (plan.Operation is InstallOperation.Uninstall or InstallOperation.UndoUpdate or InstallOperation.RestoreUpscalerFiles
+            or InstallOperation.SwitchBack) return null;
+        if (plan.Operation == InstallOperation.SwitchBuild)
+        {
+            // Like an update, plus the user's DLSS 5 file from the user-files folder under its known name.
+            var userFiles = Path.GetFullPath(Path.Combine(dataDir, "user-files")) + Path.DirectorySeparatorChar;
+            if (plan.AddFileFrom is not null && !Path.GetFullPath(plan.AddFileFrom).StartsWith(userFiles, StringComparison.OrdinalIgnoreCase))
+                return "The plan points at a file outside the app's user-files folder, so nothing was done.";
+            if (plan.AddFileAs is not null && !UserFileNames.Contains(plan.AddFileAs, StringComparer.OrdinalIgnoreCase))
+                return "The plan names a file the app doesn't manage, so nothing was done.";
+            var store = Path.GetFullPath(Path.Combine(dataDir, "components")) + Path.DirectorySeparatorChar;
+            if (plan.ExtraSourceDir is not null && !Path.GetFullPath(plan.ExtraSourceDir).StartsWith(store, StringComparison.OrdinalIgnoreCase))
+                return "The plan points at files outside the app's download folder, so nothing was done.";
+        }
         if (plan.Operation == InstallOperation.UpdateUpscalerFiles)
         {
             // Only DLLs from the app's own download folder; UpscalerFiles.Update checks names, signatures and paths.
@@ -167,7 +182,7 @@ public static class InstallRunner
         if (plan.SourceDir is null || !Path.GetFullPath(plan.SourceDir).StartsWith(components, StringComparison.OrdinalIgnoreCase)
             || (plan.OldSourceDir is not null && !Path.GetFullPath(plan.OldSourceDir).StartsWith(components, StringComparison.OrdinalIgnoreCase)))
             return "The plan points at files outside the app's download folder, so nothing was done.";
-        if (plan.Operation is InstallOperation.Update or InstallOperation.Repair) return null; // the loading name comes from the manifest
+        if (plan.Operation is InstallOperation.Update or InstallOperation.Repair or InstallOperation.SwitchBuild) return null; // the loading name comes from the manifest
         if (plan.ProxyName is null || !OptiScalerInstaller.ProxyNames.Contains(plan.ProxyName, StringComparer.OrdinalIgnoreCase))
             return "The plan has an unknown loading name, so nothing was done.";
         return null;

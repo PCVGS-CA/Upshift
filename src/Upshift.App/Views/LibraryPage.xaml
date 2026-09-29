@@ -472,14 +472,6 @@
                             <ItemsControl ItemsSource="{x:Bind ViewModel.Selected.Mods, Mode=OneWay}" />
                         </StackPanel>
 
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="DLSS 5 on this PC" FontWeight="SemiBold" />
-                            <InfoBar IsOpen="True" IsClosable="False"
-                                     Severity="{x:Bind ViewModel.NeuralSeverity, Mode=OneWay}"
-                                     Title="{x:Bind ViewModel.NeuralTitle, Mode=OneWay}"
-                                     Message="{x:Bind ViewModel.NeuralMessage, Mode=OneWay}" />
-                        </StackPanel>
-
                         <Border CornerRadius="8" Padding="16,14" Background="{StaticResource CardSurfaceBrush}"
                                 BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1"
                                 Visibility="{x:Bind ViewModel.Selected.IsInstalledByUs, Mode=OneWay}">
@@ -511,6 +503,9 @@
                         </Border>
 
                         <views:OptiScalerOptionsView x:Name="OptionsPanel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
+
+                        <!-- DLSS 5 (Neural Rendering): this card's options, the switch to the DLSS 5 build and its settings -->
+                        <views:Dlss5View x:Name="Dlss5Panel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
 
                         <!-- Everything Upshift has changed in this game folder right now, with dates -->
                         <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.Selected.HasChanges, Mode=OneWay}">

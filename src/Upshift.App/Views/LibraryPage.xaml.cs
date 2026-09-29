@@ -24,6 +24,8 @@ public sealed partial class LibraryPage : Page
         OptionsPanel.Library = ViewModel;
         OptionsPanel.ShowDialog = ShowDialogAsync;
         OptionsPanel.UpdateDlss = UpdateDlssAsync;
+        Dlss5Panel.Library = ViewModel;
+        Dlss5Panel.ShowDialog = ShowDialogAsync;
 
         // Keep the grid's highlight in step when the view model changes the selection (after a rescan, say).
         ViewModel.PropertyChanged += (_, e) =>

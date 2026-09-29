@@ -95,6 +95,37 @@ public static class AppServices
     /// <summary>The primary graphics card once detection has finished (null until then).</summary>
     public static GpuInfo? Gpu => _gpus is { IsCompletedSuccessfully: true } t ? GpuDetector.PickPrimary(t.Result) : null;
 
+    /// <summary>
+    /// Developer preview only (Settings, opened with Shift held): a card to pretend this PC has, so the DLSS 5 screens
+    /// can be seen as AMD or Intel users see them. Never saved, and nothing is installed while it's set.
+    /// </summary>
+    public static GpuInfo? PretendGpu { get; private set; }
+
+    /// <summary>The card the DLSS 5 screens describe: the pretend one when set, otherwise this PC's.</summary>
+    public static GpuInfo? EffectiveGpu => PretendGpu ?? Gpu;
+
+    /// <summary>Raised when the card the DLSS 5 screens describe changes (detected, or a pretend one set), so they redraw.</summary>
+    public static event Action? EffectiveGpuChanged;
+
+    public static void RaiseEffectiveGpuChanged() => EffectiveGpuChanged?.Invoke();
+
+    /// <summary>The cards offered for the preview.</summary>
+    public static IReadOnlyList<GpuInfo> PretendGpus { get; } = new[]
+    {
+        new GpuInfo("NVIDIA GeForce RTX 5080", Core.Models.GpuVendor.Nvidia, 0x10DE, 0x2C02, "32.0.16.1692", "Blackwell", false),
+        new GpuInfo("NVIDIA GeForce RTX 3070", Core.Models.GpuVendor.Nvidia, 0x10DE, 0x2484, "32.0.16.1692", "Ampere", false),
+        new GpuInfo("AMD Radeon RX 9070 XT", Core.Models.GpuVendor.Amd, 0x1002, 0x7550, "32.0.21013.1000", "RDNA 4", false),
+        new GpuInfo("AMD Radeon RX 7900 XTX", Core.Models.GpuVendor.Amd, 0x1002, 0x744C, "32.0.21013.1000", "RDNA 3", false),
+        new GpuInfo("AMD Radeon RX 6800", Core.Models.GpuVendor.Amd, 0x1002, 0x73BF, "32.0.21013.1000", "RDNA 2", false),
+        new GpuInfo("Intel Arc B580 Graphics", Core.Models.GpuVendor.Intel, 0x8086, 0xE20B, "32.0.101.6979", "Battlemage", false)
+    };
+
+    public static void SetPretendGpu(GpuInfo? gpu)
+    {
+        PretendGpu = gpu;
+        EffectiveGpuChanged?.Invoke();
+    }
+
     /// <summary>Raised when a setting that affects cover art changes, so the Library can look again.</summary>
     public static event Action? ArtworkSettingsChanged;
 

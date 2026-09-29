@@ -3,6 +3,9 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 using Upshift.App.Services;
+using Upshift.Core.Catalog;
+using Upshift.Core.Hardware;
+using Upshift.Core.Install;
 using Upshift.Core.Services;
 using Upshift.Core.UserFiles;
 using Windows.Storage.Pickers;
@@ -28,6 +31,7 @@ public sealed partial class SettingsPage : Page
         AboutVersionText.Text = $"Version {AppInfo.Version}";
         ReleasesLink.NavigateUri = new Uri(AppInfo.RepoUrl + "/releases");
         BuildHiddenRows();
+        BuildDeveloperOptions();
         ShowAppUpdate();
         AppUpdates.Changed += AppUpdates_Changed;
         Unloaded += (_, _) => AppUpdates.Changed -= AppUpdates_Changed;
@@ -125,8 +129,20 @@ public sealed partial class SettingsPage : Page
                 Foreground = Brush("SubtleTextBrush"),
                 Text = info is null
                     ? $"Not added. {use}"
-                    : $"Version {VersionText(kind, info.Version)} · SHA-256 {info.Sha256} · Community build, can't be verified. {use}"
+                    : kind == UserFileKind.DlssNr
+                        ? $"{Dlss5.CheckFile(info.Path, AppServices.Catalog).Label} · SHA-256 {info.Sha256}"
+                        : $"Version {VersionText(kind, info.Version)} · SHA-256 {info.Sha256} · Community build, can't be verified. {use}"
             });
+            if (kind == UserFileKind.DlssNr)
+            {
+                // The catalog's rule for this card (or the pretend one), in one sentence.
+                var option = NeuralSelector.Evaluate(AppServices.EffectiveGpu, AppServices.Catalog);
+                texts.Children.Add(new TextBlock
+                {
+                    FontSize = 12, TextWrapping = TextWrapping.Wrap,
+                    Text = Dlss5.FileRule(option) + (AppServices.PretendGpu is { } p ? $" (preview: {p.Name})" : "")
+                });
+            }
 
             var running = _searches.TryGetValue(kind, out var search) && search.Running;
             var select = new Button { Content = "Select file…" };
@@ -138,8 +154,9 @@ public sealed partial class SettingsPage : Page
                 else await FindUserFileAsync(kind);
             };
             var remove = new Button { Content = "Remove", IsEnabled = info is not null };
-            remove.Click += (_, _) =>
+            remove.Click += async (_, _) =>
             {
+                if (kind == UserFileKind.DlssNr && !await AskAboutGamesUsingDlss5Async()) return;
                 AppServices.UserFiles.Remove(kind);
                 BuildUserFileRows();
             };
@@ -162,6 +179,90 @@ public sealed partial class SettingsPage : Page
             });
             RenderSearch(kind);
         }
+    }
+
+    /// <summary>
+    /// Before the stored DLSS 5 file is removed: when games still have it (a DLSS 5 build switched in), asks "Also
+    /// remove DLSS 5 from these games?". Yes switches each back to regular OptiScaler, keeping its settings; No leaves
+    /// them as they are. Returns false when the user cancels (nothing is removed then).
+    /// </summary>
+    private async Task<bool> AskAboutGamesUsingDlss5Async()
+    {
+        var games = GameUpdates.GamesUsingDlss5File();
+        if (games.Count == 0) return true;
+        if (_dialogOpen) return false;
+
+        var list = new StackPanel { Spacing = 4 };
+        list.Children.Add(new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Text = "These games still use your DLSS 5 file. Yes switches each back to regular OptiScaler (your settings are kept); " +
+                   "No leaves them as they are. Either way, Upshift's stored copy is deleted."
+        });
+        foreach (var game in games) list.Children.Add(new TextBlock { Text = "• " + game.Name, TextWrapping = TextWrapping.Wrap });
+
+        ContentDialogResult answer;
+        _dialogOpen = true;
+        try
+        {
+            answer = await new ContentDialog
+            {
+                XamlRoot = XamlRoot, Title = "Also remove DLSS 5 from these games?", Content = list,
+                PrimaryButtonText = "Yes", SecondaryButtonText = "No", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close
+            }.ShowAsync();
+        }
+        finally { _dialogOpen = false; }
+        if (answer == ContentDialogResult.None) return false;
+        if (answer == ContentDialogResult.Secondary) return true;
+
+        var problems = new List<string>();
+        foreach (var game in games)
+        {
+            var result = await GameUpdates.SwitchBackAsync(game, null);
+            if (!result.Success) problems.Add($"{game.Name}: {result.Message}");
+        }
+        if (problems.Count > 0)
+        {
+            _dialogOpen = true;
+            try
+            {
+                await new ContentDialog
+                {
+                    XamlRoot = XamlRoot, Title = "Some games weren't switched back", CloseButtonText = "OK",
+                    Content = new TextBlock { Text = string.Join("\n", problems), TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true }
+                }.ShowAsync();
+            }
+            finally { _dialogOpen = false; }
+        }
+        return true;
+    }
+
+    // ---------------- Developer options ----------------
+
+    /// <summary>Shown when Settings is opened with Shift held, or while a pretend card is set (so it can be turned off).</summary>
+    private void BuildDeveloperOptions()
+    {
+        var shift = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Shift)
+            .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+        if (!shift && AppServices.PretendGpu is null) return;
+        DeveloperPanel.Visibility = Visibility.Visible;
+        _building = true;
+        PretendGpuBox.Items.Clear();
+        PretendGpuBox.Items.Add(new ComboBoxItem { Content = $"Off (this PC's card: {AppServices.Gpu?.Name ?? "not detected"})" });
+        foreach (var gpu in AppServices.PretendGpus)
+            PretendGpuBox.Items.Add(new ComboBoxItem { Content = $"{gpu.Name} ({gpu.Generation})", Tag = gpu });
+        PretendGpuBox.SelectedItem = PretendGpuBox.Items.OfType<ComboBoxItem>().FirstOrDefault(i => i.Tag is GpuInfo g && g == AppServices.PretendGpu)
+                                     ?? PretendGpuBox.Items[0];
+        _building = false;
+    }
+
+    private bool _building;
+
+    private void PretendGpu_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_building || PretendGpuBox.SelectedItem is not ComboBoxItem item) return;
+        AppServices.SetPretendGpu(item.Tag as GpuInfo);
+        BuildUserFileRows();
     }
 
     /// <summary>The file's version; the DLSS 5 file's with its name, "310.8.0.0 (DLSS 5)".</summary>

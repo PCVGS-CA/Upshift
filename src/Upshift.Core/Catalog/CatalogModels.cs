@@ -147,12 +147,20 @@ public sealed class NeuralBackend
     public bool RequiresSignedDll { get; set; } = true;
     public List<NeuralRuntime> Runtimes { get; set; } = new();
     public string Summary { get; set; } = "";
+
+    /// <summary>The oldest NVIDIA driver (e.g. "616.56") the backend works with; null when there's no minimum.</summary>
+    public string? MinNvidiaDriver { get; set; }
+
+    /// <summary>The build's default in-game toggle key (a Windows virtual-key code; 36 = Home); null when unbound.</summary>
+    public int? ToggleKey { get; set; }
 }
 
 public sealed class NeuralRuntime
 {
     public string Id { get; set; } = "";
     public string Name { get; set; } = "";
+    /// <summary>What goes in [DlssNr] NrBackend to choose this runtime ("daniel", "lmxxf").</summary>
+    public string? IniValue { get; set; }
     public List<string> Generations { get; set; } = new();
     public string? ComponentId { get; set; }
 }

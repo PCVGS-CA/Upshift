@@ -237,6 +237,48 @@ errors and no warnings.
       - Both games' 18 OptiScaler files match their record and the v0.9.4 release.
       - The Witcher 3's hand-change case: 3.7.0 copied in by hand → detected on scan → Update (3.1.1 kept as the
         original, 3.7.0 set aside) → Restore exact to 3.1.1 → Update.
+- **DLSS 5 (2026-09-28):**
+  - **Forks:**
+    - DLSSNR (`Dagherbou/OptiScaler_DLSSNR` v0.2.0-dlssnr, NVIDIA): `OptiScaler.dll/.ini`, the forwarder
+      `nvngx.dll_dlssnr.dll`, and DLLs under `OptiScaler\`. It ships no `nvngx_dlssnr.dll`, and needs driver 616.56+.
+    - AMD-NR (`3zwr1/AMD-NR---OptiScaler` Alpha0.3.2): the same layout plus `LmxxfNrRuntime.dll/.pak`. Its danielblnc
+      runtime comes from the separate `amd-nr-runtime` zip. It ships no `amdxcffx64.dll`.
+  - **Settings, all `[DlssNr]`:**
+    - `Enabled`, `ToggleKey` (DLSSNR: unbound; AMD-NR: Home 0x24).
+    - `TransferStrength` (the "Strength" slider, 0-150%) and `ColourStrength`.
+    - `WorkingScale` (the "Model resolution" slider, 50-100%).
+    - AMD-NR also has `NrBackend = daniel | lmxxf`. It ships commented out, so it's allow-listed in
+      `IsAddableIniKey`.
+  - **Switching:**
+    - `InstallOperation.SwitchBuild` runs `Update` in switch mode. It keeps the previous undo copy, saves a return
+      point in `.upshift\switch<stamp>\` (files, `OptiScaler.ini`, `manifest.json`, `manifest.original.json`,
+      `ini-after-switch.ini`), adds the user's DLSS 5 file and sets `NrBackend`.
+    - `SwitchBack` restores the return point byte for byte (the manifest from `manifest.original.json`), then
+      carries over settings changed while switched that the regular build also has.
+    - "Undo last update" is off while switched. `manifest.Switch` is left out of the JSON when null.
+  - **Core logic:** `Core/Install/Dlss5.cs` handles the file check (signature + `knownNvidiaNrFiles`), the rule
+    sentence per card, the NVIDIA driver number (the last 5 digits of the Windows version's last two parts), the
+    blockers and warnings, and the hotkey text.
+  - **App:**
+    - The UI is `Views/Dlss5View.cs`.
+    - The pretend card is `AppServices.PretendGpu`. It's session-only and set from Settings > Developer options,
+      which show only when Settings is opened with Shift held. Installs refuse while it's set.
+    - Removing the DLSS 5 file asks to switch back the games using it (`GameUpdates.GamesUsingDlss5File`).
+  - **Tested on The Witcher 3** with a dummy DLL Claude compiled (4 KB, unsigned, version 0.0.0.1; never
+    launched):
+    - The switch kept all 12 settings, and the toggle and sliders wrote `Enabled`, `TransferStrength` and
+      `WorkingScale`.
+    - After switching back, a second full cycle and Remove → Yes, the folder is exact against its pre-cycle snapshot
+      (D2 = D3 = D4, 0 differences).
+    - Against D0 the only difference is `manifest.json`'s timestamp (hash identical), from the first switch made
+      before the byte-exact manifest fix.
+    - Previews were taken for RTX 5080, RTX 3070, RX 9070 XT, RX 7900 XTX, RX 6800 and Arc B580 (`p1`–`p6` PNGs in
+      the scratchpad).
+  - **Not tested:**
+    - AMD-NR installs (no AMD card here; its 516 MB + 106 MB downloads never ran).
+    - Removing the DLSS 5 file with "No".
+    - Switching through the UAC helper.
+    - Repair of an AMD-NR install (repair only knows the main zip's files, not the runtime's).
 - **Installer and self-updates (2026-09-28):**
   - Velopack 1.2.158: installer, portable zip, uninstall question, and self-updates from GitHub Releases.
   - "Check for app updates" and "Restart to update" in Settings > About, plus an "Update for Upshift" bar in the
@@ -278,7 +320,10 @@ errors and no warnings.
 
 ## Next
 
-1. **DLSS 5 support:** the OptiScaler DLSSNR fork, the AMD-NR fork and its runtime, and `NeuralSelector`.
+1. **DLSS 5 follow-ups:**
+   - Test AMD-NR on a real AMD card.
+   - Consider moving the AMD-NR pin from Alpha0.3.2 to 0.3.4.x: lmxxf on RX 7000, a new runtime zip layout, and
+     `amd-nr-runtime`'s assetPattern would need `v0.4.3-Runtime.zip`.
 2. **Code signing** for the installer and app (Azure Trusted Signing or a certificate): `vpk pack` takes
    `--signParams` / `--azureTrustedSignFile`. Unsigned files trigger SmartScreen and can be blocked by Smart App
    Control.
@@ -352,6 +397,12 @@ errors and no warnings.
     - `research\` (391 MB): the XeSS 1.3.1, 2.1.1 and 3.0.2 SDK zips, FidelityFX 2.3.0 samples zip, and
       FSR 3.1.4 DLLs.
     - `gsnap.ps1` (game folder snapshots G0–G5), `link.ps1`, `menu.ps1`.
+  - From the DLSS 5 session:
+    - `nr\` (about 135 MB): the DLSSNR zip, both forks' ini and readme files, and the READMEs.
+    - `dummy\`: the dummy `nvngx_dlssnr.dll` project and build.
+    - Scripts: `preview.ps1`, `pickfile.ps1`, `dlss5set.ps1`.
+    - Snapshots D0–D4 and screenshots `p0`–`p6`, `r1`, `w*`, `u-updates`.
+  - App data: `components\optiscaler-dlssnr-v0.2.0-dlssnr\` (downloaded for the switch test).
 - **Installer leftovers:**
   - `%TEMP%\velopack\` (Velopack's own temp folder).
   - The vpk 1.2.158 tool, in the NuGet cache (`%UserProfile%\.nuget\packages\vpk`).

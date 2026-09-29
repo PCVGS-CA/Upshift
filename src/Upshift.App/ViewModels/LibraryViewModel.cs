@@ -54,15 +54,6 @@ public sealed partial class LibraryViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasNoGames))]
     private int gameCount;
 
-    [ObservableProperty]
-    private string neuralTitle = "Checking your graphics card…";
-
-    [ObservableProperty]
-    private string neuralMessage = string.Empty;
-
-    [ObservableProperty]
-    private InfoBarSeverity neuralSeverity = InfoBarSeverity.Informational;
-
     public bool HasSelection => Selected is not null;
     public bool HasNoSelection => Selected is null;
     public bool HasNoGames => GameCount == 0 && !IsBusy;
@@ -181,6 +172,16 @@ public sealed partial class LibraryViewModel : ObservableObject
     public Task<InstallResult?> UpdateDlssAsync(GameCardViewModel card) =>
         UpdateUpscalerFilesAsync(card, UpscalerUpdates.DlssPaths(card.Info));
 
+    // ---------------- DLSS 5 ----------------
+
+    /// <summary>Replaces the game's OptiScaler with the DLSS 5 build for this card (see GameUpdates.SwitchToDlss5Async).</summary>
+    public Task<InstallResult?> SwitchToDlss5Async(GameCardViewModel card, Core.Catalog.NeuralBackend backend, Core.Catalog.NeuralRuntime? runtime) =>
+        RunGameUpdateAsync(card, p => GameUpdates.SwitchToDlss5Async(card.Info, backend, runtime, p));
+
+    /// <summary>Back to the regular OptiScaler the game had before the switch.</summary>
+    public Task<InstallResult?> SwitchBackAsync(GameCardViewModel card) =>
+        RunGameUpdateAsync(card, p => GameUpdates.SwitchBackAsync(card.Info, p));
+
     /// <summary>Puts back every original Upshift replaced in this game.</summary>
     public Task<InstallResult?> RestoreUpscalerFilesAsync(GameCardViewModel card) =>
         RunGameUpdateAsync(card, p => UpscalerUpdates.RestoreAsync(card.Info, null, p));
@@ -195,17 +196,10 @@ public sealed partial class LibraryViewModel : ObservableObject
         var gpuTask = AppServices.GetGpuAsync();
         SetGames(await AppServices.Library.LoadCachedAsync());
 
-        var option = NeuralSelector.Evaluate(await gpuTask, AppServices.Catalog);
-        // The recommendation lines need the graphics card, which is known from here on.
+        await gpuTask;
+        // The recommendation lines and the DLSS 5 section need the graphics card, which is known from here on.
         foreach (var card in _all) card.RefreshSuggestions();
-        NeuralTitle = option.Title;
-        NeuralMessage = option.Message;
-        NeuralSeverity = option.Status switch
-        {
-            NeuralStatus.Available => InfoBarSeverity.Success,
-            NeuralStatus.NeedsUserFile => InfoBarSeverity.Warning,
-            _ => InfoBarSeverity.Informational
-        };
+        AppServices.RaiseEffectiveGpuChanged();
 
         if (_all.Count == 0) await RunScanAsync(includeDriveScan: false);
         else StartBackgroundLookups();

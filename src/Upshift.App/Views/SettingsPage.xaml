@@ -69,6 +69,15 @@
                 <StackPanel x:Name="UserFileRows" Spacing="10" />
             </StackPanel>
 
+            <!-- Developer options: shown only when Settings is opened with Shift held (or while a pretend card is set) -->
+            <StackPanel x:Name="DeveloperPanel" Spacing="8" Visibility="Collapsed">
+                <TextBlock Text="Developer options" FontWeight="SemiBold" />
+                <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
+                           Text="Preview the DLSS 5 screens as they look with another graphics card. Nothing is installed or changed while a pretend card is set, and it's forgotten when Upshift closes." />
+                <ComboBox x:Name="PretendGpuBox" Header="Pretend this PC has" MinWidth="320" SelectionChanged="PretendGpu_Changed"
+                          AutomationProperties.Name="Pretend this PC has" />
+            </StackPanel>
+
             <StackPanel Spacing="8">
                 <TextBlock Text="App data" FontWeight="SemiBold" />
                 <TextBlock x:Name="DataDirText" FontFamily="Consolas" FontSize="12" IsTextSelectionEnabled="True" />

@@ -6,7 +6,7 @@ using Upshift.Core.Detection;
 
 namespace Upshift.Core.Install;
 
-public enum InstallOperation { Install, Uninstall, Configure, Update, UndoUpdate, Repair, UpdateUpscalerFiles, RestoreUpscalerFiles }
+public enum InstallOperation { Install, Uninstall, Configure, Update, UndoUpdate, Repair, UpdateUpscalerFiles, RestoreUpscalerFiles, SwitchBuild, SwitchBack }
 
 /// <summary>Everything needed to install or uninstall, so an elevated copy of the app can carry it out from a file.</summary>
 public sealed class InstallPlan
@@ -21,7 +21,12 @@ public sealed class InstallPlan
 
     /// <summary>Update only: the unpacked release that is installed now, whose OptiScaler.ini holds the old defaults.</summary>
     public string? OldSourceDir { get; set; }
+
+    /// <summary>A second unpacked download copied in with SourceDir (AMD-NR's danielblnc runtime).</summary>
+    public string? ExtraSourceDir { get; set; }
     public string ComponentId { get; set; } = "optiscaler";
+    /// <summary>The component's display name, e.g. "OptiScaler DLSSNR" (for messages).</summary>
+    public string? ComponentName { get; set; }
     public string? Version { get; set; }
     /// <summary>The name OptiScaler.dll is installed as, e.g. dxgi.dll (install only).</summary>
     public string? ProxyName { get; set; }
@@ -152,6 +157,21 @@ public sealed class InstallManifest
 
     public UpdateRecord? LastUpdate { get; set; }
     public RepairRecord? LastRepair { get; set; }
+
+    /// <summary>Set while a DLSS 5 build replaces the regular OptiScaler: where "Switch back" returns to.</summary>
+    /// <remarks>Left out of the file when empty, so manifests written before DLSS 5 support stay byte-identical.</remarks>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public SwitchRecord? Switch { get; set; }
+}
+
+/// <summary>A switch to another build of OptiScaler (the DLSS 5 forks), and the exact state it came from.</summary>
+public sealed class SwitchRecord
+{
+    public string FromComponentId { get; set; } = "";
+    public string? FromVersion { get; set; }
+    public DateTime SwitchedUtc { get; set; }
+    /// <summary>Relative to the target folder: the files, OptiScaler.ini and manifest from before the switch.</summary>
+    public string ReturnFolder { get; set; } = "";
 }
 
 /// <summary>
@@ -179,8 +199,15 @@ public static partial class OptiScalerInstaller
     /// <summary>Files in the release that the official setup removes, so they never end up in the game folder.</summary>
     private static readonly HashSet<string> SetupOnlyFiles = new(StringComparer.OrdinalIgnoreCase)
     {
-        "!! README_EXTRACT ALL FILES TO GAME FOLDER !!.txt", "setup_windows.bat", "setup_linux.sh", ".upshift-complete.json", ".pcvgs-complete.json"
+        "!! README_EXTRACT ALL FILES TO GAME FOLDER !!.txt", "setup_windows.bat", "setup_linux.sh", ".upshift-complete.json", ".pcvgs-complete.json",
+        // The DLSS 5 forks' notes and checksums (their Licenses folders still go in).
+        "!! EXTRACT ALL FILES TO GAME FOLDER !!", "READ ME - DLSS Neural Rendering.txt", "CHANGELOG.md", "SHA256SUMS.txt"
     };
+
+    /// <summary>Readmes in any language (README.md, README.zh-CN.md…) stay out of the game folder too.</summary>
+    private static bool IsSetupOnly(string relative) =>
+        SetupOnlyFiles.Contains(relative)
+        || (!relative.Contains('\\') && relative.StartsWith("README", StringComparison.OrdinalIgnoreCase) && relative.EndsWith(".md", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Leftovers of an OptiScaler not installed by us; the official setup warns about the same files.</summary>
     private static readonly string[] ForeignOptiScalerFiles =
@@ -489,7 +516,8 @@ public static partial class OptiScalerInstaller
         if (plan.IniSettings.Count > 0)
         {
             var current = IniFile.Load(iniPath);
-            var unknown = plan.IniSettings.Where(s => !current.Has(s.Section, s.Key)).Select(s => $"[{s.Section}] {s.Key}").ToList();
+            var unknown = plan.IniSettings.Where(s => !current.Has(s.Section, s.Key) && !IsAddableIniKey(s.Section, s.Key))
+                .Select(s => $"[{s.Section}] {s.Key}").ToList();
             if (unknown.Count > 0) return Refuse(log, $"OptiScaler.ini has no setting called {string.Join(", ", unknown)}.");
         }
 
@@ -583,6 +611,13 @@ public static partial class OptiScalerInstaller
             return new InstallResult { Message = $"The settings couldn't be saved: {ex.Message}" };
         }
     }
+
+    /// <summary>
+    /// Settings a build ships commented out, which may be added: AMD-NR's runtime choice (";NrBackend=daniel") is only
+    /// written once chosen, and the game asks on first launch while it's missing.
+    /// </summary>
+    private static bool IsAddableIniKey(string section, string key) =>
+        section.Equals("DlssNr", StringComparison.OrdinalIgnoreCase) && key.Equals("NrBackend", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Writes ini values and records each first change with the value it replaced. A null value puts the original back
@@ -690,7 +725,7 @@ public static partial class OptiScalerInstaller
         foreach (var file in Directory.EnumerateFiles(sourceDir, "*", SearchOption.AllDirectories))
         {
             var relative = Path.GetRelativePath(sourceDir, file);
-            if (SetupOnlyFiles.Contains(relative)) continue;
+            if (IsSetupOnly(relative)) continue;
             yield return (file, relative.Equals("OptiScaler.dll", StringComparison.OrdinalIgnoreCase) ? proxyName : relative);
         }
     }

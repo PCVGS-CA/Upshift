@@ -124,7 +124,10 @@ public sealed partial class GameCardViewModel : ObservableObject
         // OptiScaler installed by this app (it has our manifest).
         var manifest = info.TargetDir is null ? null : OptiScalerInstaller.ReadManifest(info.TargetDir);
         IsInstalledByUs = manifest is { Removed: false };
-        InstalledText = IsInstalledByUs ? $"OptiScaler {manifest!.Version} installed as {manifest.ProxyName}" : "";
+        // "OptiScaler v0.9.4", or the DLSS 5 build switched in ("OptiScaler DLSSNR v0.2.0-dlssnr").
+        InstalledComponentId = IsInstalledByUs ? manifest!.ComponentId : null;
+        InstalledText = IsInstalledByUs
+            ? $"{Services.GameUpdates.ComponentFor(manifest!.ComponentId).Name} {manifest.Version} installed as {manifest.ProxyName}" : "";
         InstalledVersion = IsInstalledByUs ? manifest!.Version : null;
         CanUndo = IsInstalledByUs && info.TargetDir is not null && OptiScalerInstaller.CanUndo(info.TargetDir);
         UndoText = CanUndo ? $"Undo last update (back to {manifest!.LastUpdate!.FromVersion})" : "";
@@ -286,7 +289,10 @@ public sealed partial class GameCardViewModel : ObservableObject
 
     /// <summary>Works out UpdateVersion again after an update check or a change of channel. Call on the UI thread.</summary>
     public void RefreshUpdate() =>
-        UpdateVersion = IsInstalledByUs && !Info.HasAntiCheat ? Services.GameUpdates.TargetFor(InstalledVersion) : null;
+        UpdateVersion = IsInstalledByUs && !Info.HasAntiCheat ? Services.GameUpdates.TargetFor(InstalledVersion, InstalledComponentId) : null;
+
+    /// <summary>The build installed here by Upshift ("optiscaler", "optiscaler-dlssnr", "amd-nr").</summary>
+    public string? InstalledComponentId { get; }
 
     public bool IsInstalledByUs { get; }
     public bool IsNotInstalledByUs => !IsInstalledByUs;

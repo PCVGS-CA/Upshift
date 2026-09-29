@@ -27,46 +27,68 @@ public static class GameUpdates
     /// <summary>Raised on the calling thread when BusyGameId changes.</summary>
     public static event Action? BusyChanged;
 
+    /// <summary>The catalog component installed in a game: regular OptiScaler, or a DLSS 5 build.</summary>
+    public static CatalogComponent ComponentFor(string? componentId) =>
+        AppServices.Catalog.Components.FirstOrDefault(c => c.Id == componentId) ?? AppServices.OptiScaler;
+
     /// <summary>
-    /// The release to update an install to: the user's OptiScaler channel (Stable or Beta), when it's later than the
-    /// installed version and has a file to download. Null when there's nothing newer.
+    /// The release to update an install to: the user's channel (Stable or Beta) for the build that's installed
+    /// (OptiScaler, OptiScaler DLSSNR or AMD-NR), when it's later than the installed version and has a file to
+    /// download. Null when there's nothing newer.
     /// </summary>
-    public static string? TargetFor(string? installedVersion)
+    public static string? TargetFor(string? installedVersion, string? componentId = null)
     {
-        var opti = AppServices.OptiScaler;
-        if (AppServices.Updates.Target(opti) is not { } target || !ComponentStore.IsDownloadable(opti, target)) return null;
-        return AppServices.Updates.IsNewer(opti, target.Tag, installedVersion) ? target.Tag : null;
+        var component = ComponentFor(componentId);
+        if (AppServices.Updates.Target(component) is not { } target || !ComponentStore.IsDownloadable(component, target)) return null;
+        return AppServices.Updates.IsNewer(component, target.Tag, installedVersion) ? target.Tag : null;
     }
 
-    /// <summary>Games that can be updated. Games with anti-cheat never are.</summary>
+    /// <summary>Games that can be updated, whichever build they use. Games with anti-cheat never are.</summary>
     public static List<GameUpdateCandidate> Candidates() =>
         AppServices.Library.Current
             .Where(g => !g.HasAntiCheat && g.TargetDir is not null)
             .Select(g => (Game: g, Manifest: OptiScalerInstaller.ReadManifest(g.TargetDir!)))
-            .Where(x => x.Manifest is { Removed: false, ComponentId: "optiscaler" })
-            .Select(x => TargetFor(x.Manifest!.Version) is { } target ? new GameUpdateCandidate(x.Game, x.Manifest!.Version ?? "unknown", target) : null)
+            .Where(x => x.Manifest is { Removed: false } m && ComponentFor(m.ComponentId).Installable)
+            .Select(x => TargetFor(x.Manifest!.Version, x.Manifest.ComponentId) is { } target
+                ? new GameUpdateCandidate(x.Game, x.Manifest!.Version ?? "unknown", target) : null)
             .OfType<GameUpdateCandidate>()
             .OrderBy(c => c.Game.Name, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
+
+    /// <summary>
+    /// AMD-NR's danielblnc runtime for a release (the component grouped with it), downloaded when needed: the one
+    /// with the same tag, or the catalog's pinned one when that release has none. Null for other builds.
+    /// </summary>
+    private static async Task<CachedComponent?> RuntimeForAsync(CatalogComponent component, string version, IProgress<string>? progress)
+    {
+        var runtime = AppServices.Catalog.Components.FirstOrDefault(c => c.GroupWith == component.Id && c.Kind == "runtime");
+        if (runtime is null) return null;
+        try { return await AppServices.Components.EnsureAsync(runtime, version, progress, CancellationToken.None); }
+        catch (ComponentDownloadException) when (runtime.PinnedVersion is { } pinned && pinned != version)
+        {
+            return await AppServices.Components.EnsureAsync(runtime, pinned, progress, CancellationToken.None);
+        }
+    }
 
     /// <summary>Downloads the release (and the installed one, whose OptiScaler.ini gives the old defaults), then updates.</summary>
     public static Task<InstallResult> UpdateAsync(GameInfo game, string version, IProgress<string>? progress) =>
         RunAsync(game, progress, async manifest =>
         {
             if (game.HasAntiCheat) return Fail("Installs are blocked for games with anti-cheat.");
-            var opti = AppServices.OptiScaler;
+            var component = ComponentFor(manifest.ComponentId);
             var installed = manifest.Version;
-            var target = await AppServices.Components.EnsureAsync(opti, version, progress, CancellationToken.None,
+            var target = await AppServices.Components.EnsureAsync(component, version, progress, CancellationToken.None,
                 keep: installed is null ? null : new[] { installed });
 
             CachedComponent? old = null;
             if (installed is not null)
             {
-                try { old = await AppServices.Components.EnsureAsync(opti, installed, progress, CancellationToken.None, keep: new[] { version }); }
+                try { old = await AppServices.Components.EnsureAsync(component, installed, progress, CancellationToken.None, keep: new[] { version }); }
                 catch (ComponentDownloadException) { /* the ini merge then carries over only this app's recorded changes */ }
             }
+            var runtime = await RuntimeForAsync(component, version, progress);
 
-            progress?.Report($"Updating OptiScaler in {game.Name} to {version}…");
+            progress?.Report($"Updating {component.Name} in {game.Name} to {version}…");
             return await InstallRunner.RunAsync(new InstallPlan
             {
                 Operation = InstallOperation.Update,
@@ -75,10 +97,85 @@ public static class GameUpdates
                 TargetDir = game.TargetDir!,
                 SourceDir = target.Folder,
                 OldSourceDir = old?.Folder,
-                ComponentId = opti.Id,
+                ExtraSourceDir = runtime?.Folder,
+                ComponentId = component.Id,
+                ComponentName = component.Name,
                 Version = version
             });
         });
+
+    /// <summary>
+    /// Switches the game's regular OptiScaler to the DLSS 5 build for this card (DLSSNR for NVIDIA, AMD-NR for AMD):
+    /// downloads it (and AMD-NR's runtime), keeps the user's OptiScaler.ini settings like an update, copies in the
+    /// user's DLSS 5 file for NVIDIA, sets the runtime for AMD, and saves an exact return point for "Switch back".
+    /// </summary>
+    public static Task<InstallResult> SwitchToDlss5Async(GameInfo game, NeuralBackend backend, NeuralRuntime? runtime, IProgress<string>? progress) =>
+        RunAsync(game, progress, async manifest =>
+        {
+            if (game.HasAntiCheat) return Fail("Installs are blocked for games with anti-cheat.");
+            if (AppServices.PretendGpu is not null) return Fail("A pretend graphics card is set in Settings, so nothing is installed. Turn it off first.");
+            if (manifest.Switch is not null) return Fail("This game already uses a DLSS 5 build.");
+            var fork = ComponentFor(backend.ComponentId);
+            if (fork.PinnedVersion is not { } version) return Fail($"The catalog has no tested version of {fork.Name}.");
+
+            string? userFile = null;
+            if (backend.NeedsNvidiaDll)
+            {
+                userFile = AppServices.UserFiles.Get(Core.UserFiles.UserFileKind.DlssNr)?.Path;
+                if (userFile is null) return Fail("Add your DLSS 5 file (nvngx_dlssnr.dll) in Settings > Optional files you supply first.");
+            }
+
+            var target = await AppServices.Components.EnsureAsync(fork, version, progress, CancellationToken.None);
+            CachedComponent? old = null;
+            if (manifest.Version is { } installed)
+            {
+                try { old = await AppServices.Components.EnsureAsync(ComponentFor(manifest.ComponentId), installed, progress, CancellationToken.None); }
+                catch (ComponentDownloadException) { }
+            }
+            var runtimeFiles = await RuntimeForAsync(fork, version, progress);
+
+            progress?.Report($"Switching {game.Name} to {fork.Name}…");
+            return await InstallRunner.RunAsync(new InstallPlan
+            {
+                Operation = InstallOperation.SwitchBuild,
+                GameId = game.Id,
+                GameName = game.Name,
+                TargetDir = game.TargetDir!,
+                SourceDir = target.Folder,
+                OldSourceDir = old?.Folder,
+                ExtraSourceDir = runtimeFiles?.Folder,
+                ComponentId = fork.Id,
+                ComponentName = fork.Name,
+                Version = version,
+                AddFileFrom = userFile,
+                AddFileAs = userFile is null ? null : Dlss5.NvidiaFileName,
+                // AMD-NR asks for its runtime on first launch unless it's set; preselected for the card.
+                IniSettings = runtime?.IniValue is { } value ? new List<IniSetting> { new(Dlss5.Section, "NrBackend", value) } : new()
+            });
+        });
+
+    /// <summary>Returns the game to the regular OptiScaler it had before the switch, keeping settings changed since.</summary>
+    public static Task<InstallResult> SwitchBackAsync(GameInfo game, IProgress<string>? progress) =>
+        RunAsync(game, progress, manifest =>
+        {
+            if (manifest.Switch is null) return Task.FromResult(Fail("This game isn't using a DLSS 5 build."));
+            progress?.Report($"Switching {game.Name} back to OptiScaler {manifest.Switch.FromVersion}…");
+            return InstallRunner.RunAsync(new InstallPlan
+            {
+                Operation = InstallOperation.SwitchBack,
+                GameId = game.Id,
+                GameName = game.Name,
+                TargetDir = game.TargetDir!
+            });
+        });
+
+    /// <summary>Games whose folder has the user's DLSS 5 file from Upshift (a DLSS 5 build switched in).</summary>
+    public static List<GameInfo> GamesUsingDlss5File() =>
+        AppServices.Library.Current
+            .Where(g => g.TargetDir is not null && OptiScalerInstaller.ReadManifest(g.TargetDir) is { Removed: false } m
+                        && m.Added.Concat(m.Replaced).Any(f => f.Path.Equals(Dlss5.NvidiaFileName, StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
 
     public static Task<InstallResult> UndoAsync(GameInfo game, IProgress<string>? progress) =>
         RunAsync(game, progress, manifest =>
@@ -99,7 +196,7 @@ public static class GameUpdates
         {
             if (game.HasAntiCheat) return Fail("Installs are blocked for games with anti-cheat.");
             if (manifest.Version is not { } version) return Fail("The install record doesn't say which version is installed.");
-            var source = await AppServices.Components.EnsureAsync(AppServices.OptiScaler, version, progress, CancellationToken.None);
+            var source = await AppServices.Components.EnsureAsync(ComponentFor(manifest.ComponentId), version, progress, CancellationToken.None);
             progress?.Report($"Repairing OptiScaler in {game.Name}…");
             return await InstallRunner.RunAsync(new InstallPlan
             {
