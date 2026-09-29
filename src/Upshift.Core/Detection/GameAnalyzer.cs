@@ -94,6 +94,7 @@ public static class GameAnalyzer
 
         // Upscaler files Upshift updated that a game update (or "verify files") has since put back.
         info.UpscalerFilesRestoredByGame = Install.UpscalerFiles.RestoredByGame(game.InstallDir);
+        info.UpscalerFilesChangedByHand = Install.UpscalerFiles.ChangedOutsideUpshift(game.InstallDir);
 
         var byLocation = Fingerprints.AntiCheatByLocation(game.InstallDir);
         if (byLocation is not null) antiCheat.Add(byLocation);

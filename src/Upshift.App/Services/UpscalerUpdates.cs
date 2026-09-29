@@ -30,9 +30,15 @@ public static class UpscalerUpdates
 
     public static List<UpscalerFileItem> Items(GameInfo game) => UpscalerFiles.Items(game, AppServices.Catalog);
 
-    /// <summary>The game's DLSS Super Resolution file when it can be updated.</summary>
+    /// <summary>
+    /// The game's DLSS Super Resolution file when it can be updated. Games can carry several copies; this is the oldest
+    /// copy that's older than the new version, or null when every copy is already up to date.
+    /// </summary>
     public static UpscalerFileItem? DlssUpdate(GameInfo game) =>
-        game.HasAntiCheat ? null : Items(game).FirstOrDefault(i => i.CanUpdate && i.FileName.Equals(DlssSr, StringComparison.OrdinalIgnoreCase));
+        game.HasAntiCheat ? null : Items(game)
+            .Where(i => i.CanUpdate && i.FileName.Equals(DlssSr, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(i => UpscalerFiles.ParseVersion(i.CurrentVersion ?? "0"))
+            .FirstOrDefault();
 
     /// <summary>True when the file is already downloaded, so the update needs no download.</summary>
     public static bool IsOnThisPc(UpscalerFileSource source) => AppServices.Components.TryGetUpscalerFile(source) is not null;
@@ -59,8 +65,9 @@ public static class UpscalerUpdates
         GameUpdates.RunExclusiveAsync(game, async () =>
         {
             if (game.HasAntiCheat) return Fail("Games with anti-cheat are never changed.");
+            // Checked against the files on disk right now: copies already at the new version are simply left alone.
             var items = Items(game).Where(i => i.CanUpdate && (paths is null || paths.Contains(i.RelativePath, StringComparer.OrdinalIgnoreCase))).ToList();
-            if (items.Count == 0) return Fail("There's nothing to update.");
+            if (items.Count == 0) return new InstallResult { Success = true, Message = "Already up to date." };
 
             var jobs = new List<UpscalerFileJob>();
             foreach (var item in items)

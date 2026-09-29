@@ -78,7 +78,9 @@ public sealed partial class GameCardViewModel : ObservableObject
 
         RefreshArtwork();
 
-        // "Upscaler files": each DLSS, FSR and XeSS file this game has, and any newer one on offer.
+        // "Upscaler files": each DLSS, FSR and XeSS file this game has, and any newer one on offer. Versions come from
+        // the files on disk, not the last scan, so the bar, badge, filter and buttons match what's really there.
+        Core.Install.UpscalerFiles.RefreshVersions(info);
         _fileItems = Services.UpscalerUpdates.Items(info);
         // One row per file that is the game's (or Upshift's update of it). OptiScaler's own copies get one line:
         // OptiScaler keeps them up to date itself, so Upshift doesn't compete with it.
@@ -183,6 +185,29 @@ public sealed partial class GameCardViewModel : ObservableObject
 
     /// <summary>Upshift has updated files here whose originals it can put back.</summary>
     public bool CanRestoreFiles { get; }
+
+    /// <summary>Nothing newer for any of the game's own files: said quietly in the section, never as an error.</summary>
+    public bool IsAlreadyUpToDate => HasUpscalerFileRows && UpdatableFileCount == 0;
+
+    /// <summary>
+    /// The collapsed "Upscaler files (advanced)" header's summary: "1 update available", "DLSS 310.9.1 (DLSS 4.5) ·
+    /// updated by Upshift", "Game restored its old file", or "Already up to date".
+    /// </summary>
+    public string UpscalerFilesSummary
+    {
+        get
+        {
+            if (UpdatableFileCount > 0) return UpdatableFileCount == 1 ? "1 update available" : $"{UpdatableFileCount} updates available";
+            if (HasRestoredByGame) return RestoredTitle;
+            var updated = _fileItems.Where(i => i.State == UpscalerFileState.UpdatedByUpshift)
+                .OrderBy(i => i.Family).ThenBy(i => i.FileName.Equals("nvngx_dlss.dll", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                .FirstOrDefault();
+            if (updated?.CurrentVersion is { } v)
+                return $"{Ui.FamilyLabel(updated.Family)} {Ui.VersionLabel(v, updated.FileName)} · updated by Upshift";
+            if (_fileItems.Any(i => i.State == UpscalerFileState.ChangedSince)) return "Changed outside Upshift";
+            return HasUpscalerFileRows ? "Already up to date" : "OptiScaler's files only";
+        }
+    }
 
     /// <summary>The bar above "Upscalers in this game" when a newer DLSS file is on offer.</summary>
     public bool HasDlssBar { get; }

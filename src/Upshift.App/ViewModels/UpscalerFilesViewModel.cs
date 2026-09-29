@@ -49,7 +49,8 @@ public static class UpscalerFileText
         {
             UpscalerFileState.UpdatedByUpshift => $"Updated by Upshift · original {V(item.OriginalVersion)} backed up",
             UpscalerFileState.GameRestoredOld => $"The game put its old file back ({V(item.CurrentVersion)}). Re-apply to update it again.",
-            UpscalerFileState.ChangedSince => "Changed since Upshift updated it (a game update?) · original still backed up",
+            UpscalerFileState.ChangedSince =>
+                $"Changed outside Upshift (by hand or a game update) · the original {V(item.OriginalVersion)}, from before Upshift's first change, is still backed up",
             UpscalerFileState.OptiScalerCopy when item.OptiScalerReplaced =>
                 $"Replaced by OptiScaler {item.OptiScalerVersion}'s copy · original {V(item.OriginalVersion)} backed up",
             UpscalerFileState.OptiScalerCopy =>

@@ -412,8 +412,18 @@
                         </StackPanel>
 
                         <!-- ================= Upscaler files: newer DLSS / FSR / XeSS files for the ones the game ships ================= -->
-                        <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.Selected.HasUpscalerFiles, Mode=OneWay}">
-                            <TextBlock Text="Upscaler files" FontWeight="SemiBold" />
+                        <!-- Collapsed by default: the DLSS bar and the Updates page checklist are the main way to update. -->
+                        <Expander Visibility="{x:Bind ViewModel.Selected.HasUpscalerFiles, Mode=OneWay}" IsExpanded="False"
+                                  HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                  AutomationProperties.Name="Upscaler files (advanced)">
+                            <Expander.Header>
+                                <StackPanel Spacing="2" Padding="0,8">
+                                    <TextBlock Text="Upscaler files (advanced)" FontWeight="SemiBold" />
+                                    <TextBlock Text="{x:Bind ViewModel.Selected.UpscalerFilesSummary, Mode=OneWay}" FontSize="12"
+                                               Foreground="{StaticResource SubtleTextBrush}" />
+                                </StackPanel>
+                            </Expander.Header>
+                        <StackPanel Spacing="8">
                             <InfoBar IsOpen="{x:Bind ViewModel.Selected.HasRestoredByGame, Mode=OneWay}" IsClosable="False" Severity="Warning"
                                      Title="{x:Bind ViewModel.Selected.RestoredTitle, Mode=OneWay}"
                                      Message="{x:Bind ViewModel.Selected.RestoredText, Mode=OneWay}"
@@ -430,6 +440,10 @@
                                               ItemTemplate="{StaticResource UpscalerFileTemplate}"
                                               IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}" />
                             </Border>
+                            <StackPanel Orientation="Horizontal" Spacing="6" Visibility="{x:Bind ViewModel.Selected.IsAlreadyUpToDate, Mode=OneWay}">
+                                <FontIcon Glyph="&#xE73E;" FontSize="12" Foreground="{StaticResource UpshiftAccentBrush}" VerticalAlignment="Center" />
+                                <TextBlock Text="Already up to date" FontSize="12" VerticalAlignment="Center" />
+                            </StackPanel>
                             <TextBlock Text="{x:Bind ViewModel.Selected.OptiScalerFilesNote, Mode=OneWay}" FontSize="12" TextWrapping="Wrap"
                                        Visibility="{x:Bind ViewModel.Selected.HasOptiScalerFilesNote, Mode=OneWay}" />
                             <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
@@ -446,6 +460,7 @@
                             <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
                                        Text="Newer files come straight from NVIDIA's, AMD's and Intel's GitHub pages and must carry their digital signature. Only files the game already has are replaced, and each original is backed up in the game's .upshift folder first." />
                         </StackPanel>
+                        </Expander>
 
                         <views:SuggestionsView x:Name="SuggestionsPanel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
 

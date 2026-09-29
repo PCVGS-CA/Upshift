@@ -25,7 +25,10 @@ The first public release.
 - Updates the DLSS, FSR and XeSS files games ship with to newer ones from NVIDIA's, AMD's and Intel's own GitHub pages: DLSS Super Resolution and Ray Reconstruction to 310.9.1 (DLSS 4.5), FSR 3.1 to 3.1.4 (and FidelityFX SDK 2.x files to 2.3.0), and XeSS within its major version.
 - Only files the game already has are replaced, 64-bit for 64-bit, and every new file must carry a valid NVIDIA, AMD or Intel signature. Each original is backed up in the game's `.upshift` folder, and "Restore original files" brings the exact originals back.
 - A "DLSS update" bar shows what a newer DLSS unlocks, the DLSS model list offers "Update DLSS to unlock", and the Updates page can update DLSS in all your games at once. Games with anti-cheat are never changed.
-- If a game update puts its old file back, Upshift says so and can re-apply the update.
+- If a game update puts its old file back, Upshift says so and can re-apply the update. A file changed by hand is detected too: the file from before Upshift's first change stays the original, and the changed copy is kept aside rather than thrown away.
+- Versions are read from the files on disk (every copy, when a game has several), so updates are only offered when a copy really is older; nothing to do shows "Already up to date", never an error.
+- Files belonging to OptiScaler, including an OptiScaler installed by hand, are never updated by Upshift.
+- The per-file list is under "Upscaler files (advanced)", collapsed with a one-line summary; the DLSS bar and the Updates page are the main way to update.
 - Files that OptiScaler installed are labelled as OptiScaler's and left to OptiScaler.
 
 ### Library

@@ -207,10 +207,25 @@ errors and no warnings.
     - Launchers (REDlauncher…) filtered out of the Library.
     - "Hide from library" and "Show hidden games".
     - The smaller Windows App SDK footprint.
+  - **Fixes after the user's testing:**
+    - **Live versions:** `Items` and `RefreshVersions` read every copy's version from disk, never the scan cache.
+      The user's session had shown stale versions: its `library.json` writes never landed, cause unknown.
+    - **Up to date:** already-current copies are skipped as "Already up to date", never an error dialog.
+    - **OptiScaler's files:** `OptiScalerOwner` also covers an OptiScaler installed by hand, and `Update` refuses
+      its files.
+    - **Hand changes:** the first original is never replaced; a copy changed outside Upshift goes to
+      `.upshift\set-aside\<stamp>\` before Upshift replaces or restores it.
+    - **Section layout:** collapsed, titled "Upscaler files (advanced)", with a summary.
   - **Tested on both games** (hash snapshots `G0`–`G5` in the scratchpad):
     - Update, then Restore exact: 0 of 2,897 entries differed from before.
     - Update again. The Witcher 3 also went through a simulated "game put its old file back" → warning → Re-apply.
     - Silent Hill 2 also did DLSS + XeSS 1.3.0.28 → 1.3.1.32 → restore exact, before the final DLSS-only update.
+    - Re-test after the fixes (snapshots `H0`, `H1`):
+      - Each game has one `nvngx_dlss.dll`: The Witcher 3's `bin\x64_dx12` and Silent Hill 2's
+        `SHProto\Plugins\DLSS\…`, both 310.9.1.
+      - Both games' 18 OptiScaler files match their record and the v0.9.4 release.
+      - The Witcher 3's hand-change case: 3.7.0 copied in by hand → detected on scan → Update (3.1.1 kept as the
+        original, 3.7.0 set aside) → Restore exact to 3.1.1 → Update.
 - **Installer and self-updates (2026-09-28):**
   - Velopack 1.2.158: installer, portable zip, uninstall question, and self-updates from GitHub Releases.
   - "Check for app updates" and "Restart to update" in Settings > About, plus an "Update for Upshift" bar in the
@@ -232,10 +247,18 @@ errors and no warnings.
     - DLSS was updated by Upshift: 3.1.1 → 310.9.1, with the original in the root's `.upshift\originals\`.
     - Its OptiScaler.ini has `Dx12Upscaler=dlss`, set at 18:12 that day by an Upshift session that wasn't
       Claude's (pid 18620).
+    - DLSS model M (set by the user, 20:37).
+    - The root's `.upshift\set-aside\20260928-204743\` holds a 51 MB 3.7.0 DLL from Claude's hand-change test. It's
+      safe to delete, but waiting for the user's OK.
   - Silent Hill 2 has OptiScaler v0.9.4, installed by the user.
-    - DLSS (`SHProto\Plugins\DLSS\…`) was updated by Upshift: 3.7.0 → 310.9.1, with the original in the root's
-      `.upshift\originals\`.
-    - Its XeSS plugin file is the game's original 1.3.0.28.
+    - DLSS (`SHProto\Plugins\DLSS\…`) was updated by Upshift: 3.7.0 → 310.9.1.
+    - XeSS in `Plugins\XeSS` was updated by the user through Upshift: 1.3.0.28 → 1.3.1.32.
+    - Both originals are in the root's `.upshift\originals\`, and DLSS model M is set.
+  - Resident Evil Requiem (not a test game) was changed by the user through Upshift on 2026-09-28, with no OptiScaler
+    there:
+    - DLSS and Ray Reconstruction 310.3.0 → 310.9.1.
+    - Its own FSR SDK 2.1 and XeSS 2 files → 2.3.0 / 2.0.2.
+    - Originals are backed up in its root `.upshift\`.
 
 ## Next
 

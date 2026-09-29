@@ -69,6 +69,9 @@ public sealed class GameInfo
     /// <summary>Upscaler files Upshift updated that the game has put its old copy back into (found by the last scan).</summary>
     public List<string> UpscalerFilesRestoredByGame { get; set; } = new();
 
+    /// <summary>Upscaler files Upshift updated that were since replaced by something else (by hand, say).</summary>
+    public List<string> UpscalerFilesChangedByHand { get; set; } = new();
+
     /// <summary>Cover art found automatically: Steam's local cache or a file downloaded into the artwork folder.</summary>
     public string? ArtworkPath { get; set; }
 

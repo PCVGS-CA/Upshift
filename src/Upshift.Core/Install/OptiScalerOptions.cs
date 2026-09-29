@@ -160,10 +160,15 @@ public static class OptiScalerOptions
         _ => mode
     };
 
-    /// <summary>The game's DLSS Super Resolution version (from nvngx_dlss.dll), or null.</summary>
+    /// <summary>
+    /// The game's DLSS Super Resolution version (from nvngx_dlss.dll), or null. With several copies, the oldest counts:
+    /// a model is only offered when every copy can run it.
+    /// </summary>
     public static Version? GameDlssVersion(GameInfo game) =>
-        game.Upscalers.FirstOrDefault(u => u.FileName.Equals("nvngx_dlss.dll", StringComparison.OrdinalIgnoreCase))?.Version is { } v
-            ? ParseVersion(v) : null;
+        game.Upscalers.Where(u => u.FileName.Equals("nvngx_dlss.dll", StringComparison.OrdinalIgnoreCase) && u.Version is not null)
+            .Select(u => ParseVersion(u.Version!))
+            .DefaultIfEmpty()
+            .Min();
 
     public static bool PresetAvailable(DlssPreset preset, Version? gameDlss) =>
         gameDlss is not null && gameDlss >= ParseVersion(preset.MinVersion);

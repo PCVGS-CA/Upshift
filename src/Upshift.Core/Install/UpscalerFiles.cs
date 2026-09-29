@@ -88,7 +88,7 @@ public sealed class UpscalerFileItem
 
     public bool CanUpdate => Target is not null;
     /// <summary>Upshift's backup of the original is there, so Restore can bring it back.</summary>
-    public bool CanRestore => Record is not null && State is UpscalerFileState.UpdatedByUpshift;
+    public bool CanRestore => Record is not null && State is UpscalerFileState.UpdatedByUpshift or UpscalerFileState.ChangedSince;
 }
 
 /// <summary>
@@ -115,53 +115,102 @@ public static class UpscalerFiles
 
     // ---------------- What each file is and what it can become ----------------
 
-    /// <summary>Every upscaler DLL the game has that this feature deals with, with its state and any update.</summary>
+    /// <summary>
+    /// Every upscaler DLL the game has that this feature deals with (each copy separately), with its state and any
+    /// update. Versions are read from the files on disk every time, never from the last scan, so what's offered always
+    /// matches what's there.
+    /// </summary>
     public static List<UpscalerFileItem> Items(GameInfo game, UpscalerCatalog catalog)
     {
         var record = ReadRecord(game.InstallDir);
-        var opti = game.TargetDir is null ? null : OptiScalerInstaller.ReadManifest(game.TargetDir);
         var items = new List<UpscalerFileItem>();
 
-        foreach (var dll in game.Upscalers)
+        foreach (var dll in game.Upscalers.DistinctBy(u => u.FullPath, StringComparer.OrdinalIgnoreCase))
         {
             var sources = catalog.UpscalerFiles.Sources.Where(s => s.File.Equals(dll.FileName, StringComparison.OrdinalIgnoreCase)).ToList();
             if (sources.Count == 0) continue; // Streamline, FSR 2, DLSS FG and the like: not updated by Upshift
 
             var full = Path.GetFullPath(dll.FullPath);
+            if (!File.Exists(full)) continue; // gone since the scan
+            var version = FileVersions.Read(full);
             var feature = Fingerprints.UpscalerFiles.TryGetValue(dll.FileName, out var fp) ? fp.Feature : "";
 
-            // OptiScaler's own copy: say so, and leave it to OptiScaler's updates.
-            if (opti is { Removed: false } && game.TargetDir is not null)
+            // OptiScaler's own copy (installed by Upshift or by hand): say so, and leave it to OptiScaler.
+            if (OptiScalerOwner(full) is { } owner)
             {
-                var added = opti.Added.FirstOrDefault(f => SamePath(game.TargetDir, f.Path, full));
-                var replaced = opti.Replaced.FirstOrDefault(f => SamePath(game.TargetDir, f.Path, full));
-                if (added is not null || replaced is not null)
+                items.Add(new UpscalerFileItem
                 {
-                    var backup = replaced?.Backup is { } b ? Path.Combine(game.TargetDir, b) : null;
-                    items.Add(new UpscalerFileItem
-                    {
-                        RelativePath = dll.RelativePath, Family = dll.Family, Feature = feature, CurrentVersion = dll.Version,
-                        State = UpscalerFileState.OptiScalerCopy, OptiScalerVersion = opti.Version, OptiScalerReplaced = replaced is not null,
-                        OriginalVersion = backup is not null && File.Exists(backup) ? FileVersions.Read(backup) : null
-                    });
-                    continue;
-                }
+                    RelativePath = dll.RelativePath, Family = dll.Family, Feature = feature, CurrentVersion = version,
+                    State = UpscalerFileState.OptiScalerCopy, OptiScalerVersion = owner.Version, OptiScalerReplaced = owner.Replaced,
+                    OriginalVersion = owner.OriginalVersion
+                });
+                continue;
             }
 
             var entry = record?.Files.FirstOrDefault(f => SamePath(game.InstallDir, f.Path, full));
             var state = entry is null ? UpscalerFileState.GameFile : StateOf(game.InstallDir, entry);
             var (target, note) = game.HasAntiCheat
                 ? (null, "Blocked: this game uses anti-cheat.")
-                : TargetFor(full, dll.Version, sources);
+                : TargetFor(full, version, sources);
 
             items.Add(new UpscalerFileItem
             {
-                RelativePath = dll.RelativePath, Family = dll.Family, Feature = feature, CurrentVersion = dll.Version,
+                RelativePath = dll.RelativePath, Family = dll.Family, Feature = feature, CurrentVersion = version,
                 State = state == UpscalerFileState.GameFile && target is not null ? UpscalerFileState.UpdateAvailable : state,
                 Target = target, Note = note, Record = entry, OriginalVersion = entry?.OriginalVersion
             });
         }
         return items.OrderBy(i => i.Family).ThenBy(i => i.RelativePath, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    /// <summary>
+    /// Re-reads the version of every upscaler DLL the last scan found, from the files on disk, and drops files that
+    /// are gone. Keeps the Library right after an update or a change made outside Upshift, without a full rescan.
+    /// </summary>
+    public static void RefreshVersions(GameInfo game)
+    {
+        game.Upscalers.RemoveAll(u => !File.Exists(u.FullPath));
+        foreach (var u in game.Upscalers) u.Version = FileVersions.Read(u.FullPath);
+    }
+
+    // ---------------- OptiScaler's files ----------------
+
+    /// <summary>The DLLs an OptiScaler release puts next to the game exe (checked for 0.9.3 and 0.9.4).</summary>
+    public static readonly HashSet<string> OptiScalerFileNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "amd_fidelityfx_dx12.dll", "amd_fidelityfx_vk.dll", "amd_fidelityfx_upscaler_dx12.dll",
+        "amd_fidelityfx_framegeneration_dx12.dll", "amd_fidelityfx_loader_dx12.dll",
+        "libxess.dll", "libxess_dx11.dll", "libxess_fg.dll", "libxell.dll"
+    };
+
+    public sealed record OptiScalerFile(string? Version, bool Replaced, string? OriginalVersion);
+
+    /// <summary>
+    /// Non-null when the file belongs to OptiScaler rather than the game: listed in the OptiScaler record Upshift keeps
+    /// in that folder, or one of OptiScaler's DLL names next to any OptiScaler (including one installed by hand), or
+    /// inside OptiScaler's D3D12_Optiscaler folder. Such files are never updated or restored by Upshift.
+    /// </summary>
+    public static OptiScalerFile? OptiScalerOwner(string fullPath)
+    {
+        var dir = Path.GetDirectoryName(fullPath)!;
+        if (Path.GetFileName(dir).Equals("D3D12_Optiscaler", StringComparison.OrdinalIgnoreCase))
+            return new OptiScalerFile(null, false, null);
+
+        if (OptiScalerInstaller.ReadManifest(dir) is { Removed: false } manifest)
+        {
+            var replaced = manifest.Replaced.FirstOrDefault(f => SamePath(dir, f.Path, fullPath));
+            if (replaced is not null || manifest.Added.Any(f => SamePath(dir, f.Path, fullPath)))
+            {
+                var backup = replaced?.Backup is { } b ? Path.Combine(dir, b) : null;
+                return new OptiScalerFile(manifest.Version, replaced is not null,
+                    backup is not null && File.Exists(backup) ? FileVersions.Read(backup) : null);
+            }
+        }
+
+        if (OptiScalerFileNames.Contains(Path.GetFileName(fullPath))
+            && ModDetector.Detect(dir).FirstOrDefault(m => m.Kind == ModKind.OptiScaler) is { } found)
+            return new OptiScalerFile(found.Version, false, null);
+        return null;
     }
 
     /// <summary>The newest allowed source for a file of this version, or null with the reason.</summary>
@@ -201,11 +250,16 @@ public static class UpscalerFiles
     /// For scans: the files Upshift updated that are no longer its copy, because the game put its old one back.
     /// Uses size and time first, so unchanged files aren't hashed.
     /// </summary>
-    public static List<string> RestoredByGame(string installDir)
+    public static List<string> RestoredByGame(string installDir) => WithState(installDir, UpscalerFileState.GameRestoredOld);
+
+    /// <summary>For scans: files Upshift updated that were since changed by hand (or by a game update) to something else.</summary>
+    public static List<string> ChangedOutsideUpshift(string installDir) => WithState(installDir, UpscalerFileState.ChangedSince);
+
+    private static List<string> WithState(string installDir, UpscalerFileState state)
     {
         var record = ReadRecord(installDir);
         if (record is null) return new();
-        return record.Files.Where(f => StateOf(installDir, f) == UpscalerFileState.GameRestoredOld).Select(f => f.Path).ToList();
+        return record.Files.Where(f => StateOf(installDir, f) == state).Select(f => f.Path).ToList();
     }
 
     // ---------------- Update ----------------
@@ -230,14 +284,24 @@ public static class UpscalerFiles
         var newBackups = new List<string>();
         var stateDirExisted = Directory.Exists(Path.Combine(root, OptiScalerInstaller.StateFolder));
 
-        // 1. Check every file before touching any.
+        // 1. Check every file before touching any. Files already at (or past) the new version are skipped quietly.
         var checkedJobs = new List<(UpscalerFileJob Job, string Full, string CurrentHash, string? CurrentVersion)>();
+        var upToDate = new List<string>();
         foreach (var job in plan.UpscalerFiles)
         {
             if (CheckJob(root, job, signers) is { } problem) return Refuse(log, problem);
             var full = Path.GetFullPath(Path.Combine(root, job.Path));
-            checkedJobs.Add((job, full, OptiScalerInstaller.Sha256(full), FileVersions.Read(full)));
+            var currentVersion = FileVersions.Read(full);
+            if (currentVersion is not null && ParseVersion(currentVersion) >= ParseVersion(job.Version ?? "0"))
+            {
+                upToDate.Add(job.Path);
+                log.Write($"  already up to date: {job.Path} ({currentVersion})");
+                continue;
+            }
+            checkedJobs.Add((job, full, OptiScalerInstaller.Sha256(full), currentVersion));
         }
+        if (checkedJobs.Count == 0)
+            return new InstallResult { Success = true, Message = "Already up to date." };
 
         try
         {
@@ -253,27 +317,27 @@ public static class UpscalerFiles
                 File.Copy(full, rollback, overwrite: true);
                 done.Add((full, rollback));
 
-                // 2. Back up the game's original once. If the game has since shipped a different file of its own,
-                //    that one becomes the original.
-                var isOurs = entry is not null && currentHash == entry.Sha256;
-                var isOriginal = entry is not null && currentHash == entry.OriginalSha256;
-                if (entry is null || (!isOurs && !isOriginal))
+                // 2. Back up the game's original, once: the file that was there before Upshift's first change stays the
+                //    original for good. A copy changed since (by hand, say) isn't an original; it's set aside instead.
+                if (entry is null)
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(backup)!);
                     if (File.Exists(backup)) File.Copy(backup, backup + ".replaced-" + stamp, overwrite: true);
                     File.Copy(full, backup, overwrite: true);
                     if (OptiScalerInstaller.Sha256(backup) != currentHash) throw new IOException($"The backup of {job.Path} doesn't match the original.");
                     newBackups.Add(backup);
-                    if (entry is null)
+                    entry = new UpscalerFileChange
                     {
-                        entry = new UpscalerFileChange { Path = job.Path, FirstUpdatedUtc = DateTime.UtcNow };
-                        record.Files.Add(entry);
-                    }
-                    entry.Backup = backupRelative;
-                    entry.OriginalSha256 = currentHash;
-                    entry.OriginalVersion = currentVersion;
-                    entry.OriginalSize = new FileInfo(backup).Length;
+                        Path = job.Path, FirstUpdatedUtc = DateTime.UtcNow, Backup = backupRelative,
+                        OriginalSha256 = currentHash, OriginalVersion = currentVersion, OriginalSize = new FileInfo(backup).Length
+                    };
+                    record.Files.Add(entry);
                     log.Write($"  backed up {job.Path} ({currentVersion}) -> {backupRelative}");
+                }
+                else if (currentHash != entry.Sha256 && currentHash != entry.OriginalSha256)
+                {
+                    var aside = SetAside(root, job.Path, stamp);
+                    log.Write($"  {job.Path} ({currentVersion}) was changed outside Upshift; kept it in {aside}. The original stays {entry.OriginalVersion}.");
                 }
 
                 // 3. Copy the new file in and check it.
@@ -301,7 +365,7 @@ public static class UpscalerFiles
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { log.Write($"  (tidy-up: {ex.Message})"); }
             TryDeleteFolder(rollbackDir);
             var names = string.Join(", ", checkedJobs.Select(j => Path.GetFileName(j.Job.Path)));
-            log.Write($"  done: {checkedJobs.Count} file(s) updated");
+            log.Write($"  done: {checkedJobs.Count} file(s) updated{(upToDate.Count > 0 ? $", {upToDate.Count} already up to date" : "")}");
             return new InstallResult { Success = true, Message = checkedJobs.Count == 1 ? $"Updated {names}." : $"Updated {checkedJobs.Count} files: {names}." };
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -364,10 +428,23 @@ public static class UpscalerFiles
             return $"{job.Path} and its update aren't both 64-bit.";
         var sourceVersion = FileVersions.Read(job.SourceFile);
         if (!Components.ComponentStore.SameVersion(sourceVersion, job.Version)) return $"The downloaded {Path.GetFileName(job.SourceFile)} isn't version {job.Version}.";
-        var currentVersion = FileVersions.Read(full);
-        if (currentVersion is null || ParseVersion(currentVersion) >= ParseVersion(sourceVersion!))
-            return $"{job.Path} is already version {currentVersion}; the update ({sourceVersion}) isn't newer.";
+        if (FileVersions.Read(full) is null) return $"{job.Path}'s version can't be read, so it wasn't replaced.";
+        if (OptiScalerOwner(full) is not null)
+            return $"{job.Path} is OptiScaler's own copy, so Upshift leaves it to OptiScaler's updates.";
         return null;
+    }
+
+    /// <summary>
+    /// Keeps a copy of a file that was changed outside Upshift before Upshift replaces it, in
+    /// .upshift\set-aside\&lt;stamp&gt;\&lt;path&gt;. Returns that folder, relative to the install folder.
+    /// </summary>
+    private static string SetAside(string root, string relativePath, string stamp)
+    {
+        var folder = Path.Combine(OptiScalerInstaller.StateFolder, "set-aside", stamp);
+        var target = Path.Combine(root, folder, relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        File.Copy(Path.Combine(root, relativePath), target, overwrite: true);
+        return folder;
     }
 
     // ---------------- Restore ----------------
@@ -404,13 +481,15 @@ public static class UpscalerFiles
                     log.Write($"  {entry.Path} was already the original");
                     continue;
                 }
+                if (!File.Exists(backup)) throw new IOException($"The backup of {entry.Path} is missing.");
                 if (current is not null && current != entry.Sha256)
                 {
-                    kept.Add(entry.Path);
-                    log.Write($"  KEPT (changed since Upshift updated it), backup kept: {entry.Path}");
-                    continue;
+                    // Changed outside Upshift (by hand, say): the original is still the file from before Upshift's first
+                    // change, so that comes back; the changed copy is kept, not thrown away.
+                    var aside = SetAside(root, entry.Path, DateTime.Now.ToString("yyyyMMdd-HHmmss"));
+                    kept.Add($"{entry.Path} (your changed copy is in {aside})");
+                    log.Write($"  {entry.Path} was changed outside Upshift; kept that copy in {aside}");
                 }
-                if (!File.Exists(backup)) throw new IOException($"The backup of {entry.Path} is missing.");
                 if (OptiScalerInstaller.Sha256(backup) != entry.OriginalSha256) throw new IOException($"The backup of {entry.Path} doesn't match the original.");
                 File.Copy(backup, full, overwrite: true);
                 if (OptiScalerInstaller.Sha256(full) != entry.OriginalSha256) throw new IOException($"Restoring {entry.Path} gave a different file than the original.");
@@ -435,7 +514,7 @@ public static class UpscalerFiles
             KeptChanged = kept,
             Message = kept.Count == 0
                 ? restored.Count == 1 ? $"The game's original {Path.GetFileName(restored[0])} is back." : $"The game's {restored.Count} original files are back."
-                : $"{restored.Count} original file(s) are back. {string.Join(", ", kept)} changed after Upshift updated them, so they were left in place."
+                : $"{restored.Count} original file(s) are back. Changed outside Upshift, and kept: {string.Join(", ", kept)}."
         };
     }
 
@@ -459,7 +538,7 @@ public static class UpscalerFiles
                 + state switch
                 {
                     UpscalerFileState.GameRestoredOld => " The game has since put its old file back.",
-                    UpscalerFileState.ChangedSince => " The file has changed since (a game update?).",
+                    UpscalerFileState.ChangedSince => " The file has since been changed outside Upshift (by hand or a game update); the original above is still the one that comes back.",
                     _ => ""
                 });
         }).ToList();
