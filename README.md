@@ -42,7 +42,7 @@ outright.
 
 ## Video
 
-https://youtu.be/F7Zr62BZHzc
+[![Watch the video](https://img.youtube.com/vi/F7Zr62BZHzc/maxresdefault.jpg)](https://youtu.be/F7Zr62BZHzc)
 
 ## What it does
 
