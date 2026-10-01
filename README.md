@@ -40,6 +40,10 @@ outright.
 
 ![Updates](docs/screenshots/updates.png)
 
+## Video
+
+https://youtu.be/F7Zr62BZHzc
+
 ## What it does
 
 - **Finds your games** from Steam, Epic, GOG, the Xbox app / Game Pass, EA app, Ubisoft Connect, Battle.net,
