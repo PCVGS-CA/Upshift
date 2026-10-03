@@ -43,6 +43,26 @@ errors and no warnings.
   Control policy has blocked this file", Code Integrity event 3077). On 2026-09-28 it allowed the first
   `Upshift-Setup-x64.exe`, then blocked the rebuilt one. Never change that setting or work around a block; tell the
   user.
+  - 2026-10-03: the "1.0.1 crashes at startup" report (exit code 0xe0434352, faulting module KERNELBASE.dll, every
+    time, from Visual Studio) was this block, not a code bug. Each of the user's crashes had a Code Integrity 3077
+    event for the Debug `Upshift.dll` at the same second. With a debugger attached there's no ".NET Runtime" 1026
+    event, so the user saw only "Application Error".
+  - The next build (with the crash log) was allowed and ran from the exe, from Visual Studio and from a test
+    installer.
+  - **To tell the two apart:** look for 3077 events in Microsoft-Windows-CodeIntegrity/Operational at the time of
+    the crash. If there are none, read `logs\crash.log`.
+- **Crash log:** `Services/CrashLog.cs`, installed first thing in `Program.Main`. It records unhandled exceptions
+  (AppDomain, XAML `UnhandledException`, unobserved tasks, and start-up failures in `Main` / `OnLaunched`) in
+  `%LocalAppData%\Upshift\logs\crash.log`, falling back to `%TEMP%\Upshift-crash.log`.
+  - It can't catch a code-integrity block: that stops Upshift.dll from loading before any of Upshift's code runs.
+  - `Upshift.exe --crash-test` fails on purpose in `OnLaunched` to check the log works.
+- **Installer tests:** run `build\package.ps1 -TestPackId Upshift.App.Test` so the test Setup installs to
+  `%LocalAppData%\Upshift.App.Test`.
+  - The regular Setup finds the user's real installed Upshift (through the sandbox) and offers to update it. Don't:
+    edits to existing files may land in the real install while new files land in Claude's copy.
+  - `-TestPackId` refuses to run with `-Tag`.
+  - A test install from 2026-10-03 (1.0.1) is in Claude's sandboxed `%LocalAppData%\Upshift.App.Test`, not visible
+    to the user.
 
 ## Project layout and key files
 

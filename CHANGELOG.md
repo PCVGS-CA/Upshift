@@ -12,6 +12,7 @@ Bug fixes.
 - **Repair keeps the game's own files:** when a file OptiScaler added was replaced by the game (a game update or file check), Repair now keeps that copy as the original, so uninstalling puts it back instead of losing it.
 - **Updates page:** downloads and updates show their progress in place; expanded sections and dropdowns stay open, and the buttons are off until it's done.
 - **Library:** installing, uninstalling, updating or changing a game's options refreshes only that game's card, keeping your place in the list and your selection. After a full rescan, the selected game is scrolled back into view.
+- **Crash log:** if Upshift ever closes unexpectedly, the error and where it happened are written to `logs\crash.log` in Upshift's data folder, starting from the moment Upshift starts.
 - **FSR 4:** one "Use FSR 4 on this card" switch replaces the two. RX 6000 cards use your 4.0.2c file when you've added it in Settings, otherwise OptiScaler's built-in FSR 4; other cards use the built-in one. A "Using:" choice appears only when both are possible. Games that already had either setting on keep it.
 
 ## [1.0.0]

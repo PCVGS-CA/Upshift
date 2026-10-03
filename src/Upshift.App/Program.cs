@@ -13,6 +13,21 @@ public static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        // First of all: any crash from here on is written to %LocalAppData%\Upshift\logs\crash.log.
+        Services.CrashLog.Install();
+        try
+        {
+            Run(args);
+        }
+        catch (Exception ex)
+        {
+            Services.CrashLog.Write(ex, "Start-up failed");
+            throw;
+        }
+    }
+
+    private static void Run(string[] args)
+    {
         // The elevated one-job helper (Upshift.exe --apply plan.json) skips Velopack: it must never apply an app
         // update or run a hook, only the install plan it was given.
         if (!args.Contains("--apply"))

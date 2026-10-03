@@ -9,6 +9,8 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
+        // Exceptions XAML raises on the UI thread (event handlers, bindings, layout) are logged before they close the app.
+        UnhandledException += (_, e) => Services.CrashLog.Write(e.Exception, "Unhandled exception in the UI (Upshift closed)");
     }
 
     protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
@@ -22,11 +24,23 @@ public partial class App : Application
             return;
         }
 
-        // Data from before the rename (%LocalAppData%\PCVGS\UpscalerManager) moves to %LocalAppData%\Upshift once.
-        // This must run before AppServices is touched, since its services are created from the data folder.
-        DataFolder.Path = Core.Services.DataMigration.Run();
+        try
+        {
+            // Data from before the rename (%LocalAppData%\PCVGS\UpscalerManager) moves to %LocalAppData%\Upshift once.
+            // This must run before AppServices is touched, since its services are created from the data folder.
+            DataFolder.Path = Core.Services.DataMigration.Run();
 
-        MainAppWindow = new MainWindow();
-        MainAppWindow.Activate();
+            // Upshift.exe --crash-test: fails on purpose here, to check that a start-up crash reaches crash.log.
+            if (commandLine.Contains("--crash-test"))
+                throw new InvalidOperationException("Crash test: Upshift was started with --crash-test.");
+
+            MainAppWindow = new MainWindow();
+            MainAppWindow.Activate();
+        }
+        catch (Exception ex)
+        {
+            Services.CrashLog.Write(ex, "Start-up failed while opening the main window");
+            throw;
+        }
     }
 }

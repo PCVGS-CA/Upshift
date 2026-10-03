@@ -20,7 +20,10 @@ param(
     [string]$OutDir = "releases",
     [string]$PublishDir = "publish",
     # When given (e.g. "v1.0.0"), it must match the version, or nothing is built.
-    [string]$Tag = ""
+    [string]$Tag = "",
+    # Local testing only: a different package id (e.g. "Upshift.App.Test"), so the test installer goes into
+    # %LocalAppData%\<id> and leaves an installed Upshift alone. Never used for a release.
+    [string]$TestPackId = ""
 )
 
 $ErrorActionPreference = 'Stop'
@@ -29,6 +32,11 @@ Set-StrictMode -Version Latest
 # Must match AppLocations.PackageId in src/Upshift.Core/Services/AppLocations.cs. It decides the install folder
 # (%LocalAppData%\Upshift.App), which must never be the data folder (%LocalAppData%\Upshift).
 $packId = 'Upshift.App'
+if ($TestPackId) {
+    if ($Tag) { throw "-TestPackId is for local testing only and can't be used with -Tag." }
+    if ($TestPackId -notmatch '^Upshift\.App\.[A-Za-z0-9]+$') { throw "-TestPackId must look like 'Upshift.App.Test' (never 'Upshift', the data folder)." }
+    $packId = $TestPackId
+}
 
 function Invoke-Checked([string]$what, [scriptblock]$command) {
     & $command
