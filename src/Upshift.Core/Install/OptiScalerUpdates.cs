@@ -573,7 +573,22 @@ public static partial class OptiScalerInstaller
                     File.Copy(path, keep, overwrite: true);
                     record.SafetyFolder = safetyRelative;
                     var current = Sha256(path);
-                    if (file.Backup is not null && current != file.OriginalSha256 && !IsOptiScalerDll(path))
+                    if (file.Backup is null && manifest.Added.Contains(file) && !IsOptiScalerDll(path))
+                    {
+                        // A file the install added has been replaced by something else (a game update or file check that
+                        // now ships its own copy, say). It becomes the original: backed up, and put back on uninstall.
+                        var backupRelative = Path.Combine(manifest.BackupFolder, file.Path);
+                        var backup = Path.Combine(target, backupRelative);
+                        Directory.CreateDirectory(Path.GetDirectoryName(backup)!);
+                        File.Copy(path, backup, overwrite: true);
+                        if (Sha256(backup) != current) throw new IOException($"The backup of {file.Path} doesn't match.");
+                        manifest.Added.Remove(file);
+                        file.Backup = backupRelative;
+                        file.OriginalSha256 = current;
+                        manifest.Replaced.Add(file);
+                        log.Write($"  {file.Path}: the copy found there is kept as the original (backed up, put back on uninstall)");
+                    }
+                    else if (file.Backup is not null && current != file.OriginalSha256 && !IsOptiScalerDll(path))
                     {
                         // The game put a new copy of its own file here (a game update, say): that's what Uninstall should put back now.
                         var backup = Path.Combine(target, file.Backup);

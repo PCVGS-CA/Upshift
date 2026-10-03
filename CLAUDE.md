@@ -160,6 +160,18 @@ errors and no warnings.
 - This machine's Python can't see some folders in `%LocalAppData%`; check with PowerShell.
 - UI testing works with UI Automation scripts: select, invoke, set combos and boxes, screenshot with PrintWindow.
   Controls built in code need `AutomationProperties.Name` to be found.
+- **Claude's shell runs inside the Claude desktop app's MSIX package, so `%LocalAppData%` is virtualized** (found
+  2026-10-03). What Claude's shell, Python and any Upshift it launches see as `%LocalAppData%\Upshift` is a private
+  copy: writes land in `%LocalAppData%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Local\Upshift`, and reads of
+  files Claude never wrote fall through to the real folder.
+  - The user's own Upshift writes to the real `%LocalAppData%\Upshift`, which Claude can't see where its copy
+    has the same file. Claude's copy froze around 2026-09-29 14:36; the user's logs, library and saved settings since
+    are only in the real folder.
+  - This, not "two windows overwriting library.json", explains the stale library and the missing Silent Hill 2 log
+    line noted below.
+  - Running something outside the package (e.g. through explorer.exe) was refused by Claude Code's permission
+    check; don't try to get around it. Game folders and `C:\Projects` are not virtualized, so game-folder results are
+    real.
 
 ## Done so far
 
@@ -334,7 +346,9 @@ errors and no warnings.
     - DLSS model M (set by the user, 20:37).
     - The hand-change test's set-aside copy was deleted with the user's OK; `.upshift` holds only `originals` and
       the record.
-  - Silent Hill 2 has OptiScaler v0.9.4, installed by the user.
+  - Silent Hill 2 has OptiScaler v0.9.4, reinstalled by Claude on 2026-10-03 in the 1.0.1 test with the user's
+    settings restored (DLSS upscaler, model M, frame generation off). It was on the DLSS 5 build (DLSSNR v0.2.0,
+    with DLSS 5 turned off) before the test; switching back is one click in its DLSS 5 section.
     - DLSS (`SHProto\Plugins\DLSS\…`) was updated by Upshift: 3.7.0 → 310.9.1.
     - XeSS in `Plugins\XeSS` was updated by the user through Upshift: 1.3.0.28 → 1.3.1.32.
     - Both originals are in the root's `.upshift\originals\`, and DLSS model M is set.
@@ -348,6 +362,42 @@ errors and no warnings.
     - DLSS and Ray Reconstruction 310.3.0 → 310.9.1.
     - Its own FSR SDK 2.1 and XeSS 2 files → 2.3.0 / 2.0.2.
     - Originals are backed up in its root `.upshift\`.
+
+- **1.0.1 (2026-10-03), bug fixes:**
+  - **Uninstall** saves the game's OptiScaler.ini to `%LocalAppData%\Upshift\saved-settings\<game>\` (as
+    `OptiScaler-<stamp>.ini` plus a `.json` saying where it came from; `Core/Install/SavedSettings.cs`) and then
+    removes it even when the in-game menu changed it. It also removes OptiScaler's logs and anything inside the
+    folders the install created, including those listed in a DLSS 5 switch's `manifest.original.json`, and
+    `D3D12_Optiscaler` / `Licenses` / `OptiScaler` when they end up empty.
+  - **Install** offers "Restore my previous OptiScaler settings" (on by default): the newest of the saved copy and a
+    leftover ini. It restores values that differ from the fresh default, skipping the old version's plain defaults
+    when that version is still downloaded, and records each restored value as an IniChange.
+  - **A leftover OptiScaler.ini** is no longer a blocker (`InstallPreview.Leftovers`). "Remove it and continue"
+    backs it up to the saved settings and removes it; a failed install puts it back. The elevated helper only
+    accepts saved-settings paths under the data folder.
+  - **Repair:** a file the install *added* that something else replaced becomes a Replaced entry with that copy as
+    the backup, so uninstall puts it back (before, the repair safety copy was deleted with `.upshift`).
+  - **Updates page:** rows keep handles to their controls (`RowState`). Downloads write progress into the row's
+    status line, buttons are off meanwhile, `RefreshRowInPlace` updates texts at the end, and automatic refreshes
+    wait (`_rebuildPending`) until nothing runs. The "Update selected" game and DLSS sections do the same.
+  - **Library:** `RefreshCard(gameId)` swaps one card in place after an install, uninstall, settings change,
+    update or exe change (`GameUpdates.LibraryChanged` now passes the game id). Filters that change in the
+    background use `ReapplyFilterInPlace`. Hiding removes just that card, and a full rescan scrolls the selected
+    game back into view.
+  - **FSR 4:** one "Use FSR 4 on this card" switch. RDNA 2 uses the user's 4.0.2c file when added, otherwise the
+    built-in one with a note; other cards use the built-in one. "Using:" shows only on AMD cards with the file
+    available. The options panel follows the pretend card (`EffectiveGpu`) but never writes while one is set. The
+    pretend list now has an RX 6600 and an RTX 4070.
+  - **Tested:**
+    - 18 checks in the scratch harness on a throwaway folder.
+    - Silent Hill 2 uninstall (50 files → the game's own 8, all unchanged; the ini saved byte for byte) and
+      reinstall with restore: all 12 of the user's values back, plus the two DLSS 5 build's log defaults, which are
+      skipped on purpose.
+    - Library scroll and selection kept through option changes, and the selected game in view after a rescan.
+    - Downloading OptiScaler v0.9.2 on the Updates page: the same row and picker throughout, still expanded,
+      buttons off.
+    - The FSR 4 switch for a pretend RX 6600 (with and without a dummy file in Claude's data copy, removed after),
+      a pretend RTX 4070, and on/off on the real RTX 4070 (ini back byte for byte).
 
 ## Next
 
@@ -399,8 +449,14 @@ errors and no warnings.
   - The Upscaler and Frame generation guide flyouts.
 - OptiScaler.ini changes made before 2026-09-28 show "Date not recorded".
 - The card's FSR chip can come from files OptiScaler added (their rows say so, but the chip doesn't).
-- The user's Silent Hill 2 install has no line in the install log, although other installs are logged. Not
-  explained yet.
+- The user's Silent Hill 2 install had no line in the install log Claude could see: the user's log is in the real
+  `%LocalAppData%\Upshift\logs`, which Claude's virtualized view doesn't show (see Environment quirks).
+- The Witcher 3 shows "Needs repair" (seen 2026-10-03):
+  - `libxell.dll` and `libxess_fg.dll` are older Intel builds (1.2.1.13 and 1.2.2.118) than OptiScaler's (1.3.0.5,
+    1.3.1.78). They arrived on 2026-09-29 at 08:21, when every file in `bin\x64_dx12` was rewritten (all others with
+    the same content).
+  - Repair copies OptiScaler's back, and in 1.0.1 keeps those two as the originals for uninstall. Left for the user
+    to decide.
 
 ## Files created outside this folder during the project
 

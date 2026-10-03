@@ -113,10 +113,12 @@ public static class AppServices
     public static IReadOnlyList<GpuInfo> PretendGpus { get; } = new[]
     {
         new GpuInfo("NVIDIA GeForce RTX 5080", Core.Models.GpuVendor.Nvidia, 0x10DE, 0x2C02, "32.0.16.1692", "Blackwell", false),
+        new GpuInfo("NVIDIA GeForce RTX 4070", Core.Models.GpuVendor.Nvidia, 0x10DE, 0x2786, "32.0.16.1692", "Ada Lovelace", false),
         new GpuInfo("NVIDIA GeForce RTX 3070", Core.Models.GpuVendor.Nvidia, 0x10DE, 0x2484, "32.0.16.1692", "Ampere", false),
         new GpuInfo("AMD Radeon RX 9070 XT", Core.Models.GpuVendor.Amd, 0x1002, 0x7550, "32.0.21013.1000", "RDNA 4", false),
         new GpuInfo("AMD Radeon RX 7900 XTX", Core.Models.GpuVendor.Amd, 0x1002, 0x744C, "32.0.21013.1000", "RDNA 3", false),
         new GpuInfo("AMD Radeon RX 6800", Core.Models.GpuVendor.Amd, 0x1002, 0x73BF, "32.0.21013.1000", "RDNA 2", false),
+        new GpuInfo("AMD Radeon RX 6600", Core.Models.GpuVendor.Amd, 0x1002, 0x73FF, "32.0.21013.1000", "RDNA 2", false),
         new GpuInfo("Intel Arc B580 Graphics", Core.Models.GpuVendor.Intel, 0x8086, 0xE20B, "32.0.101.6979", "Battlemage", false)
     };
 

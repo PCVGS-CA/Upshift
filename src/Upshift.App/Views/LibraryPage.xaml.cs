@@ -34,6 +34,16 @@ public sealed partial class LibraryPage : Page
                 GamesGrid.SelectedItem = ViewModel.Selected;
         };
 
+        // After a full rescan rebuilt the list, bring the selected game back into view.
+        ViewModel.ScrollToSelectedRequested += () =>
+        {
+            if (ViewModel.Selected is { } selected)
+            {
+                GamesGrid.SelectedItem = selected;
+                GamesGrid.ScrollIntoView(selected, ScrollIntoViewAlignment.Default);
+            }
+        };
+
         Loaded += async (_, _) => await ViewModel.InitializeAsync();
     }
 
@@ -149,6 +159,31 @@ public sealed partial class LibraryPage : Page
         var names = new ComboBox { ItemsSource = OptiScalerInstaller.ProxyNames, MinWidth = 200, Header = "Load OptiScaler as" };
         var (versions, releases, chosenVersion) = VersionChoice(component.Version);
 
+        // A leftover OptiScaler.ini doesn't block: it's backed up and removed when "Remove it and continue" is ticked.
+        var removeLeftover = new CheckBox { Content = "Remove it and continue", IsChecked = true };
+        var leftoverBar = new InfoBar
+        {
+            Severity = InfoBarSeverity.Warning, IsClosable = false,
+            Title = "OptiScaler.ini from an earlier install is still in the game folder",
+            Message = "It's backed up to Upshift's saved settings first, then removed, so the new install starts clean.",
+            Content = removeLeftover
+        };
+
+        // "Restore my previous OptiScaler settings": the newest of the copy saved at uninstall and a leftover ini.
+        var settingsFolder = SavedSettings.FolderFor(AppServices.DataDir, card.Name);
+        var saved = SavedSettings.Latest(settingsFolder);
+        var leftoverPath = Path.Combine(target, "OptiScaler.ini");
+        var leftoverTime = File.Exists(leftoverPath) && OptiScalerInstaller.ReadManifest(target) is not { Removed: false }
+            ? File.GetLastWriteTimeUtc(leftoverPath) : (DateTime?)null;
+        var useLeftover = leftoverTime is { } lt && (saved is null || lt > saved.SavedUtc);
+        var restoreTime = useLeftover ? leftoverTime : saved?.SavedUtc;
+        var restore = new CheckBox
+        {
+            IsChecked = true,
+            Content = $"Restore my previous OptiScaler settings (from {restoreTime?.ToLocalTime():d MMM yyyy, HH:mm})",
+            Visibility = restoreTime is null ? Visibility.Collapsed : Visibility.Visible
+        };
+
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
@@ -169,7 +204,9 @@ public sealed partial class LibraryPage : Page
                         new TextBlock { Text = $"Into: {target}", TextWrapping = TextWrapping.Wrap, FontSize = 12, IsTextSelectionEnabled = true },
                         loadsAs,
                         backups,
+                        restore,
                         new Expander { Header = "Advanced", HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch, Content = names },
+                        leftoverBar,
                         blockers
                     }
                 }
@@ -185,13 +222,16 @@ public sealed partial class LibraryPage : Page
                 : $"Backed up first (the game's own copies, put back on uninstall): {string.Join(", ", preview.WillBackUp)}. {preview.WillAdd.Count} other files are added.";
             blockers.Message = string.Join(" ", preview.Blockers);
             blockers.IsOpen = preview.Blockers.Count > 0;
-            dialog.IsPrimaryButtonEnabled = preview.Blockers.Count == 0;
+            leftoverBar.IsOpen = preview.Leftovers.Count > 0;
+            dialog.IsPrimaryButtonEnabled = preview.Blockers.Count == 0 && (preview.Leftovers.Count == 0 || removeLeftover.IsChecked == true);
             if (names.SelectedItem as string != preview.ProxyName) names.SelectedItem = preview.ProxyName;
         }
 
         // Start on the loading name a suggestion picked for this game, if any.
         Refresh(AppServices.InstallPrefs.ProxyFor(card.Info.Id));
         names.SelectionChanged += (_, _) => Refresh(names.SelectedItem as string);
+        removeLeftover.Checked += (_, _) => Refresh(names.SelectedItem as string);
+        removeLeftover.Unchecked += (_, _) => Refresh(names.SelectedItem as string);
 
         if (await ShowDialogAsync(dialog) != ContentDialogResult.Primary) return;
         var version = chosenVersion();
@@ -204,7 +244,19 @@ public sealed partial class LibraryPage : Page
                 return;
             }
         }
-        var result = await ViewModel.InstallOptiScalerAsync(card, component, names.SelectedItem as string ?? "dxgi.dll");
+        // The defaults of the version the saved settings came from, when that version is still downloaded.
+        var oldDefaults = !useLeftover && saved is { ComponentId: { } savedId, Version: { } savedVersion }
+            && AppServices.Catalog.Components.FirstOrDefault(c => c.Id == savedId) is { } savedComponent
+            && AppServices.Components.TryGetCached(savedComponent, savedVersion) is { } cached
+            && File.Exists(Path.Combine(cached.Folder, "OptiScaler.ini"))
+            ? Path.Combine(cached.Folder, "OptiScaler.ini") : null;
+        var restoreChosen = restore.IsChecked == true && restoreTime is not null;
+        var result = await ViewModel.InstallOptiScalerAsync(card, component, names.SelectedItem as string ?? "dxgi.dll", new InstallRestore(
+            settingsFolder,
+            RemoveLeftovers: removeLeftover.IsChecked == true,
+            RestoreFrom: restoreChosen && !useLeftover ? saved?.Path : null,
+            RestoreFromLeftover: restoreChosen && useLeftover,
+            RestoreDefaultsFrom: restoreChosen ? oldDefaults : null));
         if (result is { Success: false }) await ShowMessageAsync("OptiScaler wasn't installed", result.Message);
     }
 
@@ -313,8 +365,8 @@ public sealed partial class LibraryPage : Page
             Content = new TextBlock
             {
                 TextWrapping = TextWrapping.Wrap,
-                Text = "Removes only the files this app installed, if they're unchanged, and puts back the game files it backed up. " +
-                       "Anything changed since the install is left in place and listed."
+                Text = "Removes the files this app installed, OptiScaler.ini and the logs OptiScaler wrote, and puts back the game files it backed up. " +
+                       "Your OptiScaler settings are saved first, so installing again can restore them. Other files that changed since the install are left in place and listed."
             },
             PrimaryButtonText = "Uninstall",
             CloseButtonText = "Cancel",

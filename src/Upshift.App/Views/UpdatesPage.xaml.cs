@@ -28,6 +28,36 @@ public sealed partial class UpdatesPage : Page
         public string? Message { get; set; }
         public bool Busy { get; set; }
         public bool MoreOpen { get; set; }
+
+        // The row's controls from the last time it was built. A download writes its progress and busy state straight
+        // into these, so the row (its expanded section, dropdowns and focus) is never rebuilt while it runs.
+        public TextBlock? Status { get; set; }
+        public ProgressRing? Ring { get; set; }
+        public TextBlock? OnPc { get; set; }
+        public Button? Main { get; set; }
+        public ComboBox? Channel { get; set; }
+        public ToggleSwitch? Keep { get; set; }
+        public ComboBox? Versions { get; set; }
+        public List<ReleaseInfo> Releases { get; set; } = new();
+        public ReleaseInfo? PickedRelease { get; set; }
+        public Button? Download { get; set; }
+        public Button? Remove { get; set; }
+
+        /// <summary>True while the picker's own items are being refreshed, so that isn't taken as the user picking.</summary>
+        public bool Refreshing { get; set; }
+    }
+
+    /// <summary>A refresh asked for while something ran; it happens once everything has finished.</summary>
+    private bool _rebuildPending;
+
+    private bool AnythingRunning => Rows.Values.Any(r => r.Busy) || _updatingGames || _updatingDlss;
+
+    /// <summary>Runs a refresh that was held back while a download or update ran, once nothing is running.</summary>
+    private void FlushPendingRebuild()
+    {
+        if (!_rebuildPending || AnythingRunning) return;
+        _rebuildPending = false;
+        Rebuild();
     }
 
     // Kept for the session, so coming back to the page shows it as it was left.
@@ -53,17 +83,23 @@ public sealed partial class UpdatesPage : Page
     {
         base.OnNavigatedTo(e);
         AppServices.Updates.Changed += OnUpdatesChanged;
-        GameUpdates.LibraryChanged += OnUpdatesChanged;
+        GameUpdates.LibraryChanged += OnGameChanged;
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
     {
         base.OnNavigatedFrom(e);
         AppServices.Updates.Changed -= OnUpdatesChanged;
-        GameUpdates.LibraryChanged -= OnUpdatesChanged;
+        GameUpdates.LibraryChanged -= OnGameChanged;
     }
 
-    private void OnUpdatesChanged() => _dispatcher.TryEnqueue(Rebuild);
+    private void OnGameChanged(string gameId) => OnUpdatesChanged();
+
+    private void OnUpdatesChanged() => _dispatcher.TryEnqueue(() =>
+    {
+        if (AnythingRunning) _rebuildPending = true;
+        else Rebuild();
+    });
 
     private static Microsoft.UI.Xaml.Media.Brush Brush(string key) => (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources[key];
 
@@ -71,17 +107,43 @@ public sealed partial class UpdatesPage : Page
 
     private void Rebuild()
     {
-        var updates = AppServices.Updates;
-        var settings = AppServices.Settings.Current;
         var all = AppServices.Catalog.Components;
 
         var candidates = GameUpdates.Candidates();
-        var rows = all.Where(c => c.GroupWith is null && c.BundledIn is null)
+        var rows = ComponentRows();
+        RefreshStatusLine(candidates);
+        BuildGames(candidates);
+        BuildDlss();
+
+        // ---- Used now: what the app installs today, each followed by what ships inside it ----
+        UsedNowPanel.Children.Clear();
+        LaterPanel.Children.Clear();
+        foreach (var (primary, members) in rows)
+        {
+            var panel = primary.Installable ? UsedNowPanel : LaterPanel;
+            panel.Children.Add(BuildRow(primary, members));
+            foreach (var bundled in all.Where(c => c.BundledIn == primary.Id))
+                panel.Children.Add(BuildBundledRow(bundled, primary));
+        }
+    }
+
+    /// <summary>Each card's component with the ones shown on it (AMD-NR's runtime on AMD-NR's).</summary>
+    private static List<(CatalogComponent Primary, List<CatalogComponent> Members)> ComponentRows()
+    {
+        var all = AppServices.Catalog.Components;
+        return all.Where(c => c.GroupWith is null && c.BundledIn is null)
             .Select(c => (Primary: c, Members: all.Where(m => m == c || m.GroupWith == c.Id).ToList()))
             .ToList();
-        var componentUpdates = rows.Count(r => MainAction(r.Primary, r.Members).Kind == ActionKind.Update);
+    }
 
-        // ---- one status line ----
+    /// <summary>"Checked … · n updates available", the rate-limit bar and the catalog note.</summary>
+    private void RefreshStatusLine(List<GameUpdateCandidate>? candidates = null)
+    {
+        var updates = AppServices.Updates;
+        var settings = AppServices.Settings.Current;
+        candidates ??= GameUpdates.Candidates();
+        var componentUpdates = ComponentRows().Count(r => MainAction(r.Primary, r.Members).Kind == ActionKind.Update);
+
         CheckNowButton.IsEnabled = !updates.IsChecking;
         CheckingRing.IsActive = updates.IsChecking;
         CheckingRing.Visibility = updates.IsChecking ? Visibility.Visible : Visibility.Collapsed;
@@ -102,20 +164,6 @@ public sealed partial class UpdatesPage : Page
                            ?? (AppServices.UsingRemoteCatalog
                                ? $"Using the online catalog (updated {AppServices.Catalog.Updated})."
                                : $"Using the built-in catalog (updated {AppServices.Catalog.Updated}).");
-
-        BuildGames(candidates);
-        BuildDlss();
-
-        // ---- Used now: what the app installs today, each followed by what ships inside it ----
-        UsedNowPanel.Children.Clear();
-        LaterPanel.Children.Clear();
-        foreach (var (primary, members) in rows)
-        {
-            var panel = primary.Installable ? UsedNowPanel : LaterPanel;
-            panel.Children.Add(BuildRow(primary, members));
-            foreach (var bundled in all.Where(c => c.BundledIn == primary.Id))
-                panel.Children.Add(BuildBundledRow(bundled, primary));
-        }
     }
 
     private static string Checked(DateTime local) =>
@@ -168,25 +216,42 @@ public sealed partial class UpdatesPage : Page
             GamesPanel.Children.Add(update);
             GamesPanel.Children.Add(Subtle("Each game's files are saved first, so its update can be undone from the Library. OptiScaler settings are kept. Games with anti-cheat are never updated."));
         }
-        if (_gamesMessage is not null)
-            GamesPanel.Children.Add(new TextBlock { Text = _gamesMessage, FontSize = 12, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true });
+        _gamesControls = boxes.Select(b => (Control)b.Box).Concat(GamesPanel.Children.OfType<Button>()).ToList();
+        _gamesStatus = new TextBlock
+        {
+            Text = _gamesMessage ?? "", FontSize = 12, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true,
+            Visibility = _gamesMessage is null ? Visibility.Collapsed : Visibility.Visible
+        };
+        GamesPanel.Children.Add(_gamesStatus);
+    }
+
+    private TextBlock? _gamesStatus;
+    private List<Control> _gamesControls = new();
+
+    /// <summary>Shows progress under a section without rebuilding it.</summary>
+    private static void ShowProgress(TextBlock? status, string text)
+    {
+        if (status is null) return;
+        status.Text = text;
+        status.Visibility = Visibility.Visible;
     }
 
     private async Task UpdateGamesAsync(List<GameUpdateCandidate> selected)
     {
         if (_updatingGames || selected.Count == 0) return;
         _updatingGames = true;
+        foreach (var control in _gamesControls) control.IsEnabled = false;
         var lines = new List<string>();
         try
         {
             foreach (var c in selected)
             {
                 _gamesMessage = string.Join("\n", lines.Append($"{c.Game.Name}: updating to {c.Target}…"));
-                Rebuild();
+                ShowProgress(_gamesStatus, _gamesMessage);
                 var result = await GameUpdates.UpdateAsync(c.Game, c.Target, new Progress<string>(s =>
                 {
                     _gamesMessage = string.Join("\n", lines.Append($"{c.Game.Name}: {s}"));
-                    Rebuild();
+                    ShowProgress(_gamesStatus, _gamesMessage);
                 }));
                 lines.Add($"{c.Game.Name}: {result.Message}");
             }
@@ -195,7 +260,10 @@ public sealed partial class UpdatesPage : Page
         {
             _updatingGames = false;
             _gamesMessage = string.Join("\n", lines);
-            Rebuild();
+            // Only this section changes (its list of games); the component rows stay as they are.
+            BuildGames(GameUpdates.Candidates());
+            RefreshStatusLine();
+            FlushPendingRebuild();
         }
     }
 
@@ -250,25 +318,34 @@ public sealed partial class UpdatesPage : Page
             DlssPanel.Children.Add(update);
             DlssPanel.Children.Add(Subtle("Each game's original DLSS files are backed up first; \"Restore original files\" in the Library puts them back."));
         }
-        if (_dlssMessage is not null)
-            DlssPanel.Children.Add(new TextBlock { Text = _dlssMessage, FontSize = 12, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true });
+        _dlssControls = boxes.Select(b => (Control)b.Box).Concat(DlssPanel.Children.OfType<Button>()).ToList();
+        _dlssStatus = new TextBlock
+        {
+            Text = _dlssMessage ?? "", FontSize = 12, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true,
+            Visibility = _dlssMessage is null ? Visibility.Collapsed : Visibility.Visible
+        };
+        DlssPanel.Children.Add(_dlssStatus);
     }
+
+    private TextBlock? _dlssStatus;
+    private List<Control> _dlssControls = new();
 
     private async Task UpdateDlssAsync(List<DlssCandidate> selected)
     {
         if (_updatingDlss || selected.Count == 0) return;
         _updatingDlss = true;
+        foreach (var control in _dlssControls) control.IsEnabled = false;
         var lines = new List<string>();
         try
         {
             foreach (var c in selected)
             {
                 _dlssMessage = string.Join("\n", lines.Append($"{c.Game.Name}: updating DLSS…"));
-                Rebuild();
+                ShowProgress(_dlssStatus, _dlssMessage);
                 var result = await UpscalerUpdates.UpdateAsync(c.Game, UpscalerUpdates.DlssPaths(c.Game), new Progress<string>(s =>
                 {
                     _dlssMessage = string.Join("\n", lines.Append($"{c.Game.Name}: {s}"));
-                    Rebuild();
+                    ShowProgress(_dlssStatus, _dlssMessage);
                 }));
                 lines.Add($"{c.Game.Name}: {result.Message}");
             }
@@ -277,7 +354,9 @@ public sealed partial class UpdatesPage : Page
         {
             _updatingDlss = false;
             _dlssMessage = string.Join("\n", lines);
-            Rebuild();
+            BuildDlss();
+            RefreshStatusLine();
+            FlushPendingRebuild();
         }
     }
 
@@ -310,41 +389,28 @@ public sealed partial class UpdatesPage : Page
     {
         var state = StateFor(primary.Id);
         var status = AppServices.Updates.Status(primary.Id);
-        var (kind, target) = MainAction(primary, members);
-
-        var downloaded = AppServices.Components.Downloaded(primary);
-        var onPc = NewestOnPc(primary);
-        var onPcText = onPc is null ? "Not downloaded" : downloaded.Count > 1 ? $"{V(primary, onPc)} (+{downloaded.Count - 1} older)" : V(primary, onPc);
+        var target = AppServices.Updates.Target(primary);
         var beta = AppServices.Settings.Current.For(primary.Id).Channel == UpdateChannel.Beta;
 
-        var main = new Button
+        state.Main = new Button { MinWidth = 150, HorizontalAlignment = HorizontalAlignment.Right };
+        state.Main.Click += async (_, _) =>
         {
-            MinWidth = 150,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            IsEnabled = kind is ActionKind.Download or ActionKind.Update && !state.Busy,
-            Content = kind switch
-            {
-                ActionKind.Download => "Download",
-                ActionKind.Update => $"Update to {V(primary, target!.Tag)}",
-                ActionKind.UpToDate => "Up to date",
-                ActionKind.NoDownload => "No download",
-                _ => "Not checked yet"
-            }
+            if (MainAction(primary, members) is { Kind: ActionKind.Download or ActionKind.Update, Target: { } release })
+                await DownloadAsync(primary, members, release, state);
         };
-        if (kind == ActionKind.Update) main.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
-        if (kind == ActionKind.NoDownload)
-            ToolTipService.SetToolTip(main, $"{target!.Tag} has no file on GitHub that this app can download.");
-        main.Click += async (_, _) => await DownloadAsync(members, target!, state);
+        state.Ring = new ProgressRing { Width = 16, Height = 16 };
+        state.OnPc = Cell("");
+        state.Status = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true, Margin = new Thickness(0, 6, 0, 0) };
 
-        var header = RowGrid(
+        var grid = RowGrid(
             NameCell(members.Count > 1 ? $"{primary.Name} plus {string.Join(", ", members.Skip(1).Select(m => m.Kind))}" : primary.Name),
-            Cell($"On this PC: {onPcText}"),
+            state.OnPc,
             Cell($"Latest: {(target is null ? "not checked yet" : V(primary, target.Tag))}{(beta && target is not null ? " (Beta)" : "")}"),
-            state.Busy ? new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right, Children = { new ProgressRing { IsActive = true, Width = 16, Height = 16 }, main } } : main);
+            new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right, Children = { state.Ring, state.Main } });
 
         var expander = new Expander
         {
-            Header = header,
+            Header = new StackPanel { Children = { grid, state.Status } },
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
             IsExpanded = state.MoreOpen,
@@ -353,7 +419,89 @@ public sealed partial class UpdatesPage : Page
         AutomationName(expander, primary.Name);
         expander.Expanding += (_, _) => state.MoreOpen = true;
         expander.Collapsed += (_, _) => state.MoreOpen = false;
+        RefreshRowInPlace(primary, members, state);
         return expander;
+    }
+
+    /// <summary>
+    /// Sets the row's changing parts from the current state: "On this PC", the main button, which versions are on this
+    /// PC, Download and Remove, the progress line, and whether anything can be pressed (nothing while it's busy).
+    /// </summary>
+    private static void RefreshRowInPlace(CatalogComponent primary, List<CatalogComponent> members, RowState state)
+    {
+        var store = AppServices.Components;
+        var status = AppServices.Updates.Status(primary.Id);
+        var (kind, target) = MainAction(primary, members);
+        var downloaded = store.Downloaded(primary);
+        var onPc = NewestOnPc(primary);
+
+        if (state.OnPc is { } onPcCell)
+            onPcCell.Text = $"On this PC: {(onPc is null ? "Not downloaded" : downloaded.Count > 1 ? $"{V(primary, onPc)} (+{downloaded.Count - 1} older)" : V(primary, onPc))}";
+
+        if (state.Main is { } main)
+        {
+            main.Content = kind switch
+            {
+                ActionKind.Download => "Download",
+                ActionKind.Update => $"Update to {V(primary, target!.Tag)}",
+                ActionKind.UpToDate => "Up to date",
+                ActionKind.NoDownload => "No download",
+                _ => "Not checked yet"
+            };
+            if (kind == ActionKind.Update) main.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
+            else main.ClearValue(FrameworkElement.StyleProperty);
+            main.IsEnabled = kind is ActionKind.Download or ActionKind.Update && !state.Busy;
+            ToolTipService.SetToolTip(main, kind == ActionKind.NoDownload ? $"{target!.Tag} has no file on GitHub that this app can download." : null);
+        }
+
+        if (state.Versions is { } versions)
+        {
+            for (var i = 0; i < state.Releases.Count && i < versions.Items.Count; i++)
+                if (versions.Items[i] is ComboBoxItem item) item.Content = VersionItemText(primary, members, status, state.Releases[i]);
+            // The closed picker keeps showing the old text of its selected item; selecting it again redraws it.
+            if (versions.SelectedIndex >= 0 && !versions.IsDropDownOpen)
+            {
+                var index = versions.SelectedIndex;
+                state.Refreshing = true;
+                versions.SelectedIndex = -1;
+                versions.SelectedIndex = index;
+                state.Refreshing = false;
+            }
+            versions.IsEnabled = state.Releases.Count > 0 && !state.Busy;
+        }
+
+        var picked = state.PickedRelease;
+        if (state.Download is { } download)
+            download.IsEnabled = picked is not null && !state.Busy
+                && members.Any(m => ComponentStore.IsDownloadable(m, picked))
+                && !members.Where(m => ComponentStore.IsDownloadable(m, picked)).All(m => store.TryGetCached(m, picked.Tag) is not null);
+        if (state.Remove is { } remove)
+            remove.IsEnabled = picked is not null && !state.Busy && members.Any(m => store.TryGetCached(m, picked.Tag) is not null);
+        if (state.Channel is { } channel) channel.IsEnabled = !state.Busy;
+        if (state.Keep is { } keep) keep.IsEnabled = !state.Busy;
+
+        if (state.Ring is { } ring)
+        {
+            ring.IsActive = state.Busy;
+            ring.Visibility = state.Busy ? Visibility.Visible : Visibility.Collapsed;
+        }
+        if (state.Status is { } line)
+        {
+            line.Text = state.Message ?? "";
+            line.Visibility = state.Message is null ? Visibility.Collapsed : Visibility.Visible;
+        }
+    }
+
+    /// <summary>A release in the version picker: tag, Stable/pre-release, date, and whether it's downloadable or on this PC.</summary>
+    private static string VersionItemText(CatalogComponent primary, List<CatalogComponent> members, ComponentStatus status, ReleaseInfo r)
+    {
+        var notes = new List<string>();
+        if (r.Tag == status.Stable?.Tag) notes.Add("Stable");
+        if (r.Prerelease) notes.Add("pre-release");
+        if (r.Published is { } p) notes.Add(p.LocalDateTime.ToString("d MMM yyyy"));
+        if (!members.Any(m => ComponentStore.IsDownloadable(m, r))) notes.Add("no download");
+        if (members.Any(m => AppServices.Components.TryGetCached(m, r.Tag) is not null)) notes.Add("on this PC");
+        return $"{V(primary, r.Tag)} · {string.Join(", ", notes)}";
     }
 
     /// <summary>"More options": channel, Keep updated, the version picker with Download and Remove, and What's new.</summary>
@@ -368,6 +516,7 @@ public sealed partial class UpdatesPage : Page
             panel.Children.Add(Subtle($"GitHub checked {Checked(at.ToLocalTime().DateTime)}{(status.Status == FetchStatus.NotModified ? " (not modified)" : "")}."));
 
         var channel = new ComboBox { Header = "Channel", MinWidth = 260 };
+        state.Channel = channel;
         var stableKind = primary.PinnedVersion is null ? "newest full release" : "pinned";
         channel.Items.Add(new ComboBoxItem { Content = $"Stable ({stableKind}{(status.Stable is { } s ? ": " + V(primary, s.Tag) : "")})" });
         channel.Items.Add(new ComboBoxItem { Content = $"Beta (newest, including pre-releases{(status.Beta is { } b ? ": " + V(primary, b.Tag) : "")})" });
@@ -382,6 +531,7 @@ public sealed partial class UpdatesPage : Page
             if (settings.For(primary.Id).KeepUpdated) _ = DownloadKeptAsync();
         };
         var keep = new ToggleSwitch { Header = "Keep updated", IsOn = pref.KeepUpdated, OnContent = "Download new releases", OffContent = "Off" };
+        state.Keep = keep;
         keep.Toggled += (_, _) =>
         {
             var settings = AppServices.Settings.Current;
@@ -397,33 +547,25 @@ public sealed partial class UpdatesPage : Page
         var picked = releases.FirstOrDefault(r => r.Tag == state.Picked) ?? status.For(pref.Channel) ?? releases.FirstOrDefault();
         var versions = new ComboBox { Header = "Version", MinWidth = 260, IsEnabled = releases.Count > 0 };
         foreach (var r in releases)
-        {
-            var notes = new List<string>();
-            if (r.Tag == status.Stable?.Tag) notes.Add("Stable");
-            if (r.Prerelease) notes.Add("pre-release");
-            if (r.Published is { } p) notes.Add(p.LocalDateTime.ToString("d MMM yyyy"));
-            if (!members.Any(m => ComponentStore.IsDownloadable(m, r))) notes.Add("no download");
-            if (members.Any(m => store.TryGetCached(m, r.Tag) is not null)) notes.Add("on this PC");
-            versions.Items.Add(new ComboBoxItem { Content = $"{V(primary, r.Tag)} · {string.Join(", ", notes)}", Tag = r.Tag });
-        }
+            versions.Items.Add(new ComboBoxItem { Content = VersionItemText(primary, members, status, r), Tag = r.Tag });
+        state.Versions = versions;
+        state.Releases = releases;
+        state.PickedRelease = picked;
         if (picked is not null) versions.SelectedIndex = releases.IndexOf(picked);
         versions.SelectionChanged += (_, _) =>
         {
+            if (state.Refreshing) return;
             state.Picked = (versions.SelectedItem as ComboBoxItem)?.Tag as string;
             Rebuild();
         };
 
-        var downloadable = picked is not null && members.Any(m => ComponentStore.IsDownloadable(m, picked));
-        var allCached = picked is not null && members.Where(m => ComponentStore.IsDownloadable(m, picked)).All(m => store.TryGetCached(m, picked.Tag) is not null);
-        var anyCached = picked is not null && members.Any(m => store.TryGetCached(m, picked.Tag) is not null);
         var download = new Button
         {
             Content = picked is null ? "Download" : $"Download {V(primary, picked.Tag)}",
-            IsEnabled = downloadable && !allCached && !state.Busy,
             VerticalAlignment = VerticalAlignment.Bottom
         };
-        download.Click += async (_, _) => await DownloadAsync(members, picked!, state);
-        var remove = new Button { Content = "Remove downloaded copy", IsEnabled = anyCached && !state.Busy, VerticalAlignment = VerticalAlignment.Bottom };
+        download.Click += async (_, _) => await DownloadAsync(primary, members, picked!, state);
+        var remove = new Button { Content = "Remove downloaded copy", VerticalAlignment = VerticalAlignment.Bottom };
         remove.Click += (_, _) =>
         {
             state.Message = null;
@@ -433,11 +575,12 @@ public sealed partial class UpdatesPage : Page
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { state.Message = $"Couldn't remove it: {ex.Message}"; }
             }
             state.Message ??= $"Removed the downloaded copy of {picked!.Tag}. Games it's installed in are not affected.";
-            Rebuild();
+            RefreshRowInPlace(primary, members, state);
+            RefreshStatusLine();
         };
+        state.Download = download;
+        state.Remove = remove;
         panel.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Children = { versions, download, remove } });
-        if (state.Message is not null)
-            panel.Children.Add(new TextBlock { Text = state.Message, FontSize = 12, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true });
 
         // What's new in the picked version: plain-text notes and its GitHub page.
         if (picked is not null)
@@ -551,11 +694,16 @@ public sealed partial class UpdatesPage : Page
     private static void AutomationName(DependencyObject element, string name) =>
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(element, name);
 
-    private async Task DownloadAsync(List<CatalogComponent> members, ReleaseInfo release, RowState state)
+    /// <summary>
+    /// Downloads a release for the row. Progress goes into the row's status line and its buttons are off meanwhile;
+    /// the row itself (expanded section, dropdowns) is never rebuilt, only its texts and buttons are updated.
+    /// </summary>
+    private async Task DownloadAsync(CatalogComponent primary, List<CatalogComponent> members, ReleaseInfo release, RowState state)
     {
+        if (state.Busy) return;
         state.Busy = true;
-        state.Message = $"Downloading {release.Tag}…";
-        Rebuild();
+        state.Message = $"Downloading {V(primary, release.Tag)}…";
+        RefreshRowInPlace(primary, members, state);
         var done = new List<string>();
         try
         {
@@ -564,7 +712,7 @@ public sealed partial class UpdatesPage : Page
                 var cached = await AppServices.Components.EnsureAsync(member, release.Tag, new Progress<string>(s =>
                 {
                     state.Message = s;
-                    Rebuild();
+                    ShowProgress(state.Status, s);
                 }), CancellationToken.None);
                 done.Add($"{member.Name} {cached.Version} ({cached.AssetName})");
             }
@@ -581,14 +729,17 @@ public sealed partial class UpdatesPage : Page
         finally
         {
             state.Busy = false;
-            Rebuild();
+            RefreshRowInPlace(primary, members, state);
+            RefreshStatusLine();
+            FlushPendingRebuild();
         }
     }
 
     private async Task DownloadKeptAsync()
     {
         await Task.Run(() => AppServices.Updates.DownloadKeptUpdatedAsync(CancellationToken.None));
-        Rebuild();
+        if (AnythingRunning) _rebuildPending = true;
+        else Rebuild();
     }
 
     private async void CheckNow_Click(object sender, RoutedEventArgs e)
@@ -603,7 +754,8 @@ public sealed partial class UpdatesPage : Page
         finally
         {
             CheckNowButton.IsEnabled = true;
-            Rebuild();
+            if (AnythingRunning) _rebuildPending = true;
+            else Rebuild();
         }
     }
 

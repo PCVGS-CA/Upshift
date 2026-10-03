@@ -11,6 +11,9 @@ using Upshift.Core.Models;
 
 namespace Upshift.App.ViewModels;
 
+/// <summary>The Install dialog's choices about earlier settings.</summary>
+public sealed record InstallRestore(string SettingsFolder, bool RemoveLeftovers, string? RestoreFrom, bool RestoreFromLeftover, string? RestoreDefaultsFrom);
+
 public sealed partial class LibraryViewModel : ObservableObject
 {
     private readonly List<GameCardViewModel> _all = new();
@@ -121,11 +124,11 @@ public sealed partial class LibraryViewModel : ObservableObject
         AppServices.Updates.Changed += () => _dispatcher.TryEnqueue(() =>
         {
             foreach (var card in _all) card.RefreshUpdate();
-            if (FilterIndex == 5) ApplyFilter();
+            if (FilterIndex == 5) ReapplyFilterInPlace();
         });
         GameUpdates.BusyChanged += () => _dispatcher.TryEnqueue(() => OnPropertyChanged(nameof(CanPlaySelected)));
         // A game updated, undone or repaired from the Updates page.
-        GameUpdates.LibraryChanged += () => _dispatcher.TryEnqueue(() => SetGames(AppServices.Library.Current));
+        GameUpdates.LibraryChanged += gameId => _dispatcher.TryEnqueue(() => RefreshCard(gameId));
         AppServices.HiddenGamesChanged += () => _dispatcher.TryEnqueue(() =>
         {
             SetGames(AppServices.Library.Current);
@@ -158,7 +161,13 @@ public sealed partial class LibraryViewModel : ObservableObject
             return;
         }
         if (Selected == card) Selected = null;
-        SetGames(AppServices.Library.Current);
+        // Only this card goes; the rest of the list (and its scroll position) stays as it is.
+        _all.Remove(card);
+        Games.Remove(card);
+        GameCount = Games.Count;
+        SearchPlaceholder = _all.Count == 1 ? "Search 1 game" : $"Search {_all.Count} games";
+        RefreshDlssNotice();
+        RefreshUpscalerFilter();
         StatusText = $"{card.Name} is hidden. Settings > Hidden games brings it back.";
     }
 
@@ -250,6 +259,7 @@ public sealed partial class LibraryViewModel : ObservableObject
         {
             await StopBackgroundLookupsAsync();
             SetGames(await AppServices.Library.ScanAsync(includeDriveScan, progress, cts.Token));
+            ScrollToSelectedRequested?.Invoke();
             StatusText = string.Empty;
             StartBackgroundLookups();
         }
@@ -323,7 +333,7 @@ public sealed partial class LibraryViewModel : ObservableObject
         }
     }
 
-    public Task<InstallResult?> InstallOptiScalerAsync(GameCardViewModel card, CachedComponent component, string proxyName) =>
+    public Task<InstallResult?> InstallOptiScalerAsync(GameCardViewModel card, CachedComponent component, string proxyName, InstallRestore? restore = null) =>
         RunInstallAsync(card, new InstallPlan
         {
             Operation = InstallOperation.Install,
@@ -335,7 +345,12 @@ public sealed partial class LibraryViewModel : ObservableObject
             Version = component.Version,
             ProxyName = proxyName,
             // The upscaler dropdown starts on the suggestion, so the fresh OptiScaler.ini gets it too.
-            IniSettings = SuggestedUpscalerSettings(card)
+            IniSettings = SuggestedUpscalerSettings(card),
+            SettingsFolder = restore?.SettingsFolder ?? SavedSettings.FolderFor(AppServices.DataDir, card.Name),
+            RemoveLeftovers = restore?.RemoveLeftovers ?? false,
+            RestoreSettingsFrom = restore?.RestoreFrom,
+            RestoreFromLeftover = restore?.RestoreFromLeftover ?? false,
+            RestoreDefaultsFrom = restore?.RestoreDefaultsFrom
         }, "Installing OptiScaler…");
 
     private static List<IniSetting> SuggestedUpscalerSettings(GameCardViewModel card)
@@ -365,7 +380,7 @@ public sealed partial class LibraryViewModel : ObservableObject
     public void RefreshSuggestions(GameCardViewModel card)
     {
         card.RefreshSuggestions();
-        ApplyFilter();
+        ReapplyFilterInPlace();
     }
 
     public Task<InstallResult?> UpdateOptiScalerAsync(GameCardViewModel card, string version) =>
@@ -425,7 +440,7 @@ public sealed partial class LibraryViewModel : ObservableObject
         try
         {
             var result = await work(new Progress<string>(s => StatusText = s));
-            SetGames(AppServices.Library.Current);
+            RefreshCard(card.Info.Id);
             StatusText = result.Success ? result.Message : string.Empty;
             return result;
         }
@@ -442,7 +457,9 @@ public sealed partial class LibraryViewModel : ObservableObject
             Operation = InstallOperation.Uninstall,
             GameId = card.Info.Id,
             GameName = card.Name,
-            TargetDir = card.Info.TargetDir!
+            TargetDir = card.Info.TargetDir!,
+            // OptiScaler.ini is saved here before it's removed, for "Restore my previous OptiScaler settings".
+            SettingsFolder = SavedSettings.FolderFor(AppServices.DataDir, card.Name)
         }, "Removing OptiScaler…");
 
     private async Task<InstallResult?> RunInstallAsync(GameCardViewModel card, InstallPlan plan, string busyText)
@@ -456,7 +473,7 @@ public sealed partial class LibraryViewModel : ObservableObject
             var result = await InstallRunner.RunAsync(plan);
             // Badge, filter and details pick up the change straight away.
             await AppServices.Library.ReanalyzeAsync(card.Info.Id);
-            SetGames(AppServices.Library.Current);
+            RefreshCard(card.Info.Id);
             StatusText = result.Success ? result.Message : string.Empty;
             return result;
         }
@@ -491,7 +508,7 @@ public sealed partial class LibraryViewModel : ObservableObject
         {
             await StopBackgroundLookupsAsync();
             if (await AppServices.Library.SetExeOverrideAsync(card.Info.Id, exePath) is not null)
-                SetGames(AppServices.Library.Current); // keeps the same game selected
+                RefreshCard(card.Info.Id); // keeps the same game selected
             StatusText = string.Empty;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -546,7 +563,7 @@ public sealed partial class LibraryViewModel : ObservableObject
                 _dispatcher.TryEnqueue(() =>
                 {
                     foreach (var card in _all) card.RefreshSuggestions();
-                    if (FilterIndex == 4) ApplyFilter();
+                    if (FilterIndex == 4) ReapplyFilterInPlace();
                 });
             }
             catch (OperationCanceledException) { }
@@ -577,22 +594,77 @@ public sealed partial class LibraryViewModel : ObservableObject
 
     private void ApplyFilter()
     {
-        var query = SearchText.Trim();
-        var visible = _all.Where(g =>
-            (query.Length == 0 || g.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase))
-            && FilterIndex switch
-            {
-                1 => g.HasUpscalers,
-                2 => g.Info.HasOptiScaler,
-                3 => g.HasAntiCheat,
-                4 => g.HasWikiSuggestions,
-                5 => g.HasUpdate,
-                6 => g.HasUpscalerUpdate,
-                _ => true
-            });
-
+        var visible = _all.Where(Matches);
         Games.Clear();
         foreach (var g in visible) Games.Add(g);
         GameCount = Games.Count;
     }
+
+    /// <summary>
+    /// Brings the shown cards in line with the filter without clearing the list: cards that stopped matching leave,
+    /// cards that started matching come in at their place, and everything else (and the scroll position) stays.
+    /// </summary>
+    private void ReapplyFilterInPlace()
+    {
+        var wanted = _all.Where(Matches).ToList();
+        for (var i = Games.Count - 1; i >= 0; i--)
+            if (!wanted.Contains(Games[i])) Games.RemoveAt(i);
+        for (var i = 0; i < wanted.Count; i++)
+            if (!Games.Contains(wanted[i])) Games.Insert(Math.Min(i, Games.Count), wanted[i]);
+        GameCount = Games.Count;
+    }
+
+    /// <summary>True when the card passes the search box and the selected filter.</summary>
+    private bool Matches(GameCardViewModel g)
+    {
+        var query = SearchText.Trim();
+        return (query.Length == 0 || g.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase))
+               && FilterIndex switch
+               {
+                   1 => g.HasUpscalers,
+                   2 => g.Info.HasOptiScaler,
+                   3 => g.HasAntiCheat,
+                   4 => g.HasWikiSuggestions,
+                   5 => g.HasUpdate,
+                   6 => g.HasUpscalerUpdate,
+                   _ => true
+               };
+    }
+
+    /// <summary>
+    /// Rebuilds one game's card from the library after something changed that game (an install, uninstall, settings
+    /// change or update) and swaps it in at the same place. The rest of the list, its scroll position and the
+    /// selection stay as they are; the card only leaves the list if it no longer passes the filter.
+    /// </summary>
+    private void RefreshCard(string gameId)
+    {
+        var index = _all.FindIndex(c => c.Info.Id == gameId);
+        var info = AppServices.Library.Current.FirstOrDefault(g => g.Id == gameId);
+        if (index < 0 || info is null) return;
+
+        var wasSelected = Selected?.Info.Id == gameId;
+        var old = _all[index];
+        var card = new GameCardViewModel(info);
+        _all[index] = card;
+
+        var shown = Games.IndexOf(old);
+        if (shown >= 0)
+        {
+            if (Matches(card)) Games[shown] = card;
+            else Games.RemoveAt(shown);
+        }
+        else if (Matches(card))
+        {
+            // Back into the filtered list, in library order.
+            var position = _all.Take(index).Count(c => Games.Contains(c));
+            Games.Insert(position, card);
+        }
+        GameCount = Games.Count;
+        if (wasSelected) Selected = card;
+        RefreshDlssNotice();
+        RefreshUpscalerFilter();
+    }
+
+    /// <summary>Raised after a full rescan rebuilt the list, so the page can scroll back to the selected game.</summary>
+    public event Action? ScrollToSelectedRequested;
 }

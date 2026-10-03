@@ -34,6 +34,12 @@ public sealed class OptiScalerOptionsView : UserControl
     /// <summary>True while controls are being filled in, so setting their initial values doesn't write anything.</summary>
     private bool _building;
 
+    public OptiScalerOptionsView()
+    {
+        // The developer preview's pretend card changes which options are offered (FSR 4, DLSS models…).
+        AppServices.EffectiveGpuChanged += () => DispatcherQueue.TryEnqueue(Build);
+    }
+
     public void Build()
     {
         var card = Card;
@@ -50,9 +56,17 @@ public sealed class OptiScalerOptionsView : UserControl
 
         _building = true;
         var ini = IniFile.Load(iniPath);
-        var gpu = AppServices.Gpu;
+        // The pretend card from Settings > Developer options when one is set, so its options can be previewed.
+        var gpu = AppServices.EffectiveGpu;
         var catalog = AppServices.Catalog;
         var body = new StackPanel { Spacing = 14 };
+        if (AppServices.PretendGpu is { } pretend)
+            body.Children.Add(new InfoBar
+            {
+                IsOpen = true, IsClosable = false, Severity = InfoBarSeverity.Informational,
+                Title = $"Preview for {pretend.Name}",
+                Message = "These are the options that card would get. Nothing is changed while a pretend card is set (Settings > Developer options)."
+            });
 
         // ---- FSR 4 (INT8) state first: it decides whether FSR 4 is in the upscaler list ----
         var int8Shown = OptiScalerOptions.Int8OptionsShown(gpu, catalog.Fsr4);
@@ -93,7 +107,7 @@ public sealed class OptiScalerOptionsView : UserControl
 
         // ---- FSR 4 (INT8) ----
         if (int8Shown)
-            body.Children.Add(Int8Section(card, forceInt8, communityOn, communityName));
+            body.Children.Add(Fsr4Section(card, gpu!, forceInt8, communityOn, communityName));
 
         body.Children.Add(Subtle("Set the game's upscaler to DLSS or XeSS, load a save, then press Insert to check."));
         if (card.Suggestions is { FromWiki: true })
@@ -226,42 +240,72 @@ public sealed class OptiScalerOptionsView : UserControl
         return panel;
     }
 
-    private FrameworkElement Int8Section(GameCardViewModel card, bool forceInt8, bool communityOn, string communityName)
+    private enum Fsr4Source { BuiltIn, File }
+
+    /// <summary>
+    /// "Use FSR 4 on this card": one switch, with the source picked for the card. RX 6000 (RDNA 2) uses the user's
+    /// 4.0.2c file when it's added in Settings, otherwise OptiScaler's built-in FSR 4 (with a note about the file);
+    /// other cards use the built-in one. A small "Using:" choice appears only when both are possible. Games set up
+    /// with either of the two earlier switches show as on, with the source they already use.
+    /// </summary>
+    private FrameworkElement Fsr4Section(GameCardViewModel card, GpuInfo gpu, bool forceInt8, bool communityOn, string communityName)
     {
-        var builtIn = new ToggleSwitch
-        {
-            Header = "FSR 4 on this card (uses OptiScaler's built-in FSR 4)",
-            IsOn = forceInt8
-        };
-        builtIn.Toggled += async (_, _) =>
-        {
-            if (_building) return;
-            await Save(card, OptiScalerOptions.ForceInt8Settings(builtIn.IsOn));
-        };
-
         var userFile = AppServices.UserFiles.Get(UserFileKind.Fsr4Int8);
-        var community = new ToggleSwitch
+        var rdna2 = gpu.Vendor == GpuVendor.Amd && gpu.Generation.StartsWith("RDNA 2", StringComparison.OrdinalIgnoreCase);
+        // The 4.0.2c file is AMD's runtime; it's an option on AMD cards once the user has added it (or it's already in use).
+        var fileAvailable = gpu.Vendor == GpuVendor.Amd && (userFile is not null || communityOn);
+        var preferred = rdna2 && userFile is not null ? Fsr4Source.File : Fsr4Source.BuiltIn;
+        var current = communityOn ? Fsr4Source.File : forceInt8 ? Fsr4Source.BuiltIn : preferred;
+
+        var toggle = new ToggleSwitch { Header = "Use FSR 4 on this card", IsOn = forceInt8 || communityOn };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(toggle, "Use FSR 4 on this card");
+
+        var source = new ComboBox
         {
-            Header = "FSR 4 with your own 4.0.2c file (recommended for AMD RX 6000)",
-            IsOn = communityOn,
-            IsEnabled = userFile is not null || communityOn
+            Header = "Using:", MinWidth = 260, HorizontalAlignment = HorizontalAlignment.Left,
+            Visibility = fileAvailable ? Visibility.Visible : Visibility.Collapsed
         };
-        community.Toggled += async (_, _) =>
+        source.Items.Add(new ComboBoxItem { Content = $"Your 4.0.2c file ({communityName})", Tag = Fsr4Source.File, IsEnabled = userFile is not null || communityOn });
+        source.Items.Add(new ComboBoxItem { Content = "OptiScaler's built-in FSR 4", Tag = Fsr4Source.BuiltIn });
+        source.SelectedIndex = current == Fsr4Source.File ? 0 : 1;
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(source, "Using");
+
+        Fsr4Source Chosen() => fileAvailable && source.SelectedItem is ComboBoxItem { Tag: Fsr4Source s } ? s : Fsr4Source.BuiltIn;
+
+        // Turns FSR 4 on with one source and makes sure the other is off; or turns both off.
+        async Task Apply(bool on, Fsr4Source with)
+        {
+            if (!on)
+                await Save(card, OptiScalerOptions.ForceInt8Settings(false), removeFile: communityOn ? communityName : null);
+            else if (with == Fsr4Source.File && userFile is not null)
+                await Save(card, OptiScalerOptions.ForceInt8Settings(false), addFileFrom: communityOn ? null : userFile.Path, addFileAs: communityOn ? null : communityName);
+            else
+                await Save(card, OptiScalerOptions.ForceInt8Settings(true), removeFile: communityOn ? communityName : null);
+        }
+
+        toggle.Toggled += async (_, _) =>
         {
             if (_building) return;
-            if (community.IsOn && userFile is not null)
-                await Save(card, Array.Empty<IniSetting>(), addFileFrom: userFile.Path, addFileAs: communityName);
-            else if (!community.IsOn)
-                await Save(card, Array.Empty<IniSetting>(), removeFile: communityName);
+            await Apply(toggle.IsOn, Chosen());
+        };
+        source.SelectionChanged += async (_, _) =>
+        {
+            if (_building || !toggle.IsOn) return;
+            await Apply(true, Chosen());
         };
 
-        return Group(builtIn,
-            Subtle("Sets Fsr4ForceEnableInt8. No extra file needed. Cards without INT8 support still won't run it."),
-            community,
-            Subtle(userFile is null && !communityOn
-                ? "Add the file in Settings first."
-                : $"Copies your file in as {communityName} (the game's own copy, if any, is backed up)."),
-            Subtle("With either one on, pick FSR 4 as the upscaler above. OptiScaler's watermark (Fsr4EnableWatermark) shows whether FSR 4 or FSR 3 is really running."));
+        string Explain() => Chosen() == Fsr4Source.File
+            ? $"Copies your file in as {communityName} (the game's own copy, if any, is backed up)."
+            : "Uses OptiScaler's built-in FSR 4 (Fsr4ForceEnableInt8). No extra file needed; cards without INT8 support still won't run it.";
+
+        return Group(
+            toggle,
+            source,
+            Subtle(Explain()),
+            rdna2 && userFile is null && !communityOn
+                ? Subtle("RX 6000 cards run FSR 4 best with the 4.0.2c file - add it in Settings.")
+                : null,
+            Subtle("With it on, pick FSR 4 as the upscaler above. OptiScaler's watermark (Fsr4EnableWatermark) shows whether FSR 4 or FSR 3 is really running."));
     }
 
     /// <summary>The upscaler choice whose settings match what the ini has now.</summary>
@@ -274,6 +318,20 @@ public sealed class OptiScalerOptionsView : UserControl
         string? addFileFrom = null, string? addFileAs = null, string? removeFile = null)
     {
         if (Library is null) return;
+        if (AppServices.PretendGpu is not null)
+        {
+            // A preview of another card's options: never written to a real game.
+            if (ShowDialog is not null)
+                await ShowDialog(new ContentDialog
+                {
+                    Title = "Nothing was changed",
+                    Content = new TextBlock { Text = "A pretend graphics card is set in Settings > Developer options, so OptiScaler settings aren't changed. Turn it off to change them.", TextWrapping = TextWrapping.Wrap },
+                    CloseButtonText = "OK",
+                    XamlRoot = XamlRoot
+                });
+            Build();
+            return;
+        }
         var result = await Library.ConfigureOptiScalerAsync(card, settings, addFileFrom, addFileAs, removeFile);
         if (result is { Success: false } && ShowDialog is not null)
         {

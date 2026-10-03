@@ -145,6 +145,17 @@ public static class InstallRunner
     private static string? Validate(InstallPlan plan, string dataDir)
     {
         if (!Directory.Exists(plan.TargetDir)) return "The game folder in the plan doesn't exist.";
+
+        // Saved OptiScaler settings are only written to, and read from, the app's own saved-settings folder; the old
+        // version's defaults only come from its download folder.
+        var saved = Path.GetFullPath(Path.Combine(dataDir, SavedSettings.FolderName)) + Path.DirectorySeparatorChar;
+        foreach (var path in new[] { plan.SettingsFolder, plan.RestoreSettingsFrom }.Where(p => p is not null))
+            if (!(Path.GetFullPath(path!) + Path.DirectorySeparatorChar).StartsWith(saved, StringComparison.OrdinalIgnoreCase))
+                return "The plan points at a settings file outside the app's saved-settings folder, so nothing was done.";
+        if (plan.RestoreDefaultsFrom is not null
+            && !Path.GetFullPath(plan.RestoreDefaultsFrom).StartsWith(Path.GetFullPath(Path.Combine(dataDir, "components")) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            return "The plan points at files outside the app's download folder, so nothing was done.";
+
         if (plan.Operation is InstallOperation.Uninstall or InstallOperation.UndoUpdate or InstallOperation.RestoreUpscalerFiles
             or InstallOperation.SwitchBack) return null;
         if (plan.Operation == InstallOperation.SwitchBuild)

@@ -17,7 +17,8 @@ public static class GameUpdates
     private static readonly SemaphoreSlim Gate = new(1, 1);
 
     /// <summary>Raised on the calling thread after a game folder changed, so pages can rebuild their cards.</summary>
-    public static event Action? LibraryChanged;
+    /// <remarks>The argument is the game's id: only that game's card needs rebuilding.</remarks>
+    public static event Action<string>? LibraryChanged;
 
     public static bool IsBusy => Gate.CurrentCount == 0;
 
@@ -236,7 +237,7 @@ public static class GameUpdates
                 result = Fail(ex.Message);
             }
             await AppServices.Library.ReanalyzeAsync(game.Id);
-            LibraryChanged?.Invoke();
+            LibraryChanged?.Invoke(game.Id);
             return result;
         }
         finally

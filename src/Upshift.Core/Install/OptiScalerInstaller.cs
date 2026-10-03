@@ -34,6 +34,24 @@ public sealed class InstallPlan
     /// <summary>OptiScaler.ini values to write (install: after copying; configure: on the installed copy).</summary>
     public List<IniSetting> IniSettings { get; set; } = new();
 
+    /// <summary>
+    /// The game's folder in %LocalAppData%\Upshift\saved-settings. Uninstall saves OptiScaler.ini there before removing
+    /// it; Install backs up a leftover OptiScaler.ini there before removing it.
+    /// </summary>
+    public string? SettingsFolder { get; set; }
+
+    /// <summary>Install only: remove a leftover OptiScaler.ini from an earlier install (after backing it up) instead of stopping.</summary>
+    public bool RemoveLeftovers { get; set; }
+
+    /// <summary>Install only: a saved OptiScaler.ini whose values go into the fresh one ("Restore my previous OptiScaler settings").</summary>
+    public string? RestoreSettingsFrom { get; set; }
+
+    /// <summary>Install only: restore from the leftover OptiScaler.ini this install removes (it's newer than any saved copy).</summary>
+    public bool RestoreFromLeftover { get; set; }
+
+    /// <summary>Install only: the OptiScaler.ini of the version the saved settings came from, so its plain defaults aren't carried over.</summary>
+    public string? RestoreDefaultsFrom { get; set; }
+
     /// <summary>Configure only: a user-supplied file to copy next to the game exe (from the app's user-files folder).</summary>
     public string? AddFileFrom { get; set; }
     /// <summary>Configure only: the name AddFileFrom is copied in as, e.g. amdxcffx64.dll.</summary>
@@ -80,6 +98,12 @@ public sealed class InstallPreview
     public List<string> WillAdd { get; set; } = new();
     /// <summary>Reasons the install can't go ahead (e.g. another OptiScaler already there). Empty when it can.</summary>
     public List<string> Blockers { get; set; } = new();
+
+    /// <summary>
+    /// Files an earlier OptiScaler left behind (OptiScaler.ini) that don't have to stop the install: with "Remove it and
+    /// continue" they're backed up to the saved settings and removed first.
+    /// </summary>
+    public List<string> Leftovers { get; set; } = new();
 }
 
 public sealed class ManifestFile
@@ -211,10 +235,21 @@ public static partial class OptiScalerInstaller
 
     /// <summary>Leftovers of an OptiScaler not installed by us; the official setup warns about the same files.</summary>
     private static readonly string[] ForeignOptiScalerFiles =
-        { "nvapi64.dll", "nvngx.dll", "OptiScaler.asi", "Remove OptiScaler.bat", "Remove_OptiScaler.bat", "OptiScaler.ini" };
+        { "nvapi64.dll", "nvngx.dll", "OptiScaler.asi", "Remove OptiScaler.bat", "Remove_OptiScaler.bat" };
 
-    /// <summary>Files OptiScaler and its bundled tools write while the game runs.</summary>
+    /// <summary>A leftover settings file from an earlier OptiScaler: backed up and removed on request, never a blocker.</summary>
+    private const string LeftoverIni = "OptiScaler.ini";
+
+    /// <summary>Files OptiScaler and its bundled tools write next to the game while it runs; Uninstall removes them.</summary>
     private static readonly string[] RuntimeFiles = { "OptiScaler.log", "fakenvapi.log", "dlssg_to_fsr3.log" };
+
+    /// <summary>Folders OptiScaler's releases bring; Uninstall removes them when nothing else is left in them.</summary>
+    private static readonly string[] OptiScalerFolders = { "D3D12_Optiscaler", "Licenses", "OptiScaler" };
+
+    /// <summary>True for logs OptiScaler and its tools write while running (OptiScaler.log, fakenvapi.log, OptiScaler.log.1…).</summary>
+    private static bool IsRuntimeFile(string name) =>
+        RuntimeFiles.Contains(name, StringComparer.OrdinalIgnoreCase)
+        || (name.StartsWith("OptiScaler", StringComparison.OrdinalIgnoreCase) && name.Contains(".log", StringComparison.OrdinalIgnoreCase));
 
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -261,6 +296,9 @@ public static partial class OptiScalerInstaller
 
         foreach (var name in ForeignOptiScalerFiles.Where(n => File.Exists(Path.Combine(targetDir, n))))
             preview.Blockers.Add($"{name} is left over from another OptiScaler install. Remove it first.");
+        // A settings file from an earlier install (ours or another) doesn't stop anything: it can be backed up and removed.
+        if (ReadManifest(targetDir) is not { Removed: false } && File.Exists(Path.Combine(targetDir, LeftoverIni)))
+            preview.Leftovers.Add(LeftoverIni);
         foreach (var name in ProxyNames.Where(n => IsOptiScalerDll(Path.Combine(targetDir, n))))
             preview.Blockers.Add($"{name} is an OptiScaler copy that this app didn't install. Remove it first.");
 
@@ -299,6 +337,25 @@ public static partial class OptiScalerInstaller
         {
             log.Write("  refused: " + string.Join(" / ", preview.Blockers));
             return new InstallResult { Message = string.Join(" ", preview.Blockers) };
+        }
+        if (preview.Leftovers.Count > 0 && (!plan.RemoveLeftovers || plan.SettingsFolder is null))
+            return Refuse(log, "OptiScaler.ini from an earlier OptiScaler install is still in the game folder. Choose \"Remove it and continue\" to back it up and remove it.");
+
+        // A leftover OptiScaler.ini is backed up to the saved settings first, then removed, so the fresh one goes in.
+        string? leftoverCopy = null;
+        foreach (var leftover in preview.Leftovers)
+        {
+            var path = Path.Combine(target, leftover);
+            try
+            {
+                leftoverCopy = SavedSettings.Save(plan.SettingsFolder!, path, plan.GameName, null, null, wasLeftover: true);
+                File.Delete(path);
+                log.Write($"  leftover {leftover} backed up to {leftoverCopy} and removed");
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return Refuse(log, $"The leftover {leftover} couldn't be backed up, so nothing was changed: {ex.Message}");
+            }
         }
 
         var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
@@ -357,8 +414,17 @@ public static partial class OptiScalerInstaller
                 log.Write($"  {(replaced is null ? "added" : "replaced")} {relative} ({hash[..12]})");
             }
 
-            // 3. Settings chosen before installing (e.g. the suggested upscaler) go into the fresh OptiScaler.ini.
+            // 3. Settings chosen before installing (e.g. the suggested upscaler) go into the fresh OptiScaler.ini, then
+            //    the user's previous settings when they asked for them back (those win).
             if (plan.IniSettings.Count > 0) ApplyIni(target, manifest, plan.IniSettings, log, fileWasOurs: true);
+            var restoreFrom = plan.RestoreFromLeftover ? leftoverCopy ?? plan.RestoreSettingsFrom : plan.RestoreSettingsFrom;
+            var iniPath = Path.Combine(target, LeftoverIni);
+            if (restoreFrom is not null && File.Exists(restoreFrom) && File.Exists(iniPath))
+            {
+                var restore = SavedSettings.ValuesToRestore(restoreFrom, iniPath, plan.RestoreFromLeftover ? null : plan.RestoreDefaultsFrom);
+                log.Write($"  restoring {restore.Count} previous setting(s) from {restoreFrom}");
+                if (restore.Count > 0) ApplyIni(target, manifest, restore, log, fileWasOurs: true);
+            }
 
             // 4. The manifest goes last: without it, the install didn't happen.
             Directory.CreateDirectory(stateDir);
@@ -372,12 +438,20 @@ public static partial class OptiScalerInstaller
                 Success = true,
                 Manifest = manifest,
                 Message = $"OptiScaler {plan.Version} installed as {manifest.ProxyName}."
+                          + (restoreFrom is not null ? " Your previous OptiScaler settings were restored." : "")
+                          + (leftoverCopy is not null ? " The leftover OptiScaler.ini was backed up to Upshift's saved settings." : "")
             };
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             log.Write($"  FAILED: {ex.Message} - rolling back");
             var rollbackProblems = Rollback(target, manifest, stateDirExisted, log);
+            // The leftover OptiScaler.ini removed before copying goes back too.
+            if (leftoverCopy is not null && !File.Exists(Path.Combine(target, LeftoverIni)))
+            {
+                try { File.Copy(leftoverCopy, Path.Combine(target, LeftoverIni)); log.Write("  rollback: put the leftover OptiScaler.ini back"); }
+                catch (Exception copyEx) when (copyEx is IOException or UnauthorizedAccessException) { rollbackProblems.Add(LeftoverIni); }
+            }
             return new InstallResult
             {
                 Message = rollbackProblems.Count == 0
@@ -406,12 +480,41 @@ public static partial class OptiScalerInstaller
 
         var result = new InstallResult { Manifest = manifest };
         var keepBackups = false;
+
+        // The user's OptiScaler.ini (whatever the in-game menu changed) is saved before anything is removed, so a later
+        // install can restore it. If it can't be saved, nothing is removed.
+        var iniPath = Path.Combine(target, LeftoverIni);
+        if (plan.SettingsFolder is not null && File.Exists(iniPath))
+        {
+            try
+            {
+                var copy = SavedSettings.Save(plan.SettingsFolder, iniPath, plan.GameName, manifest.ComponentId, manifest.Version, wasLeftover: false);
+                log.Write($"  saved OptiScaler.ini to {copy}");
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return Refuse(log, $"Your OptiScaler settings couldn't be saved, so nothing was removed: {ex.Message}");
+            }
+        }
+
+        // Folders the install created, including the ones from before a switch to a DLSS 5 build.
+        var createdFolders = manifest.CreatedFolders.ToList();
+        if (manifest.Switch is { } sw && ReadSwitchOriginal(target, sw) is { } original)
+            createdFolders.AddRange(original.CreatedFolders.Where(f => !createdFolders.Contains(f, StringComparer.OrdinalIgnoreCase)));
+
         try
         {
             foreach (var file in manifest.Added)
             {
                 var path = Path.Combine(target, file.Path);
                 if (!File.Exists(path)) { log.Write($"  already gone: {file.Path}"); continue; }
+                // OptiScaler.ini goes even when the in-game menu changed it: it was saved above.
+                if (IsIni(file.Path) && (plan.SettingsFolder is not null || Sha256(path) == file.Sha256))
+                {
+                    File.Delete(path);
+                    log.Write($"  removed {file.Path}");
+                    continue;
+                }
                 if (Sha256(path) != file.Sha256)
                 {
                     result.KeptChanged.Add(file.Path);
@@ -440,14 +543,30 @@ public static partial class OptiScalerInstaller
                 log.Write($"  restored {file.Path}");
             }
 
-            foreach (var name in RuntimeFiles.Where(n => File.Exists(Path.Combine(target, n))))
+            // Logs OptiScaler and its tools wrote next to the game while it ran.
+            foreach (var file in Directory.EnumerateFiles(target).Where(f => IsRuntimeFile(Path.GetFileName(f))).ToList())
             {
-                result.LeftBehind.Add(name);
-                log.Write($"  left in place (written by OptiScaler while running): {name}");
+                try { File.Delete(file); log.Write($"  removed {Path.GetFileName(file)} (written by OptiScaler while running)"); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { result.LeftBehind.Add(Path.GetFileName(file)); }
             }
 
-            foreach (var folder in manifest.CreatedFolders.AsEnumerable().Reverse())
-                TryRemoveEmptyFolder(Path.Combine(target, folder));
+            // Folders the install made: whatever OptiScaler wrote into them while running goes too (files that changed
+            // since the install, and so are kept, stay with their folder).
+            foreach (var folder in createdFolders.Distinct(StringComparer.OrdinalIgnoreCase).OrderByDescending(f => f.Length))
+            {
+                var dir = Path.Combine(target, folder);
+                if (!Directory.Exists(dir)) continue;
+                foreach (var file in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories).ToList())
+                {
+                    var relative = Path.GetRelativePath(target, file);
+                    if (result.KeptChanged.Contains(relative, StringComparer.OrdinalIgnoreCase)) continue;
+                    try { File.Delete(file); log.Write($"  removed {relative} (written by OptiScaler while running)"); }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { result.LeftBehind.Add(relative); }
+                }
+                RemoveEmptyFolders(dir);
+            }
+            // OptiScaler's own folder names, when an earlier record didn't list them but they're empty now.
+            foreach (var folder in OptiScalerFolders) RemoveEmptyFolders(Path.Combine(target, folder));
 
             var stateDir = Path.Combine(target, StateFolder);
             if (!keepBackups && result.KeptChanged.Count == 0)
@@ -478,9 +597,10 @@ public static partial class OptiScalerInstaller
             }
 
             result.Success = true;
-            result.Message = result.KeptChanged.Count == 0
+            result.Message = (result.KeptChanged.Count == 0
                 ? "OptiScaler was removed and the game's own files were put back."
-                : $"OptiScaler was removed, but {result.KeptChanged.Count} file(s) changed after install and were left in place: {string.Join(", ", result.KeptChanged)}.";
+                : $"OptiScaler was removed, but {result.KeptChanged.Count} file(s) changed after install and were left in place: {string.Join(", ", result.KeptChanged)}.")
+                + (plan.SettingsFolder is not null ? " Your OptiScaler settings were saved, so a reinstall can restore them." : "");
             log.Write("  done: " + result.Message);
             return result;
         }
@@ -770,6 +890,26 @@ public static partial class OptiScalerInstaller
         }
         log.Write(problems.Count == 0 ? "  rollback complete" : "  rollback incomplete: " + string.Join(", ", problems));
         return problems;
+    }
+
+    /// <summary>Removes the folder and any empty folders inside it, keeping every folder that still holds a file.</summary>
+    private static void RemoveEmptyFolders(string folder)
+    {
+        if (!Directory.Exists(folder)) return;
+        try
+        {
+            foreach (var sub in Directory.EnumerateDirectories(folder).ToList()) RemoveEmptyFolders(sub);
+            TryRemoveEmptyFolder(folder);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+    }
+
+    /// <summary>The manifest from before a switch to a DLSS 5 build (kept in its return folder), or null.</summary>
+    private static InstallManifest? ReadSwitchOriginal(string target, SwitchRecord sw)
+    {
+        var path = Path.Combine(target, sw.ReturnFolder, "manifest.original.json");
+        try { return File.Exists(path) ? JsonSerializer.Deserialize<InstallManifest>(File.ReadAllText(path), Json) : null; }
+        catch (Exception ex) when (ex is IOException or JsonException) { return null; }
     }
 
     private static void TryRemoveEmptyFolder(string folder)
