@@ -47,7 +47,7 @@
             <TextBlock Text="Used now" FontWeight="SemiBold" Margin="0,8,0,0" />
             <StackPanel x:Name="UsedNowPanel" Spacing="6" />
 
-            <Expander x:Name="LaterExpander" Header="Used in a later version" IsExpanded="False" Margin="0,8,0,0"
+            <Expander x:Name="LaterExpander" Header="Upscaler files for games (DLSS, FSR, XeSS)" IsExpanded="False" Margin="0,8,0,0"
                       HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                 <StackPanel x:Name="LaterPanel" Spacing="6" />
             </Expander>

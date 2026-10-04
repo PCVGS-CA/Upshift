@@ -90,6 +90,8 @@ public sealed partial class GameCardViewModel : ObservableObject
         OptiScalerFilesNote = optiCopies.Count == 0 ? ""
             : $"OptiScaler uses its own {(optiCopies.Count == 1 ? "copy" : "copies")} of {string.Join(", ", optiCopies)}, so Upshift leaves {(optiCopies.Count == 1 ? "it" : "them")} to OptiScaler's updates.";
         CanUpdateAnyFile = !info.HasAntiCheat && _fileItems.Any(i => i.CanUpdate);
+        // EasyAntiCheat, BattlEye…: say why nothing is offered, once, above the files.
+        AntiCheatFilesWarning = info.HasAntiCheat && _fileItems.Count > 0 ? Core.Install.UpscalerFiles.AntiCheatNote(info) : "";
         UpdatableFileCount = _fileItems.Count(i => i.CanUpdate);
         CanRestoreFiles = Core.Install.UpscalerFiles.ReadRecord(info.InstallDir) is { Files.Count: > 0 };
         if (Services.UpscalerUpdates.DlssUpdate(info) is { } dlss && dlss.CurrentVersion is { } dlssNow)
@@ -184,7 +186,15 @@ public sealed partial class GameCardViewModel : ObservableObject
 
     public List<UpscalerFileRowViewModel> UpscalerFiles { get; }
     public bool HasUpscalerFileRows => UpscalerFiles.Count > 0;
-    public bool HasUpscalerFiles => UpscalerFiles.Count > 0 || OptiScalerFilesNote.Length > 0;
+    public bool HasUpscalerFiles => UpscalerFiles.Count > 0 || OptiScalerFilesNote.Length > 0 || HasBuiltInFsrNote;
+
+    public string AntiCheatFilesWarning { get; } = "";
+    public bool HasAntiCheatFilesWarning => AntiCheatFilesWarning.Length > 0;
+
+    /// <summary>"FSR is built into this game…" when PCGamingWiki lists FSR but the game has no FSR file to swap.</summary>
+    public string BuiltInFsrNote => Core.Install.UpscalerFiles.BuiltInFsrNote(Info, _wiki, _fileItems) ?? "";
+    public bool HasBuiltInFsrNote => BuiltInFsrNote.Length > 0;
+    private Core.Wiki.WikiEntry? _wiki;
 
     /// <summary>"OptiScaler uses its own copies of libxess.dll, …, so Upshift leaves them to OptiScaler's updates."</summary>
     public string OptiScalerFilesNote { get; } = "";
@@ -342,6 +352,10 @@ public sealed partial class GameCardViewModel : ObservableObject
     public void ApplyWiki(Core.Wiki.WikiEntry? entry, bool checking = false)
     {
         Upscalers = new UpscalerSectionViewModel(Info, entry, checking, _fileItems);
+        _wiki = entry;
+        OnPropertyChanged(nameof(BuiltInFsrNote));
+        OnPropertyChanged(nameof(HasBuiltInFsrNote));
+        OnPropertyChanged(nameof(HasUpscalerFiles));
         Tags = Upscalers.Chips;
         RefreshSuggestions();
     }

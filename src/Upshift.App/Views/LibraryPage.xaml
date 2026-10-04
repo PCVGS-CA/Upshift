@@ -140,8 +140,12 @@
                     <TextBlock Text="{x:Bind Status}" FontSize="12" TextWrapping="Wrap"
                                Foreground="{StaticResource SubtleTextBrush}" Visibility="{x:Bind HasStatus}" />
                 </StackPanel>
-                <Button Grid.Column="2" Content="{x:Bind UpdateLabel}" Tag="{x:Bind}" Click="UpdateFile_Click" VerticalAlignment="Center"
-                        Visibility="{x:Bind CanUpdate}" AutomationProperties.Name="{x:Bind UpdateName}" />
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Button Content="{x:Bind UpdateLabel}" Tag="{x:Bind}" Click="UpdateFile_Click"
+                            Visibility="{x:Bind CanUpdate}" AutomationProperties.Name="{x:Bind UpdateName}" />
+                    <Button Content="Restore original" Tag="{x:Bind}" Click="RestoreFile_Click"
+                            Visibility="{x:Bind CanRestore}" AutomationProperties.Name="{x:Bind RestoreName}" />
+                </StackPanel>
             </Grid>
         </DataTemplate>
     </Page.Resources>
@@ -429,6 +433,9 @@
                                 </StackPanel>
                             </Expander.Header>
                         <StackPanel Spacing="8">
+                            <InfoBar IsOpen="{x:Bind ViewModel.Selected.HasAntiCheatFilesWarning, Mode=OneWay}" IsClosable="False" Severity="Warning"
+                                     Title="Anti-cheat in this game" Message="{x:Bind ViewModel.Selected.AntiCheatFilesWarning, Mode=OneWay}"
+                                     Visibility="{x:Bind ViewModel.Selected.HasAntiCheatFilesWarning, Mode=OneWay}" />
                             <InfoBar IsOpen="{x:Bind ViewModel.Selected.HasRestoredByGame, Mode=OneWay}" IsClosable="False" Severity="Warning"
                                      Title="{x:Bind ViewModel.Selected.RestoredTitle, Mode=OneWay}"
                                      Message="{x:Bind ViewModel.Selected.RestoredText, Mode=OneWay}"
@@ -451,6 +458,8 @@
                             </StackPanel>
                             <TextBlock Text="{x:Bind ViewModel.Selected.OptiScalerFilesNote, Mode=OneWay}" FontSize="12" TextWrapping="Wrap"
                                        Visibility="{x:Bind ViewModel.Selected.HasOptiScalerFilesNote, Mode=OneWay}" />
+                            <TextBlock Text="{x:Bind ViewModel.Selected.BuiltInFsrNote, Mode=OneWay}" FontSize="12" TextWrapping="Wrap"
+                                       Visibility="{x:Bind ViewModel.Selected.HasBuiltInFsrNote, Mode=OneWay}" />
                             <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
                                        Visibility="{x:Bind ViewModel.Selected.HasDlssFrameGenFile, Mode=OneWay}"
                                        Text="nvngx_dlssg.dll (DLSS Frame Generation) isn't updated: it's paired with the game's own Streamline version." />

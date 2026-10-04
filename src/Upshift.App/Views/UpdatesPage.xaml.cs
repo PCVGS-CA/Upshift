@@ -14,7 +14,7 @@ namespace Upshift.App.Views;
 
 /// <summary>
 /// Games that can be updated, then one compact row per component: "Used now" (OptiScaler and what ships inside it)
-/// and, collapsed, "Used in a later version". Each row has its versions and one main button; channel, "Keep updated",
+/// and, collapsed, "Upscaler files for games": the NVIDIA, AMD and Intel DLLs that replace the ones games ship. Each row has its versions and one main button; channel, "Keep updated",
 /// the version picker, "Remove downloaded copy" and "What's new" sit in the row's "More options". Built in code.
 /// </summary>
 public sealed partial class UpdatesPage : Page
@@ -45,6 +45,9 @@ public sealed partial class UpdatesPage : Page
 
         /// <summary>True while the picker's own items are being refreshed, so that isn't taken as the user picking.</summary>
         public bool Refreshing { get; set; }
+
+        /// <summary>For the upscaler file rows: updates "On this PC" and the button in place.</summary>
+        public Action? Refresh { get; set; }
     }
 
     /// <summary>A refresh asked for while something ran; it happens once everything has finished.</summary>
@@ -118,8 +121,15 @@ public sealed partial class UpdatesPage : Page
         // ---- Used now: what the app installs today, each followed by what ships inside it ----
         UsedNowPanel.Children.Clear();
         LaterPanel.Children.Clear();
+        var sourceIds = AppServices.Catalog.UpscalerFiles.Sources.Select(s => s.ComponentId).ToHashSet();
         foreach (var (primary, members) in rows)
         {
+            // NVIDIA DLSS, AMD FidelityFX and Intel XeSS: their single DLLs are what games use, not the whole release.
+            if (!primary.Installable && sourceIds.Contains(primary.Id))
+            {
+                LaterPanel.Children.Add(BuildUpscalerSourceRow(primary));
+                continue;
+            }
             var panel = primary.Installable ? UsedNowPanel : LaterPanel;
             panel.Children.Add(BuildRow(primary, members));
             foreach (var bundled in all.Where(c => c.BundledIn == primary.Id))
@@ -656,6 +666,123 @@ public sealed partial class UpdatesPage : Page
         foreach (var v in versions)
             if (newest is null || AppServices.Updates.IsNewer(host, v, newest)) newest = v;
         return newest;
+    }
+
+    /// <summary>
+    /// One row for NVIDIA DLSS, AMD FidelityFX or Intel XeSS: the DLLs from it that can replace the ones games ship
+    /// (from the catalog), which of them are on this PC, how many games could use them, and "Download files". Each game's
+    /// "Upscaler files (advanced)" section (and "Update DLSS in all games" above) does the replacing; a file that isn't
+    /// on this PC yet is also downloaded there when Update is pressed.
+    /// </summary>
+    private FrameworkElement BuildUpscalerSourceRow(CatalogComponent primary)
+    {
+        var state = StateFor(primary.Id);
+        var sources = AppServices.Catalog.UpscalerFiles.Sources.Where(s => s.ComponentId == primary.Id).ToList();
+        var games = AppServices.Library.Current.Where(g => !g.HasAntiCheat)
+            .Count(g => UpscalerUpdates.Items(g).Any(i => i.Target?.ComponentId == primary.Id));
+
+        state.Main = new Button { MinWidth = 150, HorizontalAlignment = HorizontalAlignment.Right };
+        state.Ring = new ProgressRing { Width = 16, Height = 16, IsActive = state.Busy, Visibility = state.Busy ? Visibility.Visible : Visibility.Collapsed };
+        state.OnPc = Cell("");
+        state.Status = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true, Margin = new Thickness(0, 6, 0, 0), Text = state.Message ?? "" };
+        state.Main.Click += async (_, _) => await DownloadSourcesAsync(primary, sources, state);
+
+        void Refresh()
+        {
+            var have = sources.Count(UpscalerUpdates.IsOnThisPc);
+            state.OnPc!.Text = $"On this PC: {(have == 0 ? "Not downloaded" : have == sources.Count ? $"all {sources.Count} files" : $"{have} of {sources.Count} files")}";
+            state.Main!.Content = have == sources.Count ? "Downloaded" : "Download files";
+            state.Main.IsEnabled = have < sources.Count && !state.Busy;
+            state.Ring!.IsActive = state.Busy;
+            state.Ring.Visibility = state.Busy ? Visibility.Visible : Visibility.Collapsed;
+        }
+        state.Refresh = Refresh;
+
+        var latest = sources.Select(s => s.Version).Distinct().ToList();
+        var latestCell = Cell("Latest: " + string.Join(", ", latest.Select(v => "v" + Helpers.Ui.VersionLabel(v, sources.First(s => s.Version == v).File))));
+        ToolTipService.SetToolTip(latestCell, latestCell.Text);
+        var grid = RowGrid(
+            NameCell(primary.Name),
+            state.OnPc,
+            latestCell,
+            new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right, Children = { state.Ring, state.Main } });
+
+        var panel = new StackPanel { Spacing = 2, Padding = new Thickness(16, 12, 16, 12) };
+        panel.Children.Add(grid);
+        panel.Children.Add(Subtle("Replaces these files in games that already have them: " +
+            string.Join(", ", sources.Select(s => $"{s.File} (v{Helpers.Ui.VersionLabel(s.Version, s.File)})")) + "."));
+        panel.Children.Add(Subtle(games switch
+        {
+            0 => "No game in your Library has an older copy Upshift can replace.",
+            1 => "1 game in your Library can use them: open it in the Library > Upscaler files (advanced).",
+            _ => $"{games} games in your Library can use them: open each in the Library > Upscaler files (advanced)."
+        }));
+        var old = AppServices.Components.Downloaded(primary);
+        if (old.Count > 0)
+        {
+            // Earlier versions of Upshift downloaded the whole release here; games never used it.
+            var remove = new Button { Content = "Remove the full release download", Margin = new Thickness(0, 6, 0, 0) };
+            remove.Click += (_, _) =>
+            {
+                foreach (var copy in AppServices.Components.Downloaded(primary))
+                {
+                    try { AppServices.Components.Remove(primary, copy.Version); }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { state.Message = $"Couldn't remove it: {ex.Message}"; }
+                }
+                state.Message ??= "Removed. Only the single files games use are kept.";
+                Rebuild();
+            };
+            panel.Children.Add(Subtle($"An older Upshift downloaded the whole {primary.Name} release ({string.Join(", ", old.Select(o => o.Version))}). Games don't use it."));
+            panel.Children.Add(remove);
+        }
+        panel.Children.Add(state.Status);
+        Refresh();
+        AutomationName(panel, primary.Name);
+        return new Border
+        {
+            CornerRadius = new CornerRadius(8), Background = Brush("CardSurfaceBrush"),
+            BorderBrush = Brush("HairlineBrush"), BorderThickness = new Thickness(1), Child = panel
+        };
+    }
+
+    /// <summary>Downloads the catalog's DLLs for this source that aren't on this PC (signed and version-checked).</summary>
+    private async Task DownloadSourcesAsync(CatalogComponent primary, List<Core.Catalog.UpscalerFileSource> sources, RowState state)
+    {
+        if (state.Busy) return;
+        state.Busy = true;
+        state.Message = $"Downloading {primary.Name} files…";
+        ShowProgress(state.Status, state.Message);
+        state.Refresh?.Invoke();
+        var done = new List<string>();
+        try
+        {
+            foreach (var source in sources.Where(s => !UpscalerUpdates.IsOnThisPc(s)))
+            {
+                await AppServices.Components.EnsureUpscalerFileAsync(AppServices.Catalog, source, new Progress<string>(s =>
+                {
+                    state.Message = s;
+                    ShowProgress(state.Status, s);
+                }), CancellationToken.None);
+                done.Add($"{source.File} {source.Version}");
+            }
+            state.Message = done.Count == 0 ? "Already on this PC." : $"Downloaded and checked (signature and version): {string.Join(", ", done)}.";
+        }
+        catch (ComponentDownloadException ex)
+        {
+            state.Message = ex.Message;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or HttpRequestException)
+        {
+            state.Message = $"The download failed: {ex.Message}";
+        }
+        finally
+        {
+            state.Busy = false;
+            ShowProgress(state.Status, state.Message ?? "");
+            state.Refresh?.Invoke();
+            RefreshStatusLine();
+            FlushPendingRebuild();
+        }
     }
 
     /// <summary>A release tag as shown; NVIDIA DLSS tags get their marketing name, "v310.9.1 (DLSS 4.5)".</summary>

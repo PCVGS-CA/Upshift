@@ -394,6 +394,14 @@ public sealed partial class LibraryPage : Page
         await ReportAsync(ViewModel.UpdateUpscalerFilesAsync(row.Card, new[] { row.Item.RelativePath }), $"{row.Item.FileName} wasn't updated");
     }
 
+    /// <summary>"Restore original" on one file: the game's own copy comes back, checked by SHA-256.</summary>
+    private async void RestoreFile_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is not UpscalerFileRowViewModel { CanRestore: true } row) return;
+        if (await ViewModel.RestoreUpscalerFilesAsync(row.Card, new[] { row.Item.RelativePath }) is { } result && (!result.Success || result.KeptChanged.Count > 0))
+            await ShowMessageAsync(result.Success ? "Original restored, with a file left in place" : $"{row.Item.FileName} wasn't restored", result.Message);
+    }
+
     private async void UpdateAllFiles_Click(object sender, RoutedEventArgs e)
     {
         if (ViewModel.Selected is not { CanUpdateAnyFile: true } card) return;

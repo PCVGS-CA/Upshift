@@ -192,8 +192,8 @@ public sealed partial class LibraryViewModel : ObservableObject
         RunGameUpdateAsync(card, p => GameUpdates.SwitchBackAsync(card.Info, p));
 
     /// <summary>Puts back every original Upshift replaced in this game.</summary>
-    public Task<InstallResult?> RestoreUpscalerFilesAsync(GameCardViewModel card) =>
-        RunGameUpdateAsync(card, p => UpscalerUpdates.RestoreAsync(card.Info, null, p));
+    public Task<InstallResult?> RestoreUpscalerFilesAsync(GameCardViewModel card, IReadOnlyCollection<string>? paths = null) =>
+        RunGameUpdateAsync(card, p => UpscalerUpdates.RestoreAsync(card.Info, paths, p));
 
     partial void OnSearchTextChanged(string value) => ApplyFilter();
 

@@ -16,13 +16,18 @@ public sealed class UpscalerFileRowViewModel
         Title = item.Feature.Length > 0 ? $"{item.FileName} · {item.Feature}" : item.FileName;
         Path = item.RelativePath;
 
-        var current = item.CurrentVersion is null ? "unknown" : Ui.VersionLabel(item.CurrentVersion, item.FileName);
-        VersionText = item.Target is { } t ? $"{current} → {Ui.VersionLabel(t.Version, item.FileName)}" : current;
+        // "In this game: v3.1.1 (DLSS 3) · Latest: v310.9.1 (DLSS 4.5)". Latest is the newest copy Upshift knows of
+        // this file, even when it can't be used for this one (too old to swap safely, a modified file, anti-cheat…).
+        var current = item.CurrentVersion is null ? "unknown" : "v" + Ui.VersionLabel(item.CurrentVersion, item.FileName);
+        var latest = (item.Target ?? item.Latest) is { } l ? " · Latest: v" + Ui.VersionLabel(l.Version, item.FileName) : "";
+        VersionText = $"In this game: {current}{latest}";
         Status = UpscalerFileText.Subtitle(item) ?? item.Note ?? (item.Target is null && item.State == UpscalerFileState.GameFile ? "Up to date" : "");
         // A release that isn't downloaded yet comes down as part of Update.
         if (item.Target is { } target && !Services.UpscalerUpdates.IsOnThisPc(target))
             Status = (Status.Length > 0 ? Status + " · " : "") + $"{UpscalerFileText.ReleaseName(target)} available (downloads when you update)";
         CanUpdate = item.CanUpdate;
+        CanRestore = item.CanRestore && !card.Info.HasAntiCheat;
+        RestoreName = $"Restore original {item.FileName}";
         UpdateLabel = item.State == UpscalerFileState.GameRestoredOld ? "Re-apply" : "Update";
         UpdateName = $"{UpdateLabel} {item.FileName}";
     }
@@ -36,6 +41,9 @@ public sealed class UpscalerFileRowViewModel
     public string Status { get; }
     public bool HasStatus => Status.Length > 0;
     public bool CanUpdate { get; }
+    /// <summary>Upshift updated this file and has the game's original: "Restore original" puts it back.</summary>
+    public bool CanRestore { get; }
+    public string RestoreName { get; }
     public string UpdateLabel { get; }
     /// <summary>The button's accessible name, e.g. "Update nvngx_dlss.dll".</summary>
     public string UpdateName { get; }

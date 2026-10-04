@@ -85,6 +85,10 @@ public sealed class UpscalerFileItem
     /// <summary>For OptiScaler's copies: true when it replaced a game file (false: OptiScaler added it).</summary>
     public bool OptiScalerReplaced { get; init; }
     public UpscalerFileChange? Record { get; init; }
+    /// <summary>The newest copy of this file Upshift knows (shown as "Latest" even when it can't be used here).</summary>
+    public UpscalerFileSource? Latest { get; init; }
+    /// <summary>A modified FSR 4 file (the user's 4.1.1b, or any copy AMD didn't sign): never replaced.</summary>
+    public bool IsModifiedFsr4 { get; init; }
 
     public bool CanUpdate => Target is not null;
     /// <summary>Upshift's backup of the original is there, so Restore can bring it back.</summary>
@@ -135,6 +139,20 @@ public static class UpscalerFiles
             var version = FileVersions.Read(full);
             var feature = Fingerprints.UpscalerFiles.TryGetValue(dll.FileName, out var fp) ? fp.Feature : "";
 
+            var latest = sources.OrderByDescending(s => ParseVersion(s.Version)).First();
+
+            // A modified FSR 4 file (the user's own, put in through the FSR 4 option or by hand) is never touched.
+            if (IsModifiedFsr4(full, catalog))
+            {
+                items.Add(new UpscalerFileItem
+                {
+                    RelativePath = dll.RelativePath, Family = dll.Family, Feature = feature, CurrentVersion = version, Latest = latest,
+                    State = UpscalerFileState.GameFile, IsModifiedFsr4 = true,
+                    Note = "This is a modified FSR 4 file (not signed by AMD), so Upshift never replaces it. Change it in OptiScaler options > FSR 4."
+                });
+                continue;
+            }
+
             // OptiScaler's own copy (installed by Upshift or by hand): say so, and leave it to OptiScaler.
             if (OptiScalerOwner(full) is { } owner)
             {
@@ -142,7 +160,7 @@ public static class UpscalerFiles
                 {
                     RelativePath = dll.RelativePath, Family = dll.Family, Feature = feature, CurrentVersion = version,
                     State = UpscalerFileState.OptiScalerCopy, OptiScalerVersion = owner.Version, OptiScalerReplaced = owner.Replaced,
-                    OriginalVersion = owner.OriginalVersion
+                    OriginalVersion = owner.OriginalVersion, Latest = latest
                 });
                 continue;
             }
@@ -150,14 +168,14 @@ public static class UpscalerFiles
             var entry = record?.Files.FirstOrDefault(f => SamePath(game.InstallDir, f.Path, full));
             var state = entry is null ? UpscalerFileState.GameFile : StateOf(game.InstallDir, entry);
             var (target, note) = game.HasAntiCheat
-                ? (null, "Blocked: this game uses anti-cheat.")
+                ? (null, AntiCheatNote(game))
                 : TargetFor(full, version, sources);
 
             items.Add(new UpscalerFileItem
             {
                 RelativePath = dll.RelativePath, Family = dll.Family, Feature = feature, CurrentVersion = version,
                 State = state == UpscalerFileState.GameFile && target is not null ? UpscalerFileState.UpdateAvailable : state,
-                Target = target, Note = note, Record = entry, OriginalVersion = entry?.OriginalVersion
+                Target = target, Note = note, Record = entry, OriginalVersion = entry?.OriginalVersion, Latest = latest
             });
         }
         return items.OrderBy(i => i.Family).ThenBy(i => i.RelativePath, StringComparer.OrdinalIgnoreCase).ToList();
@@ -171,6 +189,43 @@ public static class UpscalerFiles
     {
         game.Upscalers.RemoveAll(u => !File.Exists(u.FullPath));
         foreach (var u in game.Upscalers) u.Version = FileVersions.Read(u.FullPath);
+    }
+
+    /// <summary>
+    /// For games with anti-cheat: which one, and why files aren't swapped. Upshift never changes these games' files.
+    /// </summary>
+    public static string AntiCheatNote(GameInfo game) =>
+        $"Not offered: this game uses {string.Join(" and ", game.AntiCheat)}. Swapping its files can stop the online game from starting, " +
+        "or get the account flagged, so Upshift leaves them alone.";
+
+    /// <summary>
+    /// "FSR is built into the game" when PCGamingWiki lists FSR but the game has no separate FSR file of its own:
+    /// there's nothing to swap. Null otherwise.
+    /// </summary>
+    public static string? BuiltInFsrNote(GameInfo game, Wiki.WikiEntry? wiki, IReadOnlyList<UpscalerFileItem> items)
+    {
+        var wikiHasFsr = wiki?.UpscalingTech.Any(t => t.Contains("FSR", StringComparison.OrdinalIgnoreCase)
+                                                     || t.Contains("FidelityFX", StringComparison.OrdinalIgnoreCase)) == true;
+        var gameHasFsrFile = items.Any(i => i.Family == UpscalerFamily.Fsr && i.State != UpscalerFileState.OptiScalerCopy)
+                             || game.Upscalers.Any(u => u.Family == UpscalerFamily.Fsr && OptiScalerOwner(u.FullPath) is null);
+        return wikiHasFsr && !gameHasFsrFile
+            ? "FSR is built into this game (it has no separate FSR file), so it can't be updated this way."
+            : null;
+    }
+
+    /// <summary>
+    /// True for an FSR 4 upscaler DLL that isn't AMD's: the user's 4.1.1b file put in through the FSR 4 option (recorded
+    /// in the OptiScaler manifest), or any amd_fidelityfx_upscaler_dx12.dll without a valid AMD signature.
+    /// </summary>
+    public static bool IsModifiedFsr4(string fullPath, UpscalerCatalog catalog)
+    {
+        var dir = Path.GetDirectoryName(fullPath)!;
+        if (OptiScalerInstaller.ReadManifest(dir) is { Removed: false } manifest
+            && manifest.Overrides?.Any(o => SamePath(dir, o.Path, fullPath)) == true)
+            return true;
+        if (!Path.GetFileName(fullPath).Equals("amd_fidelityfx_upscaler_dx12.dll", StringComparison.OrdinalIgnoreCase)) return false;
+        var signers = catalog.UpscalerFiles.Signers.GetValueOrDefault(UpscalerFamily.Fsr) ?? new List<string>();
+        return signers.Count > 0 && SignatureCheck.Problem(fullPath, signers) is not null;
     }
 
     // ---------------- OptiScaler's files ----------------
@@ -431,6 +486,10 @@ public static class UpscalerFiles
         if (FileVersions.Read(full) is null) return $"{job.Path}'s version can't be read, so it wasn't replaced.";
         if (OptiScalerOwner(full) is not null)
             return $"{job.Path} is OptiScaler's own copy, so Upshift leaves it to OptiScaler's updates.";
+        // A modified FSR 4 file is the user's own choice: never overwritten (also when it's not OptiScaler's).
+        if (Path.GetFileName(full).Equals("amd_fidelityfx_upscaler_dx12.dll", StringComparison.OrdinalIgnoreCase)
+            && signers.TryGetValue(UpscalerFamily.Fsr, out var amd) && SignatureCheck.Problem(full, amd) is not null)
+            return $"{job.Path} is a modified FSR 4 file (not signed by AMD), so Upshift never replaces it.";
         return null;
     }
 
