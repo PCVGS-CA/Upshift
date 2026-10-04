@@ -418,6 +418,35 @@ errors and no warnings.
       buttons off.
     - The FSR 4 switch for a pretend RX 6600 (with and without a dummy file in Claude's data copy, removed after),
       a pretend RTX 4070, and on/off on the real RTX 4070 (ini back byte for byte).
+- **1.0.2 (2026-10-04), not released:**
+  - **Blank Start menu icon:** caused by a test install run from Claude's sandbox (`-TestPackId`), whose
+    Velopack shortcut in the real `%AppData%\…\Start Menu\Programs\Upshift.lnk` pointed into the sandbox. Fixes:
+    - `package.ps1` fails a release without the icon in every place, and test packs make no shortcuts.
+    - `Core/Services/Shortcuts.cs` (raw-buffer IPropertyStore, see the comment) plus `App/Services/Shortcuts.cs`.
+      These create or repair `Upshift.lnk` on install and update, and check it at start-up, only for the real
+      `%LocalAppData%\Upshift.App` install.
+    - **Never run a real installer from Claude's shell:** shortcuts land in the real Start menu, the files in the
+      sandbox.
+  - **FSR 4.1.1b:**
+    - New user file `UserFileKind.Fsr411bInt8`. AMD-signed copies are refused; "Find it for me" searches only
+      Downloads, Desktop and Documents.
+    - In a game it's an **override**: `InstallManifest.Overrides` / `FileOverride`. OptiScaler's
+      `amd_fidelityfx_upscaler_dx12.dll` waits in `.upshift\overrides\`.
+    - Configure checks everything first and undoes every step on failure (`PutBack` leaves an unchanged file alone).
+    - Verify, Repair, Update (the new release goes into the kept slot), Undo, Switch (dropped when the DLSS 5 build
+      has the DLL elsewhere) and Uninstall handle it.
+    - ini: `Fsr4ForceEnableInt8=true` and `Fsr4Update=true` (OptiScaler 0.9.4's ini says both default on only for
+      RDNA 4). Not verified on a real RX 6000.
+    - Options: one "FSR 4" switch with a source picker and a watermark toggle. Cards show `Fsr4Text`.
+  - **Upscaler files for games:** Updates page rows for NVIDIA DLSS, AMD FidelityFX and Intel XeSS.
+    - They download the catalog's single DLLs (`EnsureUpscalerFileAsync`), not the SDK release.
+    - Rows show "In this game / Latest" and a per-file "Restore original".
+    - `UpscalerFiles.IsModifiedFsr4` never offers, and `CheckJob` refuses, an unsigned
+      `amd_fidelityfx_upscaler_dx12.dll` or an override.
+    - Anti-cheat note names the anti-cheat (swaps stay blocked).
+    - `BuiltInFsrNote` when PCGamingWiki lists FSR with no FSR file.
+  - **Tested:** scratch harness (`fsr411b_test.cs.txt` and the swap test in `arttest`), both all passed, on
+    throwaway folders with v0.9.2 / v0.9.4 / DLSSNR from the component store. Game folders were not changed.
 
 ## Next
 

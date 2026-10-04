@@ -2,6 +2,13 @@
 
 All notable changes to Upshift. Each release's section becomes its GitHub release notes, so the heading must be `## [x.y.z]` with the same version as `Directory.Build.props` (a date after it is fine).
 
+## [1.0.2]
+
+- **App icon in the Start menu and on the desktop:** the installer creates both shortcuts with Upshift's logo, and installing over 1.0.0 or 1.0.1 replaces old shortcuts that showed a blank page. Upshift also checks its shortcuts when it starts and fixes them if they point somewhere else. Release builds now fail if the icon is missing anywhere.
+- **FSR 4.1.1b for RX 6000:** a second optional file in Settings, "FSR 4.1.1b INT8 for RX 6000 (amd_fidelityfx_upscaler_dx12.dll)", next to 4.0.2c. It's a modified file that isn't signed by AMD; Upshift shows its version and SHA-256 and never downloads it. "Find it for me" only looks in Downloads, Desktop and Documents, and skips AMD's ordinary copies and OptiScaler packages. In a game it takes the place of the amd_fidelityfx_upscaler_dx12.dll OptiScaler puts there; that copy is kept and comes back when you turn it off or uninstall.
+- **One FSR 4 setting:** a game's OptiScaler options have one "FSR 4" switch with a source: OptiScaler's built-in FSR 4, your 4.1.1b file or your 4.0.2c file. A game uses one at a time, and switching takes the previous file out. Each game shows which FSR 4 it uses and the file's version. New "Show FSR 4 watermark" switch.
+- **Upscaler files for games:** the NVIDIA DLSS, AMD FidelityFX and Intel XeSS rows on the Updates page (previously "Used in a later version") now download the files games actually use and say how many of your games can use them. Each file in a game shows "In this game" and "Latest", with Update, Update all and Restore original per file. A modified FSR 4 file is never replaced; games with anti-cheat say which one and stay untouched; a game with FSR built in (no separate file) says it can't be updated this way.
+
 ## [1.0.1]
 
 Bug fixes.
