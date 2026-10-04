@@ -32,10 +32,35 @@ Set-StrictMode -Version Latest
 # Must match AppLocations.PackageId in src/Upshift.Core/Services/AppLocations.cs. It decides the install folder
 # (%LocalAppData%\Upshift.App), which must never be the data folder (%LocalAppData%\Upshift).
 $packId = 'Upshift.App'
+$packTitle = 'Upshift'
+$shortcuts = 'StartMenuRoot'
 if ($TestPackId) {
     if ($Tag) { throw "-TestPackId is for local testing only and can't be used with -Tag." }
     if ($TestPackId -notmatch '^Upshift\.App\.[A-Za-z0-9]+$') { throw "-TestPackId must look like 'Upshift.App.Test' (never 'Upshift', the data folder)." }
     $packId = $TestPackId
+    # A test install must never touch the real install's Start menu shortcut ("Upshift.lnk"): it gets its own name and
+    # no shortcuts at all. (On 2026-10-03 a test install replaced the user's shortcut, which then showed a blank icon.)
+    $packTitle = 'Upshift (test build)'
+    $shortcuts = 'None'
+}
+
+# ---- Icon checks: the release fails rather than ship an exe without Upshift's icon ----
+Add-Type -TypeDefinition @'
+using System; using System.Runtime.InteropServices;
+public static class UpshiftIconCheck {
+  [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+  public static extern uint ExtractIconEx(string file, int index, IntPtr[] large, IntPtr[] small, uint count);
+}
+'@
+function Assert-ExeIcon([string]$exe, [string]$what) {
+    if (-not (Test-Path $exe)) { throw "Icon check: $what ($exe) is missing." }
+    $count = [UpshiftIconCheck]::ExtractIconEx($exe, -1, $null, $null, 0)
+    if ($count -lt 1) { throw "Icon check: $what ($exe) has no embedded icon." }
+    Write-Host "  icon ok: $what"
+}
+function Assert-File([string]$path, [string]$what) {
+    if (-not (Test-Path $path)) { throw "Icon check: $what is missing ($path)." }
+    Write-Host "  icon ok: $what"
 }
 
 function Invoke-Checked([string]$what, [scriptblock]$command) {
@@ -77,18 +102,45 @@ try {
     Invoke-Checked 'dotnet publish' {
         dotnet publish src/Upshift.App/Upshift.App.csproj -nologo -c Release -p:Platform=x64 -r win-x64 --self-contained -o $PublishDir
     }
+    # The exe carries the icon (Explorer, the taskbar fallback); the window loads Assets\Upshift.ico next to it.
+    Assert-ExeIcon (Join-Path $PublishDir 'Upshift.exe') 'published Upshift.exe'
+    Assert-File (Join-Path $PublishDir 'Assets\Upshift.ico') 'published Assets\Upshift.ico'
 
     # ---- Pack with Velopack ----
     Invoke-Checked 'dotnet tool restore' { dotnet tool restore }
     Invoke-Checked 'vpk pack' {
         dotnet vpk pack --packId $packId --packVersion $version --packDir $PublishDir --mainExe Upshift.exe `
-            --packTitle Upshift --packAuthors PCVGS --icon src/Upshift.App/Assets/Upshift.ico `
-            --releaseNotes $notes --shortcuts StartMenuRoot --runtime win-x64 --outputDir $OutDir
+            --packTitle $packTitle --packAuthors PCVGS --icon src/Upshift.App/Assets/Upshift.ico `
+            --releaseNotes $notes --shortcuts $shortcuts --runtime win-x64 --outputDir $OutDir
     }
 
     # Friendlier names for the two files people download. The update feed doesn't refer to either.
     Move-Item -Force (Join-Path $OutDir "$packId-win-Setup.exe") (Join-Path $OutDir 'Upshift-Setup-x64.exe')
     Move-Item -Force (Join-Path $OutDir "$packId-win-Portable.zip") (Join-Path $OutDir 'Upshift-Portable-x64.zip')
+
+    # The installer and both exes in the portable zip (Velopack's launcher and the app) have the icon, and the zip and
+    # the update package carry Assets\Upshift.ico for the window.
+    Assert-ExeIcon (Join-Path $OutDir 'Upshift-Setup-x64.exe') 'Upshift-Setup-x64.exe'
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $unzip = Join-Path ([IO.Path]::GetTempPath()) ("upshift-iconcheck-" + [Guid]::NewGuid().ToString('N'))
+    try {
+        [IO.Compression.ZipFile]::ExtractToDirectory((Join-Path $OutDir 'Upshift-Portable-x64.zip'), $unzip)
+        # Velopack names the portable launcher after the title (Upshift.exe for a release).
+        Assert-ExeIcon (Join-Path $unzip "$packTitle.exe") "portable zip: $packTitle.exe (launcher)"
+        Assert-ExeIcon (Join-Path $unzip 'current\Upshift.exe') 'portable zip: current\Upshift.exe'
+        Assert-File (Join-Path $unzip 'current\Assets\Upshift.ico') 'portable zip: current\Assets\Upshift.ico'
+    }
+    finally {
+        if (Test-Path $unzip) { Remove-Item -Recurse -Force $unzip }
+    }
+    $nupkg = Get-ChildItem $OutDir -Filter "$packId-$version-full.nupkg" | Select-Object -First 1
+    if (-not $nupkg) { throw "Icon check: $packId-$version-full.nupkg is missing." }
+    $zip = [IO.Compression.ZipFile]::OpenRead($nupkg.FullName)
+    try {
+        if (-not ($zip.Entries | Where-Object { $_.FullName -match '(^|/)Assets/Upshift\.ico$' })) { throw "Icon check: Assets/Upshift.ico is missing from $($nupkg.Name)." }
+        Write-Host "  icon ok: $($nupkg.Name) has Assets/Upshift.ico"
+    }
+    finally { $zip.Dispose() }
 
     Write-Host "Release files in ${OutDir}:"
     Get-ChildItem $OutDir -File | ForEach-Object { Write-Host ("  {0,-40} {1,8:N1} MB" -f $_.Name, ($_.Length / 1MB)) }
