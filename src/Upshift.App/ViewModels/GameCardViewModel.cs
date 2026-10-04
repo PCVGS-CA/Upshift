@@ -164,7 +164,9 @@ public sealed partial class GameCardViewModel : ObservableObject
         var optiChanges = manifest is null || info.TargetDir is null
             ? new List<ChangeEntry>()
             : OptiScalerInstaller.Changes(info.TargetDir, manifest, Ui.VersionLabel);
-        var changes = optiChanges.Concat(Core.Install.UpscalerFiles.Changes(info.InstallDir, Ui.VersionLabel))
+        // Advice applied from "Measure performance" is listed with the other changes.
+        var measureChanges = AppServices.Measurements.Get(info.Id).Applied.Select(a => new ChangeEntry(a.Utc, a.Text, "From Measure performance > What to try."));
+        var changes = optiChanges.Concat(Core.Install.UpscalerFiles.Changes(info.InstallDir, Ui.VersionLabel)).Concat(measureChanges)
             .OrderByDescending(c => c.Utc ?? DateTime.MinValue)
             .ToList();
         Changes = changes.Select(c => new ChangeViewModel(c)).ToList();

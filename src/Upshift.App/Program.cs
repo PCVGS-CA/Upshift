@@ -28,9 +28,9 @@ public static class Program
 
     private static void Run(string[] args)
     {
-        // The elevated one-job helper (Upshift.exe --apply plan.json) skips Velopack: it must never apply an app
+        // The elevated one-job helpers (Upshift.exe --apply plan.json, --measure job.json) skip Velopack: it must never apply an app
         // update or run a hook, only the install plan it was given.
-        if (!args.Contains("--apply"))
+        if (!args.Contains("--apply") && !args.Contains("--measure"))
         {
             VelopackApp.Build()
                 .OnBeforeUninstallFastCallback(_ => AskToDeleteDataOnUninstall())

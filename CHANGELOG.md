@@ -12,6 +12,7 @@ All notable changes to Upshift. Each release's section becomes its GitHub releas
 - **Game panel:** "Changes Upshift made to this game" is collapsible (closed by default) and its header gives the number of changes and the latest date. Suggestion notes show three lines, then "Show all". Every collapsible section stays open or closed as you left it, across restarts.
 - **Middle-click auto-scroll** in the Library, the game panel and Settings.
 - **Needs repair** explains each file: what it is, the version Upshift installed, the version there now and what Repair will do, and says when it looks like a game update put the game's own files back. It's worked out from the files as they are now, so it goes away after a repair. While another task runs, the Repair button says when it will be available.
+- **Measure performance** (each game's panel, closed by default): press Measure this game, start the game, press F10 (changeable in Settings) and play for 60 seconds; a beep marks the start and two the end. Uses Intel's PresentMon (MIT licence), downloaded from its GitHub page the first time and listed on the Updates page. Windows asks for permission for a small measuring helper only; Upshift stays a normal app. Shows the average and low points (1% low), the two latest runs side by side, up to 10 older runs, and "What to try" with a frame cap you can apply. Runs with frame generation are marked. Nothing measured leaves the PC.
 - **OptiScaler.ini** keeps the spacing around "=" when Upshift changes a value, so a setting put back restores the line exactly.
 
 ## [1.0.2]

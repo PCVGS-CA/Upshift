@@ -148,6 +148,13 @@ public sealed partial class ComponentStore : IDisposable
             if (asset.Sha256 is not null && actual != asset.Sha256)
                 throw new ComponentDownloadException($"{asset.Name} doesn't match GitHub's checksum (expected {asset.Sha256}, got {actual}). Nothing was kept.");
 
+            // A release that is one program (PresentMon's console app) is kept as it is; archives are unpacked.
+            if (asset.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                return await StoreAsync(component, version, asset.Name, actual, staging =>
+                {
+                    File.Copy(download, Path.Combine(staging, asset.Name));
+                    return Task.CompletedTask;
+                }, ct);
             progress?.Report($"Unpacking {asset.Name}…");
             return await StoreAsync(component, version, asset.Name, actual, staging => Task.Run(() => Extract(download, staging), ct), ct);
         }

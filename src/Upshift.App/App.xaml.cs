@@ -24,6 +24,19 @@ public partial class App : Application
             return;
         }
 
+        // Started elevated by the main window for one measurement: wait for the hotkey's signal, run PresentMon once, quit.
+        if (commandLine.Contains("--measure"))
+        {
+            string? Arg(string name) => Array.IndexOf(commandLine, name) is var i and >= 0 && i + 1 < commandLine.Length ? commandLine[i + 1] : null;
+            var job = Arg("--measure");
+            var hash = Arg("--sha256");
+            // The job sits in <data>\measure\<id>\job.json.
+            var dataDir = job is null ? null : Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(Path.GetFullPath(job))));
+            Environment.ExitCode = job is null || hash is null || dataDir is null ? 2 : Core.Measure.PresentMonRunner.RunHelper(job, hash, dataDir);
+            Exit();
+            return;
+        }
+
         try
         {
             // Data from before the rename (%LocalAppData%\PCVGS\UpscalerManager) moves to %LocalAppData%\Upshift once.

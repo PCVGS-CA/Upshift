@@ -473,7 +473,7 @@ public sealed class OptiScalerOptionsView : UserControl
     }
 
     /// <summary>The upscaler choice whose settings match what the ini has now.</summary>
-    private static string CurrentUpscaler(IniFile ini, IReadOnlyList<UpscalerChoice> choices) =>
+    internal static string CurrentUpscaler(IniFile ini, IReadOnlyList<UpscalerChoice> choices) =>
         choices.FirstOrDefault(c => c.Settings.All(s =>
             string.Equals(ini.Get(s.Section, s.Key) ?? OptiScalerOptions.Auto, s.Value ?? OptiScalerOptions.Auto, StringComparison.OrdinalIgnoreCase)))?.Id
         ?? "auto";

@@ -523,6 +523,9 @@
                         <!-- DLSS 5 (Neural Rendering): this card's options, the switch to the DLSS 5 build and its settings -->
                         <views:Dlss5View x:Name="Dlss5Panel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
 
+                        <!-- Measure performance: PresentMon for 60 seconds, results and "What to try" (closed by default) -->
+                        <views:MeasureView x:Name="MeasurePanel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
+
                         <!-- Everything Upshift has changed in this game folder right now, with dates -->
                         <!-- Closed by default; the header gives the count and the latest date -->
                         <Expander x:Name="ChangesExpander" Visibility="{x:Bind ViewModel.Selected.HasChanges, Mode=OneWay}" IsExpanded="False"

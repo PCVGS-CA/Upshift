@@ -38,6 +38,17 @@
       "notes": "Checked Alpha0.3.2 (2026-09-28): 516 MB zip with OptiScaler.dll/ini, LmxxfNrRuntime.dll + .pak (the lmxxf runtime) and the FSR/XeSS DLLs under OptiScaler\\. No amdxcffx64.dll or nvngx_dlssnr.dll. Same [DlssNr] keys as DLSSNR, plus NrBackend = daniel | lmxxf (asked on first launch when unset) and ToggleKey default Home (0x24)."
     },
     {
+      "id": "presentmon",
+      "name": "PresentMon",
+      "kind": "tool",
+      "description": "Intel's frame-timing tool (MIT licence). Upshift's Measure performance runs its console app for 60 seconds per measurement. Downloaded the first time you measure; never bundled.",
+      "repo": "GameTechDev/PresentMon",
+      "assetPattern": "(?i)^PresentMon-[\\d.]+-x64\\.exe$",
+      "pinnedVersion": "v2.6.0",
+      "installable": true,
+      "notes": "Checked v2.6.0 (2026-10-04): the console app is one x64 exe (PresentMon-2.6.0-x64.exe, about 1 MB); GitHub lists its SHA-256. Options used: --process_id, --output_file, --timed, --terminate_after_timed, --no_console_stats, --track_frame_type (FrameType column), --session_name, --stop_existing_session. Needs admin rights or the Performance Log Users group."
+    },
+    {
       "id": "amd-nr-runtime",
       "name": "AMD-NR runtime (danielblnc)",
       "kind": "runtime",

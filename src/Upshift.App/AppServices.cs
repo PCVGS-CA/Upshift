@@ -68,6 +68,9 @@ public static class AppServices
     /// <summary>Files the user supplies (DLSS 5, FSR 4.0.2c INT8). Never downloaded or bundled.</summary>
     public static UserFileStore UserFiles { get; } = new(DataDir);
 
+    /// <summary>"Measure performance" results per game (kept on this PC only).</summary>
+    public static Core.Measure.MeasurementStore Measurements { get; } = new(DataDir);
+
     public static InstallPreferences InstallPrefs { get; } = new(DataDir);
 
     /// <summary>Each game's launch options for Play.</summary>

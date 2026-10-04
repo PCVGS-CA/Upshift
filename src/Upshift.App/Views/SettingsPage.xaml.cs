@@ -31,7 +31,30 @@ public sealed partial class SettingsPage : Page
         BuildHiddenRows();
         Helpers.Sections.Bind(HiddenExpander, "settings.hiddenGames");
         Helpers.AutoScroll.Attach(PageScroller);
+        BuildMeasureKeys();
         BuildDeveloperOptions();
+    }
+
+    // ---------------- Measure performance ----------------
+
+    private bool _fillingKeys;
+
+    private void BuildMeasureKeys()
+    {
+        _fillingKeys = true;
+        foreach (var vk in GlobalHotkey.OfferedKeys)
+            MeasureKeyBox.Items.Add(new ComboBoxItem { Content = GlobalHotkey.KeyName(vk), Tag = vk });
+        var current = AppServices.Settings.Current.MeasureHotkey;
+        MeasureKeyBox.SelectedItem = MeasureKeyBox.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (int)i.Tag == current) ?? MeasureKeyBox.Items[9];
+        _fillingKeys = false;
+    }
+
+    private void MeasureKey_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_fillingKeys || MeasureKeyBox.SelectedItem is not ComboBoxItem { Tag: int vk }) return;
+        var settings = AppServices.Settings.Current;
+        settings.MeasureHotkey = vk;
+        try { AppServices.Settings.Save(settings); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
 
     // ---------------- Hidden games ----------------

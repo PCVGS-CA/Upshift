@@ -472,6 +472,25 @@ errors and no warnings.
     - Guide placeholders {hz} and {cap} (`CapUnderRefresh`, the VRR calculator rounded down). There's no
       "Suggested" wording any more.
     - "Show FPS counter": `[Menu] ShowFps` (OptiScaler 0.9.4 reads it at start; Page Up toggles it in game).
+  - **Measure performance:**
+    - Code: `Core/Measure` (FrameStats/PresentMonCsv, MeasurementStore, MeasureAdvice + MeasureThresholds,
+      PresentMonRunner + MeasureJob), `App/Services/Measurement`, `GlobalHotkey`, `Views/MeasureView`.
+    - PresentMon is MIT. The catalog's `presentmon` is v2.6.0, the console exe only; `ComponentStore` keeps a
+      `.exe` asset as-is. It's Intel-signed, and both the main window and the helper check that.
+    - Permission: unless the account is elevated or in Performance Log Users (S-1-5-32-559), arming starts
+      `Upshift.exe --measure job.json --sha256 HASH` with runas.
+      - The helper waits for `start.txt` (the game's PID), `cancel.txt`, the parent PID going away, or a 30-minute
+        deadline. It runs PresentMon once (`--timed 60 --terminate_after_timed --track_frame_type --process_id`,
+        killed after 80 s), then writes `result.json`.
+      - The work folder is `<data>\measure\<id>`, deleted after reading.
+      - Unelevated, PresentMon exits at once with code 6 ("access denied … Performance Log Users").
+    - Hotkey: `RegisterHotKey(NULL, …)` on its own thread with its own message loop; only while armed. OptiScaler's
+      keys (Insert, PgUp, PgDn, End, Home, plus the game's ini values) are refused. Beeps use kernel32 `Beep`.
+    - 1% low = average frame time of the slowest 1% of frames. Generated frames come from PresentMon's FrameType
+      (not Application, Repeated, NotSet, Unspecified or NA).
+    - Tested: the CSV maths, advice, store, helper protocol (start, cancel, tampered job, outside path), the hotkey,
+      the UI with sample runs, and Apply cap on The Witcher 3 (folder back exactly).
+    - **Not tested:** a real measurement with the UAC prompt and a running game.
   - `OptiScalerInstaller.RepairDetails` mirrors Repair's rules. The "game update" guess is at least three
     non-OptiScaler files in the folder written within 2 minutes. `GameAnalyzer.RefreshQuick` re-runs `Verify`, so
     "Needs repair" is never stale.

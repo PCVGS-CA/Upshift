@@ -36,6 +36,9 @@ public sealed class AppSettings
     /// <summary>The monitor the frame cap's numbers come from (Windows' device name, e.g. DISPLAY2); null means the main monitor.</summary>
     public string? FrameCapDisplay { get; set; }
 
+    /// <summary>The key that starts a measurement while a game runs (a Windows virtual-key code; F10 by default).</summary>
+    public int MeasureHotkey { get; set; } = 0x79;
+
     /// <summary>Collapsible sections the user left open (true) or closed (false), by a fixed key such as "game.changes".</summary>
     public Dictionary<string, bool> OpenSections { get; set; } = new();
 

@@ -63,6 +63,14 @@
             </StackPanel>
 
             <StackPanel Spacing="8">
+                <TextBlock Text="Measure performance" FontWeight="SemiBold" />
+                <ComboBox x:Name="MeasureKeyBox" Header="Key that starts a measurement while a game runs" MinWidth="240"
+                          SelectionChanged="MeasureKey_Changed" AutomationProperties.Name="Key that starts a measurement" />
+                <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
+                           Text="Pick a key the game doesn't use. OptiScaler's keys (Insert, Page Up, Page Down, End, Home) aren't offered. Measuring uses PresentMon, Intel's frame-timing tool (MIT licence), downloaded from its GitHub page the first time. Windows asks for permission each time unless your account is in the Performance Log Users group." />
+            </StackPanel>
+
+            <StackPanel Spacing="8">
                 <TextBlock Text="Optional files you supply" FontWeight="SemiBold" />
                 <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
                            Text="The app never downloads or bundles these. Point it at a copy you already have and it's copied into the app's own folder." />
