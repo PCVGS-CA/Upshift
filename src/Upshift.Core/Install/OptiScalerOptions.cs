@@ -274,8 +274,19 @@ public static class OptiScalerOptions
     /// </summary>
     public static List<IniSetting> FrameCapSettings(double? fps) => new()
     {
-        new("Framerate", "FramerateLimit", fps is > 0 ? fps.Value.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) : null)
+        new("Framerate", "FramerateLimit", fps is > 0 ? fps.Value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) : null)
     };
+
+    /// <summary>OptiScaler's FPS counter ([Menu] ShowFps). Page Up also shows or hides it in game. Off puts the original back.</summary>
+    public static List<IniSetting> FpsCounterSettings(bool on) => new() { new("Menu", "ShowFps", on ? "true" : null) };
+
+    public static bool FpsCounterOn(IniFile ini) => string.Equals(ini.Get("Menu", "ShowFps"), "true", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The cap for a game that runs faster than the screen: OptiScaler's VRR calculator, rounded down to a whole number
+    /// (144 Hz gives 138, 165 Hz gives 157, 60 Hz gives 58).
+    /// </summary>
+    public static int CapUnderRefresh(int refreshHz) => (int)Math.Floor(VrrCalculatorCap(refreshHz));
 
     /// <summary>The cap OptiScaler.ini has now (null when off or not set).</summary>
     public static double? CurrentFrameCap(IniFile ini) =>
@@ -285,7 +296,7 @@ public static class OptiScalerOptions
     /// The cap OptiScaler's "VRR Frame Cap Calculator" (in its in-game menu, 0.9.4) suggests for a refresh rate: one
     /// frame time plus a 0.3 ms margin, to one decimal. 144 Hz gives 138.0, 60 Hz 58.9, 165 Hz 157.2, 240 Hz 223.9.
     /// </summary>
-    public static double SuggestedFrameCap(int refreshHz) =>
+    public static double VrrCalculatorCap(int refreshHz) =>
         Math.Round(10000.0 / (1000.0 / refreshHz + 0.3)) / 10.0;
 
     /// <summary>The kind recorded for the modified FSR 4.1.1b file in the install manifest.</summary>

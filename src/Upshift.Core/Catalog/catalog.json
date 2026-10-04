@@ -357,15 +357,15 @@
     "frameCap": {
       "title": "Which frame cap should I pick?",
       "rows": [
-        { "id": "off", "text": "No cap from OptiScaler: the game, the driver or V-Sync decide the frame rate." },
-        { "id": "suggested", "text": "Just under your display's refresh rate, worked out the way OptiScaler's own VRR calculator does it (one frame time plus 0.3 ms). Keeps a G-Sync or FreeSync display in its variable refresh range, with less input lag than V-Sync alone.", "bestFor": "Most players with a VRR display" },
-        { "id": "custom", "text": "Any number you type, e.g. 60 for steadier frame pacing, or to save power and heat.", "bestFor": "Steady pacing, laptops, quieter fans" }
+        { "id": "empty", "name": "Empty (No cap)", "text": "No cap from OptiScaler: the game, the driver or V-Sync decide the frame rate." },
+        { "id": "holdable", "name": "A rate the game can hold", "text": "Type a frame rate the game can hold most of the time. Example: if it runs between 55 and 75 fps, a cap of 60 gives smoother motion than a rate that keeps jumping.", "bestFor": "Games that can't stay at your screen's rate" },
+        { "id": "under", "name": "{cap} (just under {hz} Hz)", "text": "For games that run faster than your screen, use {cap}, just under your {hz} Hz display. That keeps a G-Sync or FreeSync display in its variable refresh range, with less input lag than V-Sync alone.", "bestFor": "Games faster than your screen" }
       ],
       "cardNotes": [
         { "vendors": [ "Amd", "Intel" ], "text": "OptiScaler's cap runs through Reflex. On your card, OptiScaler loads the fakenvapi.dll that comes with it to stand in for Reflex, so the game still has to support Reflex." },
         { "vendors": [ "Nvidia" ], "text": "OptiScaler's cap runs through NVIDIA Reflex, so it only works in games that support Reflex. If you also use OptiScaler's frame generation, turn Reflex on in the game, or the cap stays off." }
       ],
-      "footer": "With frame generation on, the number is the final frame rate you see, generated frames included: OptiScaler halves it for the real frames itself. It only works in games that support Reflex, and takes effect after restarting the game."
+      "footer": "With frame generation on, the number is the final frame rate you see, generated frames included: OptiScaler halves it for the real frames itself. A number above your screen's rate has little effect. Turn on Show FPS counter first to see what the game runs at. Takes effect after restarting the game."
     }
   }
 }

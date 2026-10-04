@@ -461,6 +461,17 @@ errors and no warnings.
       package) stands in. With OptiScaler FG on, it's off unless Reflex is on in-game (or fakenvapi is in use).
     - It's the final frame rate: OptiScaler halves it itself for OptiFG with FSR FG, and for DLSS FG through fakenvapi.
     - VRR calculator: `round(10000 / (1000/Hz + 0.3)) / 10`, i.e. 144 → 138, 165 → 157.2.
+  - Frame cap UI, second pass:
+    - One whole-number NumberBox (empty = no cap) plus a clear button. It saves on ValueChanged, which a NumberBox
+      raises only on Enter or losing focus. Setting Value inside that handler doesn't raise it again, so the rounded
+      value is saved directly.
+    - The hint's numbers come from `Helpers.Display`: the rate set in Windows for the main monitor, or the one picked
+      in "Screen the game runs on" (`AppSettings.FrameCapDisplay`, shown only with 2+ monitors). Checked every 3 s.
+    - The user's main monitor (LG ULTRAGEAR, DISPLAY1) is set to 165 Hz in Windows, and that's also its highest mode.
+      The LG TV (DISPLAY2) runs at 60 Hz.
+    - Guide placeholders {hz} and {cap} (`CapUnderRefresh`, the VRR calculator rounded down). There's no
+      "Suggested" wording any more.
+    - "Show FPS counter": `[Menu] ShowFps` (OptiScaler 0.9.4 reads it at start; Page Up toggles it in game).
   - `OptiScalerInstaller.RepairDetails` mirrors Repair's rules. The "game update" guess is at least three
     non-OptiScaler files in the folder written within 2 minutes. `GameAnalyzer.RefreshQuick` re-runs `Verify`, so
     "Needs repair" is never stale.
