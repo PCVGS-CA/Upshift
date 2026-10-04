@@ -50,6 +50,7 @@ public sealed partial class MainWindow : Window
 
     private void ShowAppUpdate()
     {
+        AppUpdateBadge.Visibility = Services.AppUpdates.NewerExists ? Visibility.Visible : Visibility.Collapsed;
         var state = Services.AppUpdates.State;
         if (state is not (Services.AppUpdateState.Available or Services.AppUpdateState.Downloading))
         {
@@ -82,11 +83,12 @@ public sealed partial class MainWindow : Window
         {
             "updates" => typeof(UpdatesPage),
             "settings" => typeof(SettingsPage),
+            "about" => typeof(AboutPage),
             _ => typeof(LibraryPage)
         });
     }
 
-    /// <summary>Selects a page in the navigation ("library", "updates" or "settings").</summary>
+    /// <summary>Selects a page in the navigation ("library", "updates", "settings" or "about").</summary>
     public void ShowPage(string tag)
     {
         if (Nav.MenuItems.OfType<NavigationViewItem>().FirstOrDefault(i => (string)i.Tag == tag) is { } item) Nav.SelectedItem = item;

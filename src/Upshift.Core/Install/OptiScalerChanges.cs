@@ -65,8 +65,11 @@ public static partial class OptiScalerInstaller
                 $"OptiScaler's own copy waits in {Path.GetDirectoryName(over.Backup)} and comes back when the option is turned off or OptiScaler is uninstalled."));
 
         foreach (var change in manifest.IniChanges)
-            list.Add(new(change.ChangedUtc, $"OptiScaler.ini: [{change.Section}] {change.Key} = {change.Current}",
-                $"OptiScaler's default is {change.Original ?? "not set"}"));
+            list.Add(change.Key.Equals("FramerateLimit", StringComparison.OrdinalIgnoreCase)
+                ? new(change.ChangedUtc, $"Frame cap set to {change.Current} fps",
+                    $"OptiScaler.ini: [Framerate] FramerateLimit = {change.Current}. OptiScaler's default is {change.Original ?? "not set"} (off).")
+                : new(change.ChangedUtc, $"OptiScaler.ini: [{change.Section}] {change.Key} = {change.Current}",
+                    $"OptiScaler's default is {change.Original ?? "not set"}"));
 
         if (manifest.LastRepair is { Fixed.Count: > 0 } repair)
             list.Add(new(repair.RepairedUtc, $"Repaired {repair.Fixed.Count} file(s)", Shorten(repair.Fixed)));

@@ -140,4 +140,7 @@ public sealed class RecommendationViewModel
     public string InGameInput { get; }
     public bool HasInGameInput => InGameInput.Length > 0;
     public string? ChoiceId { get; }
+
+    /// <summary>Reason, frame generation and in-game lines as one text, for "first three lines · Show all".</summary>
+    public string Notes => string.Join("\n", new[] { Reason, FrameGen, InGameInput }.Where(t => t.Length > 0));
 }

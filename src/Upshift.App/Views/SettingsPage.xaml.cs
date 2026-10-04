@@ -28,15 +28,10 @@ public sealed partial class SettingsPage : Page
                 : "Using the built-in catalog (the online one isn't newer or couldn't be reached).");
         BuildUserFileRows();
 
-        AboutLogo.Source = new Microsoft.UI.Xaml.Media.Imaging.SvgImageSource(
-            new Uri(Path.Combine(AppInfo.AssetsDir, "Upshift.svg")));
-        AboutVersionText.Text = $"Version {AppInfo.Version}";
-        ReleasesLink.NavigateUri = new Uri(AppInfo.RepoUrl + "/releases");
         BuildHiddenRows();
+        Helpers.Sections.Bind(HiddenExpander, "settings.hiddenGames");
+        Helpers.AutoScroll.Attach(PageScroller);
         BuildDeveloperOptions();
-        ShowAppUpdate();
-        AppUpdates.Changed += AppUpdates_Changed;
-        Unloaded += (_, _) => AppUpdates.Changed -= AppUpdates_Changed;
     }
 
     // ---------------- Hidden games ----------------
@@ -72,25 +67,6 @@ public sealed partial class SettingsPage : Page
             HiddenRows.Children.Add(row);
         }
     }
-
-    // ---------------- App updates (About) ----------------
-
-    private void AppUpdates_Changed() => DispatcherQueue.TryEnqueue(ShowAppUpdate);
-
-    private void ShowAppUpdate()
-    {
-        var state = AppUpdates.State;
-        AppUpdateText.Text = AppUpdates.Message;
-        AppUpdateText.Visibility = AppUpdates.Message.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-        CheckAppUpdateButton.IsEnabled = state is not (AppUpdateState.Checking or AppUpdateState.Downloading);
-        RestartToUpdateButton.Visibility = state is AppUpdateState.Available or AppUpdateState.Downloading ? Visibility.Visible : Visibility.Collapsed;
-        RestartToUpdateButton.IsEnabled = state == AppUpdateState.Available;
-        ReleasesLink.Visibility = state == AppUpdateState.NotInstalled ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    private async void CheckAppUpdate_Click(object sender, RoutedEventArgs e) => await AppUpdates.CheckAsync();
-
-    private async void RestartToUpdate_Click(object sender, RoutedEventArgs e) => await AppUpdates.DownloadAndRestartAsync();
 
     // ---------------- Optional files you supply ----------------
 

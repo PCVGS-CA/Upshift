@@ -6,7 +6,7 @@
     xmlns:hw="using:Upshift.Core.Hardware"
     Background="Transparent">
 
-    <ScrollViewer>
+    <ScrollViewer x:Name="PageScroller">
         <StackPanel Padding="40,28,40,40" Spacing="20" MaxWidth="900" HorizontalAlignment="Left">
             <TextBlock Text="Settings" FontSize="26" FontWeight="SemiBold" />
 
@@ -40,7 +40,7 @@
                 <TextBlock Text="Updates" FontWeight="SemiBold" />
                 <ToggleSwitch x:Name="AutoCheckSwitch" Header="Check for updates automatically" />
                 <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
-                           Text="At start-up, Upshift checks GitHub for a newer version of itself and, at most every 6 hours, reads each component's release list. Nothing is installed into games unless you choose to update them, and Upshift only updates itself when you choose Restart to update." />
+                           Text="At start-up, Upshift checks GitHub for a newer version of itself and, at most every 6 hours, reads each component's release list. Nothing is installed into games unless you choose to update them, and Upshift only updates itself when you press Update on its row at the top of the Updates page (or Restart to update)." />
                 <TextBlock Text="Catalog address (catalogUrl)" Margin="0,6,0,0" />
                 <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
                            Text="Upshift reads its list of downloads, DLSS names and advice from its online catalog on GitHub, so fixes arrive without an app update. A newer, valid catalog is used from the next start; when it can't be reached, the copy built into the app is used. Leave this empty for Upshift's catalog, or enter another address." />
@@ -97,40 +97,6 @@
                 </Expander>
             </StackPanel>
 
-            <StackPanel Spacing="8">
-                <TextBlock Text="About" FontWeight="SemiBold" />
-                <Border CornerRadius="8" Padding="16,14" Background="{StaticResource CardSurfaceBrush}"
-                        BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1">
-                    <Grid ColumnSpacing="16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <!-- Source set in code from Assets\Upshift.svg next to the exe. -->
-                        <Image x:Name="AboutLogo" Width="56" Height="56" VerticalAlignment="Top" />
-                        <StackPanel Grid.Column="1" Spacing="4">
-                            <TextBlock Text="Upshift" FontSize="20" FontWeight="SemiBold" />
-                            <TextBlock x:Name="AboutVersionText" FontSize="12" Foreground="{StaticResource SubtleTextBrush}" />
-                            <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
-                                       Text="Upshift is a free, unofficial tool. It isn't made by or affiliated with the OptiScaler team, NVIDIA, AMD or Intel. Everything it installs is downloaded from each project's official GitHub page." />
-                            <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,10,0,0">
-                                <Button x:Name="CheckAppUpdateButton" Content="Check for app updates" Click="CheckAppUpdate_Click" />
-                                <Button x:Name="RestartToUpdateButton" Content="Restart to update" Visibility="Collapsed"
-                                        Style="{StaticResource AccentButtonStyle}" Click="RestartToUpdate_Click" />
-                                <HyperlinkButton x:Name="ReleasesLink" Content="Releases on GitHub" Visibility="Collapsed" />
-                            </StackPanel>
-                            <TextBlock x:Name="AppUpdateText" FontSize="12" Foreground="{StaticResource SubtleTextBrush}"
-                                       TextWrapping="Wrap" />
-                            <!-- License, disclaimer and author, at the bottom of About -->
-                            <TextBlock FontSize="11" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap" Margin="0,12,0,0"
-                                       Text="Free and open source under the MIT License." />
-                            <TextBlock FontSize="11" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap">
-                                <Run Text="Upshift is provided as-is, without warranty. Changing game files is at your own risk. Never use it with online or anti-cheat games. Made by PCVGS, " /><Hyperlink NavigateUri="https://pcvgs.com" Foreground="{StaticResource SubtleTextBrush}">pcvgs.com</Hyperlink>
-                            </TextBlock>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-            </StackPanel>
         </StackPanel>
     </ScrollViewer>
 </Page>

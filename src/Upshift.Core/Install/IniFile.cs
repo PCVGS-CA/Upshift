@@ -72,8 +72,12 @@ public sealed class IniFile
         var index = FindKey(section, key);
         if (index >= 0)
         {
+            // Keeps the spacing after "=" ("Key = auto" stays "Key = 138.0"), so putting a value back restores the
+            // line exactly.
             var eq = _lines[index].IndexOf('=');
-            _lines[index] = _lines[index][..(eq + 1)] + value;
+            var rest = _lines[index][(eq + 1)..];
+            var gap = rest[..(rest.Length - rest.TrimStart(' ', '\t').Length)];
+            _lines[index] = _lines[index][..(eq + 1)] + gap + value;
             return;
         }
 

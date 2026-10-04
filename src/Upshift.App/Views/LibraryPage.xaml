@@ -264,7 +264,7 @@
                                Foreground="{StaticResource SubtleTextBrush}" />
                 </StackPanel>
 
-                <ScrollViewer Visibility="{x:Bind ViewModel.HasSelection, Mode=OneWay}">
+                <ScrollViewer x:Name="DetailsScroller" Visibility="{x:Bind ViewModel.HasSelection, Mode=OneWay}">
                     <StackPanel Padding="32,28,32,32" Spacing="20" MaxWidth="820" HorizontalAlignment="Left">
 
                         <StackPanel Spacing="6">
@@ -386,12 +386,11 @@
                                     <FontIcon Glyph="&#xE734;" FontSize="14" Foreground="{StaticResource UpshiftAccentBrush}" VerticalAlignment="Center" />
                                     <TextBlock Text="{x:Bind ViewModel.Selected.Recommendation.Upscaler, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap" />
                                 </StackPanel>
-                                <TextBlock Text="{x:Bind ViewModel.Selected.Recommendation.Reason, Mode=OneWay}" FontSize="12"
-                                           Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap" Margin="22,0,0,0" />
-                                <TextBlock Text="{x:Bind ViewModel.Selected.Recommendation.FrameGen, Mode=OneWay}" FontSize="12" TextWrapping="Wrap"
-                                           Margin="22,2,0,0" Visibility="{x:Bind ViewModel.Selected.Recommendation.HasFrameGen, Mode=OneWay}" />
-                                <TextBlock Text="{x:Bind ViewModel.Selected.Recommendation.InGameInput, Mode=OneWay}" FontSize="12" TextWrapping="Wrap"
-                                           Margin="22,2,0,4" Visibility="{x:Bind ViewModel.Selected.Recommendation.HasInGameInput, Mode=OneWay}" />
+                                <!-- The notes: the first three lines, then "Show all" (remembered across restarts) -->
+                                <TextBlock x:Name="RecommendationNotes" Text="{x:Bind ViewModel.Selected.Recommendation.Notes, Mode=OneWay}" FontSize="12"
+                                           TextWrapping="Wrap" TextTrimming="CharacterEllipsis" Margin="22,0,0,0" IsTextTrimmedChanged="RecommendationNotes_TrimmedChanged" />
+                                <HyperlinkButton x:Name="RecommendationShowAll" Content="Show all" FontSize="12" Padding="0" Margin="22,2,0,4"
+                                                 Visibility="Collapsed" Click="RecommendationShowAll_Click" />
                             </StackPanel>
                             <Border CornerRadius="8" Background="{StaticResource CardSurfaceBrush}"
                                     BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1"
@@ -406,7 +405,7 @@
                                 <Hyperlink NavigateUri="{x:Bind ViewModel.Selected.Upscalers.PageUri, Mode=OneWay}"
                                            Foreground="{StaticResource SubtleTextBrush}">Some details from PCGamingWiki</Hyperlink><Run Text="{x:Bind ViewModel.Selected.Upscalers.FooterSuffix, Mode=OneWay}" />
                             </TextBlock>
-                            <Expander Header="Show files" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                            <Expander x:Name="FilesExpander" Header="Show files" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                                       IsExpanded="False"
                                       Visibility="{x:Bind ViewModel.Selected.Upscalers.HasFiles, Mode=OneWay}">
                                 <ItemsControl ItemsSource="{x:Bind ViewModel.Selected.Upscalers.Files, Mode=OneWay}">
@@ -422,7 +421,7 @@
 
                         <!-- ================= Upscaler files: newer DLSS / FSR / XeSS files for the ones the game ships ================= -->
                         <!-- Collapsed by default: the DLSS bar and the Updates page checklist are the main way to update. -->
-                        <Expander Visibility="{x:Bind ViewModel.Selected.HasUpscalerFiles, Mode=OneWay}" IsExpanded="False"
+                        <Expander x:Name="UpscalerFilesExpander" Visibility="{x:Bind ViewModel.Selected.HasUpscalerFiles, Mode=OneWay}" IsExpanded="False"
                                   HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                                   AutomationProperties.Name="Upscaler files (advanced)">
                             <Expander.Header>
@@ -499,8 +498,12 @@
                                 <InfoBar IsOpen="{x:Bind ViewModel.Selected.NeedsRepair, Mode=OneWay}" IsClosable="False" Severity="Warning"
                                          Title="Needs repair" Message="{x:Bind ViewModel.Selected.RepairText, Mode=OneWay}">
                                     <InfoBar.ActionButton>
-                                        <Button Content="Repair" Click="Repair_Click" IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}" />
+                                        <Button Content="Repair" Click="Repair_Click" IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
+                                                ToolTipService.ToolTip="{x:Bind ViewModel.BusyReason, Mode=OneWay}" />
                                     </InfoBar.ActionButton>
+                                    <!-- While another task runs, say why Repair is off -->
+                                    <TextBlock Text="{x:Bind ViewModel.BusyReason, Mode=OneWay}" FontSize="12" Margin="0,0,0,8"
+                                               Visibility="{x:Bind ViewModel.HasBusyReason, Mode=OneWay}" />
                                 </InfoBar>
                                 <StackPanel Orientation="Horizontal" Spacing="10">
                                     <Button Content="{x:Bind ViewModel.Selected.UpdateButtonText, Mode=OneWay}" Style="{StaticResource AccentButtonStyle}"
@@ -521,8 +524,17 @@
                         <views:Dlss5View x:Name="Dlss5Panel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
 
                         <!-- Everything Upshift has changed in this game folder right now, with dates -->
-                        <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.Selected.HasChanges, Mode=OneWay}">
-                            <TextBlock Text="Changes Upshift made to this game" FontWeight="SemiBold" />
+                        <!-- Closed by default; the header gives the count and the latest date -->
+                        <Expander x:Name="ChangesExpander" Visibility="{x:Bind ViewModel.Selected.HasChanges, Mode=OneWay}" IsExpanded="False"
+                                  HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                  AutomationProperties.Name="Changes Upshift made to this game">
+                            <Expander.Header>
+                                <StackPanel Spacing="2" Padding="0,8">
+                                    <TextBlock Text="Changes Upshift made to this game" FontWeight="SemiBold" />
+                                    <TextBlock Text="{x:Bind ViewModel.Selected.ChangesSummary, Mode=OneWay}" FontSize="12"
+                                               Foreground="{StaticResource SubtleTextBrush}" />
+                                </StackPanel>
+                            </Expander.Header>
                             <Border CornerRadius="8" Background="{StaticResource CardSurfaceBrush}"
                                     BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1">
                                 <ItemsControl ItemsSource="{x:Bind ViewModel.Selected.Changes, Mode=OneWay}">
@@ -544,7 +556,7 @@
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
                             </Border>
-                        </StackPanel>
+                        </Expander>
 
                         <StackPanel Orientation="Horizontal" Spacing="10">
                             <Button Content="Install OptiScaler" Style="{StaticResource AccentButtonStyle}" Click="Install_Click"

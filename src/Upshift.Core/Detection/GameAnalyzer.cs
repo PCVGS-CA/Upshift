@@ -157,7 +157,11 @@ public static class GameAnalyzer
     {
         Install.UpscalerFiles.RefreshVersions(info);
         if (info.TargetDir is { } target && Directory.Exists(target))
+        {
             info.ExistingMods = ModDetector.Detect(target);
+            // "Needs repair" from the files as they are now, not the last scan (a repair or game update since changes it).
+            info.RepairProblems = Install.OptiScalerInstaller.Verify(target);
+        }
         if (Directory.Exists(info.InstallDir))
         {
             info.UpscalerFilesRestoredByGame = Install.UpscalerFiles.RestoredByGame(info.InstallDir);

@@ -5,7 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Background="Transparent">
 
-    <ScrollViewer>
+    <ScrollViewer x:Name="PageScroller">
         <StackPanel Padding="40,28,40,40" Spacing="12" MaxWidth="1000" HorizontalAlignment="Left">
             <Grid ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
@@ -32,6 +32,12 @@
 
             <InfoBar x:Name="RateLimitBar" IsClosable="False" Severity="Warning" Title="Can't check right now" Visibility="Collapsed" />
 
+            <!-- Upshift itself, in the same style as the component rows -->
+            <Border CornerRadius="8" Padding="16,12" Background="{StaticResource CardSurfaceBrush}"
+                    BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1">
+                <StackPanel x:Name="AppRowPanel" />
+            </Border>
+
             <!-- Games with an OptiScaler from this app that a newer release can replace -->
             <Border x:Name="GamesBorder" CornerRadius="8" Padding="16,12" Background="{StaticResource CardSurfaceBrush}"
                     BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1">
@@ -47,7 +53,7 @@
             <TextBlock Text="Used now" FontWeight="SemiBold" Margin="0,8,0,0" />
             <StackPanel x:Name="UsedNowPanel" Spacing="6" />
 
-            <Expander x:Name="LaterExpander" Header="Upscaler files for games (DLSS, FSR, XeSS)" IsExpanded="False" Margin="0,8,0,0"
+            <Expander x:Name="LaterExpander" Header="Game upscaler files (DLSS, FSR, XeSS)" IsExpanded="False" Margin="0,8,0,0"
                       HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                 <StackPanel x:Name="LaterPanel" Spacing="6" />
             </Expander>

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-09-27",
+  "updated": "2026-10-04",
   "notes": "Upshift's built-in catalog. Upshift will later download a newer version of this file from its GitHub repo, so new forks and GPU support can be added without releasing a new version. The userAgent values below are fallbacks; the app sends Upshift/<its version>.",
 
   "components": [
@@ -353,6 +353,19 @@
         { "vendors": [ "Nvidia" ], "generations": [ "Ada Lovelace", "Blackwell" ], "text": "Your card has DLSS frame generation: if the game offers it, \"Game's own\" is usually best." }
       ],
       "footer": "Frame generation makes motion smoother but adds input lag. It works best when the game already runs at 60 fps or more."
+    },
+    "frameCap": {
+      "title": "Which frame cap should I pick?",
+      "rows": [
+        { "id": "off", "text": "No cap from OptiScaler: the game, the driver or V-Sync decide the frame rate." },
+        { "id": "suggested", "text": "Just under your display's refresh rate, worked out the way OptiScaler's own VRR calculator does it (one frame time plus 0.3 ms). Keeps a G-Sync or FreeSync display in its variable refresh range, with less input lag than V-Sync alone.", "bestFor": "Most players with a VRR display" },
+        { "id": "custom", "text": "Any number you type, e.g. 60 for steadier frame pacing, or to save power and heat.", "bestFor": "Steady pacing, laptops, quieter fans" }
+      ],
+      "cardNotes": [
+        { "vendors": [ "Amd", "Intel" ], "text": "OptiScaler's cap runs through Reflex. On your card, OptiScaler loads the fakenvapi.dll that comes with it to stand in for Reflex, so the game still has to support Reflex." },
+        { "vendors": [ "Nvidia" ], "text": "OptiScaler's cap runs through NVIDIA Reflex, so it only works in games that support Reflex. If you also use OptiScaler's frame generation, turn Reflex on in the game, or the cap stays off." }
+      ],
+      "footer": "With frame generation on, the number is the final frame rate you see, generated frames included: OptiScaler halves it for the real frames itself. It only works in games that support Reflex, and takes effect after restarting the game."
     }
   }
 }

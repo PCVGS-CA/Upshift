@@ -14,7 +14,8 @@ namespace Upshift.App.Views;
 
 /// <summary>
 /// Games that can be updated, then one compact row per component: "Used now" (OptiScaler and what ships inside it)
-/// and, collapsed, "Upscaler files for games": the NVIDIA, AMD and Intel DLLs that replace the ones games ship. Each row has its versions and one main button; channel, "Keep updated",
+/// and, collapsed, "Game upscaler files": the NVIDIA, AMD and Intel DLLs that replace the ones games ship. Upshift
+/// itself has the first row. Each row has its versions and one main button; channel, "Keep updated",
 /// the version picker, "Remove downloaded copy" and "What's new" sit in the row's "More options". Built in code.
 /// </summary>
 public sealed partial class UpdatesPage : Page
@@ -27,7 +28,6 @@ public sealed partial class UpdatesPage : Page
         public string? Picked { get; set; }
         public string? Message { get; set; }
         public bool Busy { get; set; }
-        public bool MoreOpen { get; set; }
 
         // The row's controls from the last time it was built. A download writes its progress and busy state straight
         // into these, so the row (its expanded section, dropdowns and focus) is never rebuilt while it runs.
@@ -65,7 +65,6 @@ public sealed partial class UpdatesPage : Page
 
     // Kept for the session, so coming back to the page shows it as it was left.
     private static readonly Dictionary<string, RowState> Rows = new();
-    private static bool _laterOpen;
 
     private readonly HashSet<string> _unchecked = new();
     private string? _gamesMessage;
@@ -76,15 +75,14 @@ public sealed partial class UpdatesPage : Page
     public UpdatesPage()
     {
         InitializeComponent();
-        LaterExpander.IsExpanded = _laterOpen;
-        LaterExpander.Expanding += (_, _) => _laterOpen = true;
-        LaterExpander.Collapsed += (_, _) => _laterOpen = false;
+        Helpers.Sections.Bind(LaterExpander, "updates.gameUpscalerFiles");
         Rebuild();
     }
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
+        AppUpdates.Changed += OnAppUpdateChanged;
         AppServices.Updates.Changed += OnUpdatesChanged;
         GameUpdates.LibraryChanged += OnGameChanged;
     }
@@ -92,11 +90,68 @@ public sealed partial class UpdatesPage : Page
     protected override void OnNavigatedFrom(NavigationEventArgs e)
     {
         base.OnNavigatedFrom(e);
+        AppUpdates.Changed -= OnAppUpdateChanged;
         AppServices.Updates.Changed -= OnUpdatesChanged;
         GameUpdates.LibraryChanged -= OnGameChanged;
     }
 
     private void OnGameChanged(string gameId) => OnUpdatesChanged();
+
+    private void OnAppUpdateChanged() => _dispatcher.TryEnqueue(BuildAppRow);
+
+    /// <summary>
+    /// "Upshift · On this PC: v1.0.2 · Latest: v1.0.3 · Update to v1.0.3" (or "Up to date"). Update downloads the new
+    /// version, then restarts Upshift. A copy that wasn't installed with the installer links to GitHub instead.
+    /// </summary>
+    private void BuildAppRow()
+    {
+        AppRowPanel.Children.Clear();
+        var state = AppUpdates.State;
+        var latest = AppUpdates.LatestVersion;
+        FrameworkElement action;
+        if (state == AppUpdateState.NotInstalled)
+        {
+            action = new HyperlinkButton { Content = "Releases on GitHub", NavigateUri = new Uri(AppInfo.RepoUrl + "/releases"), HorizontalAlignment = HorizontalAlignment.Right };
+        }
+        else
+        {
+            var button = new Button { MinWidth = 150, HorizontalAlignment = HorizontalAlignment.Right };
+            switch (state)
+            {
+                case AppUpdateState.Available:
+                    button.Content = $"Update to v{AppUpdates.AvailableVersion}";
+                    button.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
+                    button.Click += async (_, _) => await AppUpdates.DownloadAndRestartAsync();
+                    break;
+                case AppUpdateState.Downloading:
+                    button.Content = "Downloading…";
+                    button.IsEnabled = false;
+                    break;
+                case AppUpdateState.Checking:
+                    button.Content = "Checking…";
+                    button.IsEnabled = false;
+                    break;
+                case AppUpdateState.UpToDate:
+                    button.Content = "Up to date";
+                    button.IsEnabled = false;
+                    break;
+                default:
+                    button.Content = "Not checked yet";
+                    button.IsEnabled = false;
+                    break;
+            }
+            AutomationName(button, "Upshift update");
+            action = button;
+        }
+        var grid = RowGrid(
+            NameCell("Upshift"),
+            Cell($"On this PC: v{AppInfo.Version}"),
+            Cell($"Latest: {(latest is null ? "not checked yet" : "v" + latest)}{(latest is not null && AppUpdates.IsNewer(AppInfo.Version, latest) ? " (yours is newer)" : "")}"),
+            action);
+        AppRowPanel.Children.Add(grid);
+        if (AppUpdates.Message.Length > 0)
+            AppRowPanel.Children.Add(new TextBlock { Text = AppUpdates.Message, FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0), Foreground = Brush("SubtleTextBrush") });
+    }
 
     private void OnUpdatesChanged() => _dispatcher.TryEnqueue(() =>
     {
@@ -112,6 +167,7 @@ public sealed partial class UpdatesPage : Page
     {
         var all = AppServices.Catalog.Components;
 
+        BuildAppRow();
         var candidates = GameUpdates.Candidates();
         var rows = ComponentRows();
         RefreshStatusLine(candidates);
@@ -423,12 +479,13 @@ public sealed partial class UpdatesPage : Page
             Header = new StackPanel { Children = { grid, state.Status } },
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            IsExpanded = state.MoreOpen,
+            IsExpanded = Helpers.Sections.IsOpen("updates.row." + primary.Id),
             Content = MoreOptions(primary, members, status, state)
         };
         AutomationName(expander, primary.Name);
-        expander.Expanding += (_, _) => state.MoreOpen = true;
-        expander.Collapsed += (_, _) => state.MoreOpen = false;
+        // Open or closed as it was last left, across restarts.
+        expander.Expanding += (_, _) => Helpers.Sections.Set("updates.row." + primary.Id, true);
+        expander.Collapsed += (_, _) => Helpers.Sections.Set("updates.row." + primary.Id, false);
         RefreshRowInPlace(primary, members, state);
         return expander;
     }
@@ -874,7 +931,10 @@ public sealed partial class UpdatesPage : Page
         CheckNowButton.IsEnabled = false;
         try
         {
+            // Upshift itself too (its row and the sidebar marker follow AppUpdates.Changed).
+            var app = Task.Run(AppUpdates.CheckAsync);
             await Task.Run(() => AppServices.Updates.CheckAsync(CancellationToken.None));
+            await app;
             await Task.Run(() => AppServices.Updates.DownloadKeptUpdatedAsync(CancellationToken.None));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }

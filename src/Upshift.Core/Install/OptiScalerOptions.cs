@@ -265,6 +265,29 @@ public static class OptiScalerOptions
     /// <summary>OptiScaler's on-screen FSR 4 watermark (Fsr4EnableWatermark). Off puts the original value back.</summary>
     public static List<IniSetting> WatermarkSettings(bool on) => new() { new("FSR", "Fsr4EnableWatermark", on ? "true" : null) };
 
+    // ---------------- Frame cap ----------------
+
+    /// <summary>
+    /// OptiScaler's own frame limiter, [Framerate] FramerateLimit (a float, 0 = off). It works through Reflex: the game has
+    /// to send Reflex markers (support Reflex); on AMD and Intel cards OptiScaler loads the fakenvapi.dll from its package
+    /// to stand in for Reflex. Null puts back what the file had (off).
+    /// </summary>
+    public static List<IniSetting> FrameCapSettings(double? fps) => new()
+    {
+        new("Framerate", "FramerateLimit", fps is > 0 ? fps.Value.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) : null)
+    };
+
+    /// <summary>The cap OptiScaler.ini has now (null when off or not set).</summary>
+    public static double? CurrentFrameCap(IniFile ini) =>
+        double.TryParse(ini.Get("Framerate", "FramerateLimit"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v) && v > 0 ? v : null;
+
+    /// <summary>
+    /// The cap OptiScaler's "VRR Frame Cap Calculator" (in its in-game menu, 0.9.4) suggests for a refresh rate: one
+    /// frame time plus a 0.3 ms margin, to one decimal. 144 Hz gives 138.0, 60 Hz 58.9, 165 Hz 157.2, 240 Hz 223.9.
+    /// </summary>
+    public static double SuggestedFrameCap(int refreshHz) =>
+        Math.Round(10000.0 / (1000.0 / refreshHz + 0.3)) / 10.0;
+
     /// <summary>The kind recorded for the modified FSR 4.1.1b file in the install manifest.</summary>
     public const string Fsr411bKind = "fsr4-4.1.1b";
 

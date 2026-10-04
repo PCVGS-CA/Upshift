@@ -13,6 +13,33 @@ public sealed partial class LibraryPage : Page
 {
     public LibraryViewModel ViewModel { get; } = new();
 
+    private const string NotesKey = "game.notes";
+
+    /// <summary>The suggestion notes show three lines until "Show all" is pressed; the choice is remembered.</summary>
+    private void ApplyNotesState()
+    {
+        RecommendationNotes.MaxLines = Helpers.Sections.IsOpen(NotesKey) ? 0 : 3;
+        UpdateShowAll();
+    }
+
+    /// <summary>"Show all" when lines are hidden, "Show less" when more than three are shown, nothing otherwise.</summary>
+    private void UpdateShowAll()
+    {
+        var open = Helpers.Sections.IsOpen(NotesKey);
+        var threeLines = 3 * RecommendationNotes.FontSize * 1.4;
+        var more = open ? RecommendationNotes.ActualHeight > threeLines + 1 : RecommendationNotes.IsTextTrimmed;
+        RecommendationShowAll.Content = open ? "Show less" : "Show all";
+        RecommendationShowAll.Visibility = more ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void RecommendationNotes_TrimmedChanged(TextBlock sender, IsTextTrimmedChangedEventArgs args) => UpdateShowAll();
+
+    private void RecommendationShowAll_Click(object sender, RoutedEventArgs e)
+    {
+        Helpers.Sections.Set(NotesKey, !Helpers.Sections.IsOpen(NotesKey));
+        ApplyNotesState();
+    }
+
     public LibraryPage()
     {
         InitializeComponent();
@@ -26,6 +53,17 @@ public sealed partial class LibraryPage : Page
         OptionsPanel.UpdateDlss = UpdateDlssAsync;
         Dlss5Panel.Library = ViewModel;
         Dlss5Panel.ShowDialog = ShowDialogAsync;
+
+        // Collapsible sections open as they were last left, for every game and across restarts.
+        Helpers.Sections.Bind(FilesExpander, "game.files");
+        Helpers.Sections.Bind(UpscalerFilesExpander, "game.upscalerFiles");
+        Helpers.Sections.Bind(ChangesExpander, "game.changes");
+        ApplyNotesState();
+        RecommendationNotes.SizeChanged += (_, _) => UpdateShowAll();
+
+        // Middle-click auto-scroll in the game grid and the game panel.
+        Helpers.AutoScroll.Attach(GamesGrid);
+        Helpers.AutoScroll.Attach(DetailsScroller);
 
         // Keep the grid's highlight in step when the view model changes the selection (after a rescan, say).
         ViewModel.PropertyChanged += (_, e) =>

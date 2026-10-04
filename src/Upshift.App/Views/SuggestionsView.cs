@@ -68,7 +68,21 @@ public sealed class SuggestionsView : UserControl
         body.Children.Add(SourceLine(card, s, suggestionsOff));
 
         if (!suggestionsOff)
-            foreach (var item in s.Items) body.Children.Add(ItemRow(card, s, item));
+        {
+            // The first three notes, then "Show all (n)"; whether it was left open is remembered.
+            var all = Helpers.Sections.IsOpen("game.suggestions");
+            foreach (var item in all ? s.Items : s.Items.Take(3)) body.Children.Add(ItemRow(card, s, item));
+            if (s.Items.Count > 3)
+            {
+                var toggle = new HyperlinkButton { Content = all ? "Show less" : $"Show all ({s.Items.Count})", Padding = new Thickness(0), FontSize = 12 };
+                toggle.Click += (_, _) =>
+                {
+                    Helpers.Sections.Set("game.suggestions", !all);
+                    Build();
+                };
+                body.Children.Add(toggle);
+            }
+        }
 
         Content = panel;
     }

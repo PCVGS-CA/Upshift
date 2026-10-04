@@ -63,6 +63,7 @@ public sealed class Guides
     public Guide DlssModel { get; set; } = new();
     public Guide Upscaler { get; set; } = new();
     public Guide FrameGen { get; set; } = new();
+    public Guide FrameCap { get; set; } = new();
 }
 
 public sealed class Guide

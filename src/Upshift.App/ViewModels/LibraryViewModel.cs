@@ -44,11 +44,37 @@ public sealed partial class LibraryViewModel : ObservableObject
     private string searchText = string.Empty;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasNoGames), nameof(IsIdle))]
+    [NotifyPropertyChangedFor(nameof(HasNoGames), nameof(IsIdle), nameof(BusyReason), nameof(HasBusyReason))]
     private bool isBusy;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BusyReason))]
     private string statusText = string.Empty;
+
+    /// <summary>
+    /// Why buttons such as Repair are off right now: "Available when unpacking finishes." (empty when nothing runs).
+    /// Worked out from the running task's own progress line.
+    /// </summary>
+    public string BusyReason => !IsBusy ? "" : $"Available when {TaskName(StatusText)} finishes.";
+    public bool HasBusyReason => IsBusy;
+
+    private static string TaskName(string status)
+    {
+        bool Has(string word) => status.Contains(word, StringComparison.OrdinalIgnoreCase);
+        if (Has("unpack") || Has("extract")) return "unpacking";
+        if (Has("download")) return "the download";
+        if (Has("verif") || Has("checking the download")) return "checking the download";
+        if (Has("uninstall")) return "the uninstall";
+        if (Has("install")) return "the install";
+        if (Has("repair")) return "the repair";
+        if (Has("undo")) return "the undo";
+        if (Has("switch")) return "the switch";
+        if (Has("updat")) return "the update";
+        if (Has("restor")) return "the restore";
+        if (Has("saving")) return "saving the settings";
+        if (Has("scan") || Has("looking") || Has("checking the folder")) return "the scan";
+        return "the current task";
+    }
 
     [ObservableProperty]
     private string searchPlaceholder = "Search games";

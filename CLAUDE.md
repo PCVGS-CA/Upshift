@@ -448,6 +448,28 @@ errors and no warnings.
   - **Tested:** scratch harness (`fsr411b_test.cs.txt` and the swap test in `arttest`), both all passed, on
     throwaway folders with v0.9.2 / v0.9.4 / DLSSNR from the component store. Game folders were not changed.
 
+- **After 1.0.2 (2026-10-04), not released:**
+  - `Views/AboutPage` (sidebar "about"); About removed from Settings. The Buy Me a Coffee link is only there.
+  - `AppUpdates`: `LatestVersion` (Velopack when installed, otherwise GitHub's release list), `NewerExists` for the
+    sidebar `InfoBadge`. The Upshift row is built in `UpdatesPage.BuildAppRow`; "Check now" runs `AppUpdates.CheckAsync`.
+  - `Helpers/Sections`: open/closed per section key in `settings.json` (`OpenSections`).
+  - `Helpers/AutoScroll`: middle-click auto-scroll. A full-window transparent Popup takes clicks, Esc and the wheel;
+    the cursor is polled each tick (PointerMoved never reached the overlay).
+  - **Frame cap:** `[Framerate] FramerateLimit` (float, 0 = off). From OptiScaler 0.9.4's source (`Reflex_Hooks.cpp`,
+    `menu_common.cpp`):
+    - It works only with Reflex markers from the game; on AMD and Intel cards fakenvapi.dll (installed with the
+      package) stands in. With OptiScaler FG on, it's off unless Reflex is on in-game (or fakenvapi is in use).
+    - It's the final frame rate: OptiScaler halves it itself for OptiFG with FSR FG, and for DLSS FG through fakenvapi.
+    - VRR calculator: `round(10000 / (1000/Hz + 0.3)) / 10`, i.e. 144 → 138, 165 → 157.2.
+  - `OptiScalerInstaller.RepairDetails` mirrors Repair's rules. The "game update" guess is at least three
+    non-OptiScaler files in the folder written within 2 minutes. `GameAnalyzer.RefreshQuick` re-runs `Verify`, so
+    "Needs repair" is never stale.
+  - `IniFile.Set` keeps the whitespace after "=".
+  - Testing note: for a while the WinUI windows (old builds too) drew white and ignored input. Nothing in the logs,
+    and it came back by itself, so test again before blaming a change.
+  - The Witcher 3: frame cap Suggested → typed → Off. OptiScaler.ini is now `FramerateLimit =auto` instead of
+    `= auto` (before the spacing fix); the manifest hash matches the file.
+
 ## Next
 
 1. **DLSS 5 follow-ups:**

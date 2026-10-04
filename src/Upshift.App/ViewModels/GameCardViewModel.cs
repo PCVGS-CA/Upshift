@@ -146,7 +146,7 @@ public sealed partial class GameCardViewModel : ObservableObject
         UndoText = CanUndo ? $"Undo last update (back to {manifest!.LastUpdate!.FromVersion})" : "";
         // Found by the last scan: files of our install that are missing or were changed.
         NeedsRepair = IsInstalledByUs && !info.HasAntiCheat && info.RepairProblems.Count > 0;
-        RepairText = NeedsRepair ? string.Join(". ", info.RepairProblems) + "." : "";
+        RepairText = NeedsRepair ? RepairExplanation(info, manifest!) : "";
         IniPath = info.TargetDir is null ? "" : Path.Combine(info.TargetDir, "OptiScaler.ini");
         // OptiScaler is 64-bit only, so 32-bit games can't use it.
         CanInstall = !info.HasAntiCheat && info.TargetDir is not null && !IsInstalledByUs && info.Is64Bit != false;
@@ -164,10 +164,14 @@ public sealed partial class GameCardViewModel : ObservableObject
         var optiChanges = manifest is null || info.TargetDir is null
             ? new List<ChangeEntry>()
             : OptiScalerInstaller.Changes(info.TargetDir, manifest, Ui.VersionLabel);
-        Changes = optiChanges.Concat(Core.Install.UpscalerFiles.Changes(info.InstallDir, Ui.VersionLabel))
+        var changes = optiChanges.Concat(Core.Install.UpscalerFiles.Changes(info.InstallDir, Ui.VersionLabel))
             .OrderByDescending(c => c.Utc ?? DateTime.MinValue)
-            .Select(c => new ChangeViewModel(c))
             .ToList();
+        Changes = changes.Select(c => new ChangeViewModel(c)).ToList();
+        // "Changes Upshift made to this game · 7 changes, latest 3 Oct 2026"
+        var latestChange = changes.FirstOrDefault(c => c.Utc is not null)?.Utc;
+        ChangesSummary = changes.Count == 0 ? ""
+            : $"{changes.Count} {(changes.Count == 1 ? "change" : "changes")}" + (latestChange is { } t ? $", latest {t.ToLocalTime():d MMM yyyy}" : "");
 
         launchOptions = AppServices.LaunchOptions.Get(info.Id);
         (TakesLaunchOptions, LaunchOptionsNote) = Core.Launch.GameLauncher.LaunchOptionsSupport(info);
@@ -176,8 +180,29 @@ public sealed partial class GameCardViewModel : ObservableObject
             : launchProblem ?? "";
     }
 
+    /// <summary>
+    /// For each file: what it is, the version Upshift installed, the version there now and what Repair will do; then
+    /// whether it looks like a game update or file check put the game's own files back.
+    /// </summary>
+    private static string RepairExplanation(GameInfo info, InstallManifest manifest)
+    {
+        var release = AppServices.Components.TryGetCached(Services.GameUpdates.ComponentFor(manifest.ComponentId), manifest.Version ?? "")?.Folder;
+        var details = OptiScalerInstaller.RepairDetails(info.TargetDir!, release);
+        if (details.Count == 0) return string.Join(". ", info.RepairProblems) + ".";
+        var lines = details.Select(d =>
+        {
+            var installed = d.InstalledVersion is null ? "" : $" Upshift installed v{d.InstalledVersion};";
+            var now = d.Missing ? " it's missing now." : d.NowVersion is null ? " it has changed since." : $" it's v{d.NowVersion} now.";
+            return $"{d.Path}: {d.What}.{installed}{now} {d.Action}";
+        }).ToList();
+        if (details.FirstOrDefault(d => d.LooksLikeGameUpdate) is { } update)
+            lines.Add($"This looks like a game update or a file check putting the game's own files back: other game files in the same folder changed at the same time ({update.ChangedLocal:d MMM yyyy, HH:mm}).");
+        return string.Join("\n\n", lines);
+    }
+
     public List<ChangeViewModel> Changes { get; }
     public bool HasChanges => Changes.Count > 0;
+    public string ChangesSummary { get; } = "";
 
     // ---------------- Upscaler files ----------------
 

@@ -33,6 +33,9 @@ public sealed class AppSettings
     /// <summary>Per component (by catalog id): the chosen channel and whether to download new releases automatically.</summary>
     public Dictionary<string, ComponentPreference> Components { get; set; } = new();
 
+    /// <summary>Collapsible sections the user left open (true) or closed (false), by a fixed key such as "game.changes".</summary>
+    public Dictionary<string, bool> OpenSections { get; set; } = new();
+
     public ComponentPreference For(string componentId) =>
         Components.TryGetValue(componentId, out var p) ? p : Components[componentId] = new ComponentPreference();
 }

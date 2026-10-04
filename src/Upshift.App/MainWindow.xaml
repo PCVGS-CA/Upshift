@@ -25,7 +25,7 @@
                        FontSize="13" FontWeight="SemiBold" />
         </Grid>
 
-        <!-- Shown when the start-up check finds a newer Upshift (Settings > About has the same button). -->
+        <!-- Shown when the start-up check finds a newer Upshift (the Upshift row on the Updates page has the same button). -->
         <InfoBar x:Name="AppUpdateBar" Grid.Row="1" Margin="16,0,16,8" IsOpen="False" Severity="Informational"
                  AutomationProperties.Name="App update">
             <InfoBar.ActionButton>
@@ -49,14 +49,24 @@
                         <FontIcon Glyph="&#xE8F1;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Updates" Tag="updates">
+                <NavigationViewItem x:Name="UpdatesNavItem" Content="Updates" Tag="updates">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE895;" />
                     </NavigationViewItem.Icon>
+                    <!-- A dot while a newer Upshift is available -->
+                    <NavigationViewItem.InfoBadge>
+                        <InfoBadge x:Name="AppUpdateBadge" Visibility="Collapsed" Background="{StaticResource UpshiftAccentBrush}"
+                                   ToolTipService.ToolTip="A newer Upshift is available" />
+                    </NavigationViewItem.InfoBadge>
                 </NavigationViewItem>
                 <NavigationViewItem Content="Settings" Tag="settings">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE713;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="About" Tag="about">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE946;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>

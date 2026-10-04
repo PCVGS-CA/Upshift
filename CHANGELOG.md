@@ -2,6 +2,17 @@
 
 All notable changes to Upshift. Each release's section becomes its GitHub release notes, so the heading must be `## [x.y.z]` with the same version as `Directory.Build.props` (a date after it is fine).
 
+## [Unreleased]
+
+- **About** has its own place in the sidebar, under Settings, with the logo, version, licence and disclaimer. It has an optional Buy Me a Coffee button; Upshift never asks for donations anywhere else.
+- **Upshift's own update** is the first row on the Updates page ("On this PC", "Latest", Update or Up to date), and "Check now" checks it too. A dot on Updates in the sidebar shows when a newer Upshift is available.
+- **Game upscaler files:** the NVIDIA DLSS, AMD FidelityFX and Intel XeSS section on the Updates page has its final name.
+- **Frame cap:** a per-game setting in OptiScaler options (Off, a suggested cap for your display, or a number you type), using OptiScaler's own Reflex-based limiter ([Framerate] FramerateLimit). The suggestion is worked out the way OptiScaler's VRR calculator does it. It's listed in the game's change history.
+- **Game panel:** "Changes Upshift made to this game" is collapsible (closed by default) and its header gives the number of changes and the latest date. Suggestion notes show three lines, then "Show all". Every collapsible section stays open or closed as you left it, across restarts.
+- **Middle-click auto-scroll** in the Library, the game panel and Settings.
+- **Needs repair** explains each file: what it is, the version Upshift installed, the version there now and what Repair will do, and says when it looks like a game update put the game's own files back. It's worked out from the files as they are now, so it goes away after a repair. While another task runs, the Repair button says when it will be available.
+- **OptiScaler.ini** keeps the spacing around "=" when Upshift changes a value, so a setting put back restores the line exactly.
+
 ## [1.0.2]
 
 - **App icon in the Start menu and on the desktop:** the installer creates both shortcuts with Upshift's logo, and installing over 1.0.0 or 1.0.1 replaces old shortcuts that showed a blank page. Upshift also checks its shortcuts when it starts and fixes them if they point somewhere else. Release builds now fail if the icon is missing anywhere.

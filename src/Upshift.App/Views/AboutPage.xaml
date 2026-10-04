@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Upshift.App.Views.AboutPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="Transparent">
+
+    <ScrollViewer x:Name="PageScroller">
+        <StackPanel Padding="40,28,40,40" Spacing="20" MaxWidth="900" HorizontalAlignment="Left">
+            <TextBlock Text="About" FontSize="26" FontWeight="SemiBold" />
+
+            <Border CornerRadius="8" Padding="16,14" Background="{StaticResource CardSurfaceBrush}"
+                    BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1">
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <!-- Source set in code from Assets\Upshift.svg next to the exe. -->
+                    <Image x:Name="AboutLogo" Width="56" Height="56" VerticalAlignment="Top" />
+                    <StackPanel Grid.Column="1" Spacing="4">
+                        <TextBlock Text="Upshift" FontSize="20" FontWeight="SemiBold" />
+                        <TextBlock x:Name="AboutVersionText" FontSize="12" Foreground="{StaticResource SubtleTextBrush}" />
+                        <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
+                                   Text="Upshift is a free, unofficial tool. It isn't made by or affiliated with the OptiScaler team, NVIDIA, AMD or Intel. Everything it installs is downloaded from each project's official GitHub page." />
+                        <!-- License, disclaimer and author -->
+                        <TextBlock FontSize="11" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap" Margin="0,12,0,0"
+                                   Text="Free and open source under the MIT License." />
+                        <TextBlock FontSize="11" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap">
+                            <Run Text="Upshift is provided as-is, without warranty. Changing game files is at your own risk. Never use it with online or anti-cheat games. Made by PCVGS, " /><Hyperlink NavigateUri="https://pcvgs.com" Foreground="{StaticResource SubtleTextBrush}">pcvgs.com</Hyperlink>
+                        </TextBlock>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Support: shown only here. Upshift never asks for donations anywhere else. -->
+            <Border CornerRadius="8" Padding="16,14" Background="{StaticResource CardSurfaceBrush}"
+                    BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1">
+                <StackPanel Spacing="10">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Button Content="Buy Me a Coffee" Click="BuyMeACoffee_Click" VerticalAlignment="Top"
+                                ToolTipService.ToolTip="https://buymeacoffee.com/pcvgs" />
+                        <StackPanel Grid.Column="1" Spacing="4">
+                            <TextBlock TextWrapping="Wrap"
+                                       Text="This program is free forever. The coffee button is purely optional and unlocks nothing. It just keeps a hobo developer caffeinated and the AI bills paid." />
+                            <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
+                                       Text="Donations go to PCVGS, not to the OptiScaler team, NVIDIA, AMD or Intel." />
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock TextWrapping="Wrap">
+                        <Run Text="OptiScaler does the heavy lifting. If you want to support them too, visit the " /><Hyperlink NavigateUri="https://github.com/optiscaler/OptiScaler">OptiScaler GitHub page</Hyperlink>
+                    </TextBlock>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

@@ -100,6 +100,9 @@ public sealed class OptiScalerOptionsView : UserControl
         body.Children.Add(Group(WithGuide(fgBox, catalog.Guides.FrameGen, modes.Select(m => (m.Id, m.Label)), gpu), fgNote,
             card.Suggestions?.HiddenFrameGen.Count > 0 ? Subtle("Some modes are hidden because the OptiScaler wiki says they don't work for this game.") : null));
 
+        // ---- Frame cap (OptiScaler's Reflex-based limiter) ----
+        body.Children.Add(FrameCapSection(card, ini, gpu));
+
         // ---- DLSS model (NVIDIA RTX only) ----
         if (OptiScalerOptions.IsNvidiaRtx(gpu))
             body.Children.Add(DlssSection(card, ini, gpu!));
@@ -346,6 +349,57 @@ public sealed class OptiScalerOptionsView : UserControl
             Subtle("With it on, pick FSR 4 as the upscaler above."),
             watermark,
             Subtle("Takes effect after restarting the game. The watermark shows whether FSR 4 or the FSR 3 fallback is really running."));
+    }
+
+    /// <summary>
+    /// "Frame cap": Off, the suggested cap for the main display (OptiScaler's VRR calculator: one frame time plus
+    /// 0.3 ms) or a number typed in. Writes [Framerate] FramerateLimit, which OptiScaler applies through Reflex.
+    /// </summary>
+    private FrameworkElement FrameCapSection(GameCardViewModel card, IniFile ini, GpuInfo? gpu)
+    {
+        var current = OptiScalerOptions.CurrentFrameCap(ini);
+        var refresh = Helpers.Display.MainRefreshRate();
+        double? suggested = refresh is { } hz ? OptiScalerOptions.SuggestedFrameCap(hz) : null;
+        string Fps(double v) => v.ToString(v % 1 == 0 ? "0" : "0.0", System.Globalization.CultureInfo.CurrentCulture);
+
+        var items = new List<ComboBoxItem> { Item("off", "Off") };
+        if (suggested is { } sv) items.Add(Item("suggested", $"Suggested: {Fps(sv)} fps (for your {refresh} Hz display)"));
+        items.Add(Item("custom", "A number I type"));
+        var box = Combo("Frame cap", items);
+        var currentId = current is null ? "off" : suggested is { } s2 && Math.Abs(current.Value - s2) < 0.05 ? "suggested" : "custom";
+        box.SelectedItem = box.Items.OfType<ComboBoxItem>().First(i => (string)i.Tag == currentId);
+
+        var number = new NumberBox
+        {
+            Header = "Frames per second", Minimum = 10, Maximum = 1000, SmallChange = 1, LargeChange = 10, Width = 180,
+            HorizontalAlignment = HorizontalAlignment.Left, SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline,
+            Value = current ?? (suggested is { } s3 ? Math.Floor(s3) : 60),
+            Visibility = currentId == "custom" ? Visibility.Visible : Visibility.Collapsed
+        };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(number, "Frame cap in frames per second");
+
+        box.SelectionChanged += async (_, _) =>
+        {
+            if (_building || box.SelectedItem is not ComboBoxItem { Tag: string id }) return;
+            number.Visibility = id == "custom" ? Visibility.Visible : Visibility.Collapsed;
+            if (id == "off") await Save(card, OptiScalerOptions.FrameCapSettings(null));
+            else if (id == "suggested") await Save(card, OptiScalerOptions.FrameCapSettings(suggested));
+            else if (!double.IsNaN(number.Value)) await Save(card, OptiScalerOptions.FrameCapSettings(Math.Round(number.Value, 1)));
+        };
+        // Saved when the number is confirmed (Enter, the spin buttons or leaving the box), not on every keystroke.
+        number.ValueChanged += async (_, e) =>
+        {
+            if (_building || double.IsNaN(e.NewValue) || box.SelectedItem is not ComboBoxItem { Tag: "custom" }) return;
+            if (current is { } c && Math.Abs(c - e.NewValue) < 0.05) return;
+            await Save(card, OptiScalerOptions.FrameCapSettings(Math.Round(e.NewValue, 1)));
+        };
+
+        var offered = items.Select(i => ((string)i.Tag, i.Content as string ?? "")).ToList();
+        return Group(
+            WithGuide(box, AppServices.Catalog.Guides.FrameCap, offered, gpu),
+            number,
+            Subtle("Uses OptiScaler's own limiter, which works through Reflex: the game must support Reflex (on AMD and Intel cards OptiScaler's fakenvapi stands in for it). " +
+                   "With frame generation on, the cap is the final frame rate you see, generated frames included. Takes effect after restarting the game."));
     }
 
     /// <summary>The upscaler choice whose settings match what the ini has now.</summary>
