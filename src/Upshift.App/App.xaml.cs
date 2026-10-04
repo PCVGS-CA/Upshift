@@ -36,6 +36,9 @@ public partial class App : Application
 
             MainAppWindow = new MainWindow();
             MainAppWindow.Activate();
+
+            // An installed copy repairs its own shortcuts if they point elsewhere or lost the icon (in the background).
+            _ = Task.Run(() => Services.Shortcuts.Ensure(createMissing: false));
         }
         catch (Exception ex)
         {

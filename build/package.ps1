@@ -33,7 +33,7 @@ Set-StrictMode -Version Latest
 # (%LocalAppData%\Upshift.App), which must never be the data folder (%LocalAppData%\Upshift).
 $packId = 'Upshift.App'
 $packTitle = 'Upshift'
-$shortcuts = 'StartMenuRoot'
+$shortcuts = 'Desktop,StartMenuRoot'
 if ($TestPackId) {
     if ($Tag) { throw "-TestPackId is for local testing only and can't be used with -Tag." }
     if ($TestPackId -notmatch '^Upshift\.App\.[A-Za-z0-9]+$') { throw "-TestPackId must look like 'Upshift.App.Test' (never 'Upshift', the data folder)." }

@@ -34,6 +34,10 @@ public static class Program
         {
             VelopackApp.Build()
                 .OnBeforeUninstallFastCallback(_ => AskToDeleteDataOnUninstall())
+                // After installing or updating (also over an older copy): Start menu and desktop shortcuts with Upshift's
+                // icon, replacing any broken "Upshift" shortcut.
+                .OnAfterInstallFastCallback(_ => Services.Shortcuts.Ensure(createMissing: true))
+                .OnAfterUpdateFastCallback(_ => Services.Shortcuts.Ensure(createMissing: true))
                 .Run();
 
             if (AppLocations.DataFolderProblem(DataMigration.NewDataDir, null) is { } problem)
