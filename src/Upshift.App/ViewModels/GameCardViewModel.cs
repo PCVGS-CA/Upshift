@@ -129,6 +129,17 @@ public sealed partial class GameCardViewModel : ObservableObject
         InstalledText = IsInstalledByUs
             ? $"{Services.GameUpdates.ComponentFor(manifest!.ComponentId).Name} {manifest.Version} installed as {manifest.ProxyName}" : "";
         InstalledVersion = IsInstalledByUs ? manifest!.Version : null;
+        // Which FSR 4 the game uses and the version of its file: "FSR 4: your 4.1.1b file · v4.1.1.0".
+        if (IsInstalledByUs && info.TargetDir is { } fsrDir && File.Exists(Path.Combine(fsrDir, "OptiScaler.ini")))
+        {
+            try
+            {
+                var (source, version) = OptiScalerOptions.Fsr4InUse(fsrDir, manifest!, IniFile.Load(Path.Combine(fsrDir, "OptiScaler.ini")),
+                    AppServices.Catalog.Fsr4.CommunityInt8FileName);
+                Fsr4Text = OptiScalerOptions.Fsr4Label(source, version) ?? "";
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
         CanUndo = IsInstalledByUs && info.TargetDir is not null && OptiScalerInstaller.CanUndo(info.TargetDir);
         UndoText = CanUndo ? $"Undo last update (back to {manifest!.LastUpdate!.FromVersion})" : "";
         // Found by the last scan: files of our install that are missing or were changed.
@@ -297,6 +308,10 @@ public sealed partial class GameCardViewModel : ObservableObject
     public bool IsInstalledByUs { get; }
     public bool IsNotInstalledByUs => !IsInstalledByUs;
     public string InstalledText { get; }
+
+    /// <summary>The FSR 4 source in use and its file's version, or "" when FSR 4 isn't turned on in Upshift's options.</summary>
+    public string Fsr4Text { get; } = "";
+    public bool HasFsr4Text => Fsr4Text.Length > 0;
     public string IniPath { get; }
     /// <summary>False for games with anti-cheat (installs stay blocked) and when there's no main exe folder.</summary>
     public bool CanInstall { get; }

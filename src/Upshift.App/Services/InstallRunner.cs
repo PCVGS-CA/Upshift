@@ -137,6 +137,7 @@ public static class InstallRunner
 
     /// <summary>Files a settings change may copy in or take out: only the user-supplied ones the app knows.</summary>
     private static readonly string[] UserFileNames = OptiScalerInstaller.UserFileNames;
+    private static readonly string[] OverrideNames = OptiScalerInstaller.OverrideNames;
 
     /// <summary>
     /// An elevated copy only installs from our own component cache into an existing folder, under a known loading name,
@@ -185,6 +186,12 @@ public static class InstallRunner
                 return "The plan points at a file outside the app's user-files folder, so nothing was done.";
             foreach (var name in new[] { plan.AddFileAs, plan.RemoveFile }.Where(n => n is not null))
                 if (!UserFileNames.Contains(name, StringComparer.OrdinalIgnoreCase))
+                    return "The plan names a file the app doesn't manage, so nothing was done.";
+            // A file of the user's in place of OptiScaler's: only the FSR 4.1.1b upscaler DLL, only from user-files.
+            if (plan.OverrideFrom is not null && !Path.GetFullPath(plan.OverrideFrom).StartsWith(userFiles, StringComparison.OrdinalIgnoreCase))
+                return "The plan points at a file outside the app's user-files folder, so nothing was done.";
+            foreach (var name in new[] { plan.OverrideAs, plan.RemoveOverride }.Where(n => n is not null))
+                if (!OverrideNames.Contains(Path.GetFileName(name), StringComparer.OrdinalIgnoreCase) || name!.Contains(".."))
                     return "The plan names a file the app doesn't manage, so nothing was done.";
             return null;
         }

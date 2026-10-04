@@ -11,6 +11,9 @@ public static partial class OptiScalerInstaller
     /// <summary>Files a user supplies through the options (never part of a release). They may be added, removed or swapped.</summary>
     public static readonly string[] UserFileNames = { "amdxcffx64.dll", "nvngx_dlssnr.dll" };
 
+    /// <summary>OptiScaler files a user-supplied file may take the place of (the modified FSR 4.1.1b upscaler DLL).</summary>
+    public static readonly string[] OverrideNames = { "amd_fidelityfx_upscaler_dx12.dll" };
+
     private sealed class SnapshotFile
     {
         public string Path { get; set; } = "";
@@ -50,6 +53,13 @@ public static partial class OptiScalerInstaller
             foreach (var file in AllEntries(manifest))
             {
                 var path = Path.Combine(targetDir, file.Path);
+                if (manifest.OverrideFor(file.Path) is { } over)
+                {
+                    // The user's file sits here in place of OptiScaler's: it's what has to be there.
+                    if (!File.Exists(path)) problems.Add($"{file.Path} (your {over.Kind} file) is missing");
+                    else if (Sha256(path) != over.Sha256) problems.Add($"{file.Path} (your {over.Kind} file) has changed");
+                    continue;
+                }
                 if (!File.Exists(path)) problems.Add($"{file.Path} is missing");
                 else if (!IsIni(file.Path) && !IsUserFile(file.Path) && HasChanged(file, path)) problems.Add($"{file.Path} has changed");
             }
@@ -147,6 +157,18 @@ public static partial class OptiScalerInstaller
                 if (Sha256(to) != hash) throw new IOException($"The saved copy of {file.Path} doesn't match the file.");
                 snapshot.Add(new SnapshotFile { Path = file.Path, Sha256 = hash });
             }
+            // OptiScaler's own copies of files the user replaced (FSR 4.1.1b) are part of the state too.
+            foreach (var over in manifest.Overrides ?? new List<FileOverride>())
+            {
+                var from = Path.Combine(target, over.Backup);
+                if (!File.Exists(from)) continue;
+                var to = Path.Combine(undoDir, "files", over.Backup);
+                Directory.CreateDirectory(Path.GetDirectoryName(to)!);
+                File.Copy(from, to, overwrite: false);
+                var hash = Sha256(from);
+                if (Sha256(to) != hash) throw new IOException($"The saved copy of {over.Backup} doesn't match the file.");
+                snapshot.Add(new SnapshotFile { Path = over.Backup, Sha256 = hash });
+            }
             var saved = JsonSerializer.Deserialize<InstallManifest>(oldManifestJson, Json)!;
             // Only the latest update can be undone. A switch keeps it: switching back returns to exactly this state.
             if (!isSwitch && saved.LastUpdate is not null) saved.LastUpdate.UndoFolder = null;
@@ -165,6 +187,7 @@ public static partial class OptiScalerInstaller
                 manifest.Added.Remove(file);
                 record.RemovedFiles.Add(file.Path);
                 log.Write($"  removed {file.Path} (not in {plan.Version})");
+                DropOverride(file.Path);
             }
             foreach (var file in manifest.Replaced.Where(f => oldRelease.Contains(f.Path) && !newSet.Contains(f.Path)).ToList())
             {
@@ -175,6 +198,20 @@ public static partial class OptiScalerInstaller
                 manifest.Replaced.Remove(file);
                 record.RemovedFiles.Add(file.Path);
                 log.Write($"  restored the game's {file.Path} (not in {plan.Version})");
+                DropOverride(file.Path);
+            }
+
+            // A file of the user's in place of one this release no longer has at that path (a DLSS 5 build keeps FSR
+            // in its OptiScaler\ folder): it goes, and the option has to be turned on again for the new build.
+            void DropOverride(string relative)
+            {
+                if (manifest.OverrideFor(relative) is not { } over) return;
+                var backup = Path.Combine(target, over.Backup);
+                if (File.Exists(backup)) File.Delete(backup);
+                manifest.Overrides!.Remove(over);
+                if (manifest.Overrides.Count == 0) manifest.Overrides = null;
+                record.RemovedFiles.Add($"your {over.Kind} file");
+                log.Write($"  your {over.Kind} file at {relative} removed: {plan.Version} doesn't have that file");
             }
 
             // 3. The new release, under the same loading name.
@@ -206,6 +243,22 @@ public static partial class OptiScalerInstaller
                     record.AddedFiles.Add(relative);
                 }
 
+                // Where the user's own file sits in place of OptiScaler's, the new release's copy goes into the slot kept
+                // for OptiScaler's file, and the user's file stays.
+                if (manifest.OverrideFor(relative) is { } over)
+                {
+                    var slot = Path.Combine(target, over.Backup);
+                    Directory.CreateDirectory(Path.GetDirectoryName(slot)!);
+                    File.Copy(from, slot, overwrite: true);
+                    var slotHash = Sha256(slot);
+                    if (slotHash != Sha256(from)) throw new IOException($"{relative} didn't copy correctly.");
+                    over.BackupSha256 = slotHash;
+                    entry.Sha256 = slotHash;
+                    entry.Size = new FileInfo(slot).Length;
+                    entry.LastWriteUtc = null;
+                    log.Write($"  {relative}: your {over.Kind} file stays; {plan.Version}'s copy kept for when it's turned off");
+                    continue;
+                }
                 File.Copy(from, to, overwrite: true);
                 var hash = Sha256(to);
                 if (hash != Sha256(from)) throw new IOException($"{relative} didn't copy correctly.");
@@ -507,6 +560,10 @@ public static partial class OptiScalerInstaller
                 if (Sha256(to) != file.Sha256) throw new IOException("the saved copy didn't come back unchanged");
             });
         log.Write($"  undo: put back {snapshot.Count - problems.Count} saved file(s)");
+        // A file of the user's put in after the saved copy was made: OptiScaler's copy kept for it isn't needed any more.
+        foreach (var over in current.Overrides ?? new List<FileOverride>())
+            if (old.OverrideFor(over.Path) is null)
+                Try(over.Backup, () => { var b = Path.Combine(target, over.Backup); if (File.Exists(b)) File.Delete(b); });
 
         foreach (var folder in current.CreatedFolders.Where(f => !old.CreatedFolders.Contains(f, StringComparer.OrdinalIgnoreCase)).Reverse())
             TryRemoveEmptyFolder(Path.Combine(target, folder));
@@ -548,6 +605,8 @@ public static partial class OptiScalerInstaller
         {
             foreach (var file in AllEntries(manifest).ToList())
             {
+                // The user's own file in place of OptiScaler's (FSR 4.1.1b) is never "repaired" back to OptiScaler's.
+                if (manifest.OverrideFor(file.Path) is not null) continue;
                 var path = Path.Combine(target, file.Path);
                 var exists = File.Exists(path);
                 var broken = !exists || (!IsIni(file.Path) && !IsUserFile(file.Path) && HasChanged(file, path));

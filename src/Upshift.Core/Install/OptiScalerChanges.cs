@@ -60,6 +60,10 @@ public static partial class OptiScalerInstaller
                 $"Added {file.Path} ({Version(path, file.Path)})", "Your own file, added from the options. Removed on uninstall."));
         }
 
+        foreach (var over in manifest.Overrides ?? new List<FileOverride>())
+            list.Add(new(over.AddedUtc, $"Your {OverrideName(over.Kind)} file in place of OptiScaler's {over.Path}" + (over.Version is null ? "" : $" ({versionLabel(over.Version, over.Path)})"),
+                $"OptiScaler's own copy waits in {Path.GetDirectoryName(over.Backup)} and comes back when the option is turned off or OptiScaler is uninstalled."));
+
         foreach (var change in manifest.IniChanges)
             list.Add(new(change.ChangedUtc, $"OptiScaler.ini: [{change.Section}] {change.Key} = {change.Current}",
                 $"OptiScaler's default is {change.Original ?? "not set"}"));
@@ -69,6 +73,13 @@ public static partial class OptiScalerInstaller
 
         return list.OrderByDescending(e => e.Utc ?? DateTime.MinValue).ToList();
     }
+
+    /// <summary>"FSR 4.1.1b" for "fsr4-4.1.1b".</summary>
+    public static string OverrideName(string kind) => kind switch
+    {
+        "fsr4-4.1.1b" => "FSR 4.1.1b",
+        _ => kind
+    };
 
     private static string Shorten(IReadOnlyList<string> names) =>
         names.Count <= 6 ? string.Join(", ", names) : $"{string.Join(", ", names.Take(6))} and {names.Count - 6} more";

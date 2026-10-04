@@ -1,3 +1,4 @@
+using Upshift.Core.Detection;
 using Upshift.Core.Catalog;
 using Upshift.Core.Hardware;
 using Upshift.Core.Models;
@@ -19,6 +20,9 @@ public sealed record DlssModelChoice(string Id, string Label, string? Note, bool
 /// the DLSS models and the FSR 4 (INT8) options, each with the OptiScaler.ini values it writes.
 /// Option names and values come from OptiScaler v0.9.4's own OptiScaler.ini.
 /// </summary>
+/// <summary>Where a game's FSR 4 comes from (one at a time).</summary>
+public enum Fsr4Source { Off, BuiltIn, File411b, File402c }
+
 public static class OptiScalerOptions
 {
     public const string Auto = "auto";
@@ -246,4 +250,55 @@ public static class OptiScalerOptions
     // ---------------- FSR 4 (INT8) ----------------
 
     public static List<IniSetting> ForceInt8Settings(bool on) => new() { new("FSR", "Fsr4ForceEnableInt8", on ? "true" : null) };
+
+    /// <summary>
+    /// For the modified FSR 4.1.1b file in place of amd_fidelityfx_upscaler_dx12.dll: OptiScaler's own documentation says
+    /// Fsr4ForceEnableInt8 "enables the INT8 model for all GPUs" and Fsr4Update "updates FSR 3.x to FSR 4"; both default
+    /// to on only for RX 9000 (RDNA 4), so an RX 6000 needs both. Off (null) puts both back to what they were.
+    /// </summary>
+    public static List<IniSetting> Fsr411bSettings(bool on) => new()
+    {
+        new("FSR", "Fsr4ForceEnableInt8", on ? "true" : null),
+        new("FSR", "Fsr4Update", on ? "true" : null)
+    };
+
+    /// <summary>OptiScaler's on-screen FSR 4 watermark (Fsr4EnableWatermark). Off puts the original value back.</summary>
+    public static List<IniSetting> WatermarkSettings(bool on) => new() { new("FSR", "Fsr4EnableWatermark", on ? "true" : null) };
+
+    /// <summary>The kind recorded for the modified FSR 4.1.1b file in the install manifest.</summary>
+    public const string Fsr411bKind = "fsr4-4.1.1b";
+
+    /// <summary>OptiScaler's upscaler DLL that the 4.1.1b file replaces, as the manifest names it (root first), or null.</summary>
+    public static string? FsrUpscalerPath(InstallManifest manifest) =>
+        manifest.Added.Concat(manifest.Replaced).Select(f => f.Path)
+            .Where(p => Path.GetFileName(p).Equals("amd_fidelityfx_upscaler_dx12.dll", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(p => p.Count(c => c == Path.DirectorySeparatorChar)).FirstOrDefault();
+
+    /// <summary>
+    /// Which FSR 4 a game uses and the version of the file behind it: the user's 4.1.1b file (in place of OptiScaler's
+    /// upscaler DLL), the user's 4.0.2c file (amdxcffx64.dll next to the exe), OptiScaler's built-in FSR 4
+    /// (Fsr4ForceEnableInt8 on, OptiScaler's own upscaler DLL), or none of them.
+    /// </summary>
+    public static (Fsr4Source Source, string? Version) Fsr4InUse(string targetDir, InstallManifest manifest, IniFile ini, string communityName)
+    {
+        if (manifest.Overrides?.FirstOrDefault(o => o.Kind == Fsr411bKind) is { } over) return (Fsr4Source.File411b, over.Version);
+        if (manifest.Added.Concat(manifest.Replaced).Any(f => f.Path.Equals(communityName, StringComparison.OrdinalIgnoreCase)))
+            return (Fsr4Source.File402c, FileVersions.Read(Path.Combine(targetDir, communityName)));
+        if (string.Equals(ini.Get("FSR", "Fsr4ForceEnableInt8"), "true", StringComparison.OrdinalIgnoreCase))
+            return (Fsr4Source.BuiltIn, FsrUpscalerPath(manifest) is { } dll ? FileVersions.Read(Path.Combine(targetDir, dll)) : null);
+        return (Fsr4Source.Off, null);
+    }
+
+    /// <summary>"FSR 4.1.1b (your file) v4.1.1.0" style label for a card, or null when no FSR 4 source is on.</summary>
+    public static string? Fsr4Label(Fsr4Source source, string? version)
+    {
+        var name = source switch
+        {
+            Fsr4Source.File411b => "FSR 4: your 4.1.1b file",
+            Fsr4Source.File402c => "FSR 4: your 4.0.2c file",
+            Fsr4Source.BuiltIn => "FSR 4: OptiScaler's built-in",
+            _ => null
+        };
+        return name is null ? null : version is null ? name : $"{name} · v{version}";
+    }
 }

@@ -60,6 +60,18 @@ public sealed class InstallPlan
     public string? RemoveFile { get; set; }
 
     /// <summary>
+    /// Configure only: a user-supplied file (from the app's user-files folder) that takes the place of one of
+    /// OptiScaler's own files, named by OverrideAs (e.g. the modified FSR 4.1.1b amd_fidelityfx_upscaler_dx12.dll).
+    /// OptiScaler's copy is kept in .upshift\overrides and comes back when the override is removed.
+    /// </summary>
+    public string? OverrideFrom { get; set; }
+    public string? OverrideAs { get; set; }
+    /// <summary>What the override is, for the record and the app ("fsr4-4.1.1b").</summary>
+    public string? OverrideKind { get; set; }
+    /// <summary>Configure only: an override to take out again (OptiScaler's own copy comes back).</summary>
+    public string? RemoveOverride { get; set; }
+
+    /// <summary>
     /// Upscaler file updates and restores: the files, relative to TargetDir, which for these operations is the game's
     /// install folder (not the exe folder), since DLLs can sit anywhere in the game.
     /// </summary>
@@ -120,6 +132,25 @@ public sealed class ManifestFile
     /// <summary>Size and time of the file as we left it, so a scan can skip hashing files that are clearly unchanged.</summary>
     public long? Size { get; set; }
     public DateTime? LastWriteUtc { get; set; }
+}
+
+/// <summary>
+/// A user-supplied file in place of one of OptiScaler's own files (the modified FSR 4.1.1b upscaler DLL). The manifest's
+/// Added/Replaced entry for the path keeps describing OptiScaler's copy, which waits in Backup.
+/// </summary>
+public sealed class FileOverride
+{
+    /// <summary>Path relative to the target folder (the same as OptiScaler's file it replaces).</summary>
+    public string Path { get; set; } = "";
+    /// <summary>"fsr4-4.1.1b".</summary>
+    public string Kind { get; set; } = "";
+    /// <summary>SHA-256 and version of the user's file as copied in.</summary>
+    public string Sha256 { get; set; } = "";
+    public string? Version { get; set; }
+    /// <summary>OptiScaler's own copy, relative to the target folder (.upshift\overrides\…), and its SHA-256.</summary>
+    public string Backup { get; set; } = "";
+    public string BackupSha256 { get; set; } = "";
+    public DateTime AddedUtc { get; set; }
 }
 
 /// <summary>What the last update did, and where the copy for "Undo last update" is.</summary>
@@ -186,6 +217,14 @@ public sealed class InstallManifest
     /// <remarks>Left out of the file when empty, so manifests written before DLSS 5 support stay byte-identical.</remarks>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public SwitchRecord? Switch { get; set; }
+
+    /// <summary>User-supplied files in place of OptiScaler's own (null when there are none, so older manifests stay the same).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<FileOverride>? Overrides { get; set; }
+
+    /// <summary>The override at this path, if any.</summary>
+    public FileOverride? OverrideFor(string relativePath) =>
+        Overrides?.FirstOrDefault(o => o.Path.Equals(relativePath, StringComparison.OrdinalIgnoreCase));
 }
 
 /// <summary>A switch to another build of OptiScaler (the DLSS 5 forks), and the exact state it came from.</summary>
@@ -508,6 +547,13 @@ public static partial class OptiScalerInstaller
             {
                 var path = Path.Combine(target, file.Path);
                 if (!File.Exists(path)) { log.Write($"  already gone: {file.Path}"); continue; }
+                // A file of the user's in place of OptiScaler's (the modified FSR 4.1.1b DLL) goes as well.
+                if (manifest.OverrideFor(file.Path) is { } over)
+                {
+                    File.Delete(path);
+                    log.Write($"  removed {file.Path} (your {over.Kind} file)");
+                    continue;
+                }
                 // OptiScaler.ini goes even when the in-game menu changed it: it was saved above.
                 if (IsIni(file.Path) && (plan.SettingsFolder is not null || Sha256(path) == file.Sha256))
                 {
@@ -529,7 +575,7 @@ public static partial class OptiScalerInstaller
             {
                 var path = Path.Combine(target, file.Path);
                 var backup = Path.Combine(target, file.Backup!);
-                if (File.Exists(path) && Sha256(path) != file.Sha256)
+                if (File.Exists(path) && Sha256(path) != file.Sha256 && manifest.OverrideFor(file.Path) is null)
                 {
                     // Something (a game update, say) replaced our copy; don't overwrite it, and keep the backup.
                     result.KeptChanged.Add(file.Path);
@@ -613,14 +659,19 @@ public static partial class OptiScalerInstaller
     }
 
     /// <summary>
-    /// Changes an existing install: OptiScaler.ini values and/or a user-supplied file. Every change is recorded in the
-    /// manifest (the ini's hash, the first value we replaced, backups of any game file we overwrite), so Uninstall
-    /// still puts the folder back exactly. If anything fails, the ini and files are left as they were.
+    /// Changes an existing install: OptiScaler.ini values, a user-supplied file next to the exe (added or removed), and a
+    /// user-supplied file in place of one of OptiScaler's own (an override, added or removed). Everything is checked
+    /// before anything changes; every change is recorded in the manifest (the ini's hash, the first value we replaced,
+    /// backups of what we overwrite), so Uninstall still puts the folder back exactly. If anything fails part-way, the
+    /// ini, files and manifest are put back as they were.
     /// </summary>
     public static InstallResult Configure(InstallPlan plan, InstallLog log)
     {
         var target = plan.TargetDir;
-        log.Write($"CONFIGURE {plan.GameName} | {plan.IniSettings.Count} ini value(s){(plan.AddFileAs is null ? "" : $", add {plan.AddFileAs}")}{(plan.RemoveFile is null ? "" : $", remove {plan.RemoveFile}")}");
+        log.Write($"CONFIGURE {plan.GameName} | {plan.IniSettings.Count} ini value(s)"
+                  + (plan.AddFileAs is null ? "" : $", add {plan.AddFileAs}") + (plan.RemoveFile is null ? "" : $", remove {plan.RemoveFile}")
+                  + (plan.OverrideAs is null ? "" : $", your {plan.OverrideKind} file as {plan.OverrideAs}")
+                  + (plan.RemoveOverride is null ? "" : $", OptiScaler's {plan.RemoveOverride} back"));
 
         if (MoveLegacyState(target, log) is { } moveProblem) return Refuse(log, moveProblem);
         var manifest = ReadManifest(target);
@@ -632,6 +683,7 @@ public static partial class OptiScalerInstaller
         if (plan.IniSettings.Count > 0 && !File.Exists(iniPath))
             return Refuse(log, "OptiScaler.ini is missing from the game folder.");
 
+        // ---- 1. Check everything before anything changes, so a refusal never leaves half a change behind ----
         // Only keys that exist in OptiScaler's own ini can be written, so a plan can't add arbitrary settings.
         if (plan.IniSettings.Count > 0)
         {
@@ -641,11 +693,49 @@ public static partial class OptiScalerInstaller
             if (unknown.Count > 0) return Refuse(log, $"OptiScaler.ini has no setting called {string.Join(", ", unknown)}.");
         }
 
+        ManifestFile? removeAdded = null, removeReplaced = null;
+        if (plan.RemoveFile is { } remove)
+        {
+            removeAdded = manifest.Added.FirstOrDefault(f => f.Path.Equals(remove, StringComparison.OrdinalIgnoreCase));
+            removeReplaced = manifest.Replaced.FirstOrDefault(f => f.Path.Equals(remove, StringComparison.OrdinalIgnoreCase));
+            if (removeAdded is null && removeReplaced is null) return Refuse(log, $"{remove} wasn't added by this app, so it wasn't removed.");
+            var path = Path.Combine(target, remove);
+            if (File.Exists(path) && Sha256(path) != (removeAdded ?? removeReplaced)!.Sha256)
+                return Refuse(log, $"{remove} has changed since it was copied in, so it was left in place.");
+        }
+
+        if (plan.AddFileFrom is { } addFrom && plan.AddFileAs is { } addName)
+        {
+            var stillManaged = AllEntries(manifest).Any(f => f.Path.Equals(addName, StringComparison.OrdinalIgnoreCase))
+                               && !addName.Equals(plan.RemoveFile, StringComparison.OrdinalIgnoreCase);
+            if (stillManaged) return Refuse(log, $"{addName} is already managed by this app; remove it first.");
+            if (!File.Exists(addFrom)) return Refuse(log, $"Your {addName} isn't in Upshift's folder any more. Add it again in Settings.");
+        }
+
+        FileOverride? removeOverride = null;
+        if (plan.RemoveOverride is { } removeOverridePath)
+        {
+            removeOverride = manifest.OverrideFor(removeOverridePath);
+            if (removeOverride is null) return Refuse(log, $"Upshift didn't put a file of yours in place of {removeOverridePath}, so nothing was changed.");
+            if (!File.Exists(Path.Combine(target, removeOverride.Backup)))
+                return Refuse(log, $"OptiScaler's own {removeOverridePath} is missing from {StateFolder}, so yours was left in place. Repair OptiScaler to get it back.");
+        }
+
+        if (plan.OverrideFrom is { } overrideFrom && plan.OverrideAs is { } overrideAs)
+        {
+            if (manifest.OverrideFor(overrideAs) is { } existing && existing != removeOverride)
+                return Refuse(log, $"{overrideAs} is already replaced by a file of yours; turn that off first.");
+            if (!AllEntries(manifest).Any(f => f.Path.Equals(overrideAs, StringComparison.OrdinalIgnoreCase)))
+                return Refuse(log, $"This OptiScaler doesn't have {overrideAs}, so your file can't take its place.");
+            if (!File.Exists(Path.Combine(target, overrideAs)))
+                return Refuse(log, $"OptiScaler's {overrideAs} is missing from the game folder. Repair OptiScaler first.");
+            if (!File.Exists(overrideFrom)) return Refuse(log, $"Your {Path.GetFileName(overrideFrom)} isn't in Upshift's folder any more. Add it again in Settings.");
+        }
+
+        // ---- 2. Change, with an undo step for every file change ----
         var iniBefore = File.Exists(iniPath) ? File.ReadAllBytes(iniPath) : null;
         var manifestBefore = JsonSerializer.Serialize(manifest, Json);
-        string? copiedTo = null;
-        string? backupMade = null;
-
+        var undo = new Stack<Action>();
         try
         {
             if (plan.IniSettings.Count > 0)
@@ -655,38 +745,55 @@ public static partial class OptiScalerInstaller
                 ApplyIni(target, manifest, plan.IniSettings, log, ours);
             }
 
-            if (plan.RemoveFile is { } remove)
+            if (plan.RemoveFile is { } removeName)
             {
-                var path = Path.Combine(target, remove);
-                var added = manifest.Added.FirstOrDefault(f => f.Path.Equals(remove, StringComparison.OrdinalIgnoreCase));
-                var replaced = manifest.Replaced.FirstOrDefault(f => f.Path.Equals(remove, StringComparison.OrdinalIgnoreCase));
-                if (added is null && replaced is null) return Refuse(log, $"{remove} wasn't added by this app, so it wasn't removed.");
-                if (File.Exists(path) && Sha256(path) != (added ?? replaced)!.Sha256)
-                    return Refuse(log, $"{remove} has changed since it was copied in, so it was left in place.");
-
-                if (added is not null)
+                var path = Path.Combine(target, removeName);
+                var keep = path + ".upshift-undo";
+                if (File.Exists(path))
+                {
+                    File.Copy(path, keep, overwrite: true);
+                    undo.Push(() => PutBack(keep, path));
+                }
+                if (removeAdded is not null)
                 {
                     if (File.Exists(path)) File.Delete(path);
-                    manifest.Added.Remove(added);
+                    manifest.Added.Remove(removeAdded);
                 }
                 else
                 {
-                    var backup = Path.Combine(target, replaced!.Backup!);
+                    var backup = Path.Combine(target, removeReplaced!.Backup!);
                     File.Copy(backup, path, overwrite: true);
-                    if (Sha256(path) != replaced.OriginalSha256) throw new IOException($"Restoring {remove} gave a different file than the original.");
+                    if (Sha256(path) != removeReplaced.OriginalSha256) throw new IOException($"Restoring {removeName} gave a different file than the original.");
+                    var backupKeep = backup + ".upshift-undo";
+                    File.Copy(backup, backupKeep, overwrite: true);
                     File.Delete(backup);
-                    manifest.Replaced.Remove(replaced);
+                    undo.Push(() => PutBack(backupKeep, backup));
+                    manifest.Replaced.Remove(removeReplaced);
                 }
-                log.Write($"  removed {remove}");
+                log.Write($"  removed {removeName}");
+            }
+
+            if (removeOverride is not null)
+            {
+                var live = Path.Combine(target, removeOverride.Path);
+                var backup = Path.Combine(target, removeOverride.Backup);
+                var keep = live + ".upshift-undo";
+                if (File.Exists(live))
+                {
+                    File.Copy(live, keep, overwrite: true);
+                    undo.Push(() => PutBack(keep, live));
+                }
+                File.Copy(backup, live, overwrite: true);
+                if (Sha256(live) != removeOverride.BackupSha256) throw new IOException($"OptiScaler's {removeOverride.Path} didn't come back unchanged.");
+                File.Delete(backup);
+                undo.Push(() => File.Copy(live, backup, overwrite: true));
+                manifest.Overrides!.Remove(removeOverride);
+                log.Write($"  put OptiScaler's {removeOverride.Path} back (your {removeOverride.Kind} file removed)");
             }
 
             if (plan.AddFileFrom is { } from && plan.AddFileAs is { } name)
             {
                 var path = Path.Combine(target, name);
-                if (manifest.Added.Any(f => f.Path.Equals(name, StringComparison.OrdinalIgnoreCase))
-                    || manifest.Replaced.Any(f => f.Path.Equals(name, StringComparison.OrdinalIgnoreCase)))
-                    return Refuse(log, $"{name} is already managed by this app; remove it first.");
-
                 if (File.Exists(path))
                 {
                     // The game (or something else) already has this file: back it up so it comes back on uninstall.
@@ -694,41 +801,76 @@ public static partial class OptiScalerInstaller
                     var backup = Path.Combine(target, backupRelative);
                     Directory.CreateDirectory(Path.GetDirectoryName(backup)!);
                     File.Copy(path, backup, overwrite: false);
-                    backupMade = backup;
                     var originalHash = Sha256(path);
+                    undo.Push(() => { File.Copy(backup, path, overwrite: true); File.Delete(backup); });
                     File.Copy(from, path, overwrite: true);
-                    copiedTo = path;
                     manifest.Replaced.Add(Stamp(new ManifestFile { Path = name, Backup = backupRelative, OriginalSha256 = originalHash }, path, Sha256(path)));
                     log.Write($"  replaced {name} (the game's copy is backed up in {backupRelative})");
                 }
                 else
                 {
                     File.Copy(from, path, overwrite: false);
-                    copiedTo = path;
+                    undo.Push(() => File.Delete(path));
                     manifest.Added.Add(Stamp(new ManifestFile { Path = name }, path, Sha256(path)));
                     log.Write($"  added {name}");
                 }
             }
 
+            if (plan.OverrideFrom is { } overrideSource && plan.OverrideAs is { } overrideName)
+            {
+                var live = Path.Combine(target, overrideName);
+                var backupRelative = Path.Combine(StateFolder, "overrides", overrideName);
+                var backup = Path.Combine(target, backupRelative);
+                Directory.CreateDirectory(Path.GetDirectoryName(backup)!);
+                File.Copy(live, backup, overwrite: true);
+                var backupHash = Sha256(backup);
+                if (backupHash != Sha256(live)) throw new IOException($"The copy of OptiScaler's {overrideName} doesn't match.");
+                undo.Push(() => { File.Copy(backup, live, overwrite: true); File.Delete(backup); });
+                File.Copy(overrideSource, live, overwrite: true);
+                var hash = Sha256(live);
+                if (hash != Sha256(overrideSource)) throw new IOException($"Your {overrideName} didn't copy correctly.");
+                manifest.Overrides ??= new List<FileOverride>();
+                manifest.Overrides.Add(new FileOverride
+                {
+                    Path = overrideName, Kind = plan.OverrideKind ?? "", Sha256 = hash, Version = FileVersions.Read(live),
+                    Backup = backupRelative, BackupSha256 = backupHash, AddedUtc = DateTime.UtcNow
+                });
+                log.Write($"  your {plan.OverrideKind} file is now {overrideName} (OptiScaler's copy kept in {backupRelative})");
+            }
+
+            if (manifest.Overrides is { Count: 0 }) manifest.Overrides = null;
             WriteManifest(target, manifest);
+            // Nothing to undo any more: drop the temporary copies.
+            foreach (var temp in Directory.EnumerateFiles(target, "*.upshift-undo", SearchOption.AllDirectories).ToList())
+                try { File.Delete(temp); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
             log.Write("  done");
             return new InstallResult { Success = true, Manifest = manifest, Message = "OptiScaler settings saved." };
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             log.Write($"  FAILED: {ex.Message} - putting things back");
-            try
+            // Every step is tried even when an earlier one fails, so as much as possible is put back.
+            var steps = new List<Action> { () => { if (iniBefore is not null) File.WriteAllBytes(iniPath, iniBefore); } };
+            steps.AddRange(undo); // a Stack enumerates newest first
+            steps.Add(() => File.WriteAllText(Path.Combine(target, StateFolder, ManifestName), manifestBefore));
+            foreach (var step in steps)
             {
-                if (iniBefore is not null) File.WriteAllBytes(iniPath, iniBefore);
-                if (copiedTo is not null && backupMade is null) File.Delete(copiedTo);
-                if (copiedTo is not null && backupMade is not null) { File.Copy(backupMade, copiedTo, overwrite: true); File.Delete(backupMade); }
-                File.WriteAllText(Path.Combine(target, StateFolder, ManifestName), manifestBefore);
-            }
-            catch (Exception rollback) when (rollback is IOException or UnauthorizedAccessException)
-            {
-                log.Write($"  could not fully put back: {rollback.Message}");
+                try { step(); }
+                catch (Exception rollback) when (rollback is IOException or UnauthorizedAccessException)
+                {
+                    log.Write($"  could not fully put back: {rollback.Message}");
+                }
             }
             return new InstallResult { Message = $"The settings couldn't be saved: {ex.Message}" };
+        }
+
+        // Puts a file back from its temporary copy. A file that never changed (the step failed before writing it) is
+        // left alone, so a file the game has open doesn't stop the rest of the rollback.
+        static void PutBack(string keep, string path)
+        {
+            if (!File.Exists(keep)) return;
+            if (!File.Exists(path) || Sha256(path) != Sha256(keep)) File.Copy(keep, path, overwrite: true);
+            File.Delete(keep);
         }
     }
 

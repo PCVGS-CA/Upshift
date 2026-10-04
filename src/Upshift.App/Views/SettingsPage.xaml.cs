@@ -97,7 +97,10 @@ public sealed partial class SettingsPage : Page
     private static readonly (UserFileKind Kind, string Title, string Use)[] UserFileKinds =
     {
         (UserFileKind.DlssNr, "DLSS 5 (nvngx_dlssnr.dll)", "Used by a later version of this app."),
-        (UserFileKind.Fsr4Int8, "FSR 4.0.2c INT8 (amdxcffx64.dll)", "Used by the \"FSR 4 with your own 4.0.2c file\" option in a game's OptiScaler options.")
+        (UserFileKind.Fsr4Int8, "FSR 4.0.2c INT8 (amdxcffx64.dll)", "Used by the \"Your 4.0.2c file\" FSR 4 source in a game's OptiScaler options."),
+        (UserFileKind.Fsr411bInt8, "FSR 4.1.1b INT8 for RX 6000 (amd_fidelityfx_upscaler_dx12.dll)",
+            "The newer modified FSR 4 file for RX 6000 cards (4.0.2c is the older one). Used by the \"Your 4.1.1b file\" FSR 4 source in a game's OptiScaler options, " +
+            "where it takes the place of OptiScaler's own amd_fidelityfx_upscaler_dx12.dll.")
     };
 
     private bool _dialogOpen;
@@ -133,8 +136,12 @@ public sealed partial class SettingsPage : Page
                     ? $"Not added. {use}"
                     : kind == UserFileKind.DlssNr
                         ? $"{Dlss5.CheckFile(info.Path, AppServices.Catalog).Label} · SHA-256 {info.Sha256}"
-                        : $"Version {VersionText(kind, info.Version)} · SHA-256 {info.Sha256} · Community build, can't be verified. {use}"
+                        : kind == UserFileKind.Fsr411bInt8
+                            ? $"Modified file: not signed by AMD, can't be verified as safe · Version {VersionText(kind, info.Version)} · SHA-256 {info.Sha256}"
+                            : $"Version {VersionText(kind, info.Version)} · SHA-256 {info.Sha256} · Community build, can't be verified. {use}"
             });
+            if (kind == UserFileKind.Fsr411bInt8 && info is not null)
+                texts.Children.Add(new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap, Text = use });
             if (kind == UserFileKind.DlssNr)
             {
                 // The catalog's rule for this card (or the pretend one), in one sentence.
@@ -292,7 +299,9 @@ public sealed partial class SettingsPage : Page
         BuildUserFileRows();
 
         var games = AppServices.Library.Current.Select(g => g.InstallDir).ToList();
-        var result = await AppServices.UserFiles.FindOnDrivesAsync(name, games,
+        // For the 4.1.1b file only Downloads, Desktop and Documents, never AMD-signed copies or OptiScaler packages.
+        if (UserFileStore.MustBeModified(kind)) state.Status = $"Looking for a modified {name} in Downloads, Desktop and Documents…";
+        var result = await AppServices.UserFiles.FindAsync(kind, games,
             new Progress<string>(s => { if (state.Running) { state.Status = s; RenderSearch(kind); } }),
             new Progress<FoundFile>(f =>
             {
@@ -308,7 +317,9 @@ public sealed partial class SettingsPage : Page
         state.Status = result.Cancelled
             ? state.Found.Count == 0 ? "Search cancelled." : $"Search cancelled. Found {state.Found.Count} so far:"
             : state.Found.Count == 0
-                ? "No copy found on this PC. Download the file first, then use Select file…"
+                ? UserFileStore.MustBeModified(kind)
+                    ? "No modified copy found in Downloads, Desktop or Documents (AMD's ordinary signed copies are skipped). Use Select file… if it's elsewhere."
+                    : "No copy found on this PC. Download the file first, then use Select file…"
                 : $"Search finished. Found {state.Found.Count}:";
         state.Cts.Dispose();
         if (_searches.TryGetValue(kind, out var current) && current == state) BuildUserFileRows();

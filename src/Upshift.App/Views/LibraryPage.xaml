@@ -80,6 +80,8 @@
                 </Grid>
                 <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" FontSize="13" TextTrimming="CharacterEllipsis" />
                 <TextBlock Text="{x:Bind SourceText}" FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{x:Bind Fsr4Text}" Visibility="{x:Bind HasFsr4Text}" FontSize="11" TextWrapping="Wrap" MaxLines="2"
+                           Foreground="{StaticResource SubtleTextBrush}" ToolTipService.ToolTip="{x:Bind Fsr4Text}" />
                 <ItemsControl ItemsSource="{x:Bind Tags, Mode=OneWay}" ItemTemplate="{StaticResource ChipTemplate}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
@@ -481,6 +483,8 @@
                                     <TextBlock Text="{x:Bind ViewModel.Selected.InstalledText, Mode=OneWay}" FontWeight="SemiBold"
                                                VerticalAlignment="Center" TextWrapping="Wrap" />
                                 </StackPanel>
+                                <TextBlock Text="{x:Bind ViewModel.Selected.Fsr4Text, Mode=OneWay}" FontSize="12" TextWrapping="Wrap"
+                                           Visibility="{x:Bind ViewModel.Selected.HasFsr4Text, Mode=OneWay}" />
                                 <TextBlock Text="In game: press Insert to open the OptiScaler menu" FontSize="12"
                                            Foreground="{StaticResource SubtleTextBrush}" />
                                 <InfoBar IsOpen="{x:Bind ViewModel.Selected.NeedsRepair, Mode=OneWay}" IsClosable="False" Severity="Warning"

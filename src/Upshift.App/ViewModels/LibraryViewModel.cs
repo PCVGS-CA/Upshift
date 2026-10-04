@@ -363,7 +363,8 @@ public sealed partial class LibraryViewModel : ObservableObject
 
     /// <summary>Changes OptiScaler's settings (and/or a user-supplied file) for an installed game.</summary>
     public Task<InstallResult?> ConfigureOptiScalerAsync(GameCardViewModel card, IReadOnlyList<IniSetting> settings,
-        string? addFileFrom = null, string? addFileAs = null, string? removeFile = null) =>
+        string? addFileFrom = null, string? addFileAs = null, string? removeFile = null,
+        string? overrideFrom = null, string? overrideAs = null, string? overrideKind = null, string? removeOverride = null) =>
         RunInstallAsync(card, new InstallPlan
         {
             Operation = InstallOperation.Configure,
@@ -373,7 +374,11 @@ public sealed partial class LibraryViewModel : ObservableObject
             IniSettings = settings.ToList(),
             AddFileFrom = addFileFrom,
             AddFileAs = addFileAs,
-            RemoveFile = removeFile
+            RemoveFile = removeFile,
+            OverrideFrom = overrideFrom,
+            OverrideAs = overrideAs,
+            OverrideKind = overrideKind,
+            RemoveOverride = removeOverride
         }, "Saving OptiScaler settings…");
 
     /// <summary>Called after the user changes which wiki entry a game matches (or turns suggestions off).</summary>

@@ -10,7 +10,12 @@ public enum UserFileKind
     /// <summary>NVIDIA's DLSS 5 file (nvngx_dlssnr.dll). Used by a later phase.</summary>
     DlssNr,
     /// <summary>The community FSR 4.0.2c INT8 build (amdxcffx64.dll), recommended for AMD RX 6000.</summary>
-    Fsr4Int8
+    Fsr4Int8,
+    /// <summary>
+    /// The modified FSR 4.1.1b INT8 build for RX 6000 (amd_fidelityfx_upscaler_dx12.dll, not signed by AMD). It takes
+    /// the place of the amd_fidelityfx_upscaler_dx12.dll OptiScaler puts in a game.
+    /// </summary>
+    Fsr411bInt8
 }
 
 /// <summary>A file the user supplied, copied into the app's user-files folder.</summary>
@@ -44,8 +49,21 @@ public sealed class UserFileStore
     {
         UserFileKind.DlssNr => "nvngx_dlssnr.dll",
         UserFileKind.Fsr4Int8 => "amdxcffx64.dll",
+        UserFileKind.Fsr411bInt8 => "amd_fidelityfx_upscaler_dx12.dll",
         _ => throw new ArgumentOutOfRangeException(nameof(kind))
     };
+
+    /// <summary>Who signs AMD's own FidelityFX files (the same names as the catalog's upscaler files).</summary>
+    public static readonly IReadOnlyCollection<string> AmdSigners = new[] { "Advanced Micro Devices", "Advanced Micro Devices, Inc.", "Advanced Micro Devices Inc." };
+
+    /// <summary>
+    /// True for kinds where an ordinary copy of the file is everywhere (every OptiScaler package and many games ship
+    /// amd_fidelityfx_upscaler_dx12.dll): only a copy AMD didn't sign can be the modified one.
+    /// </summary>
+    public static bool MustBeModified(UserFileKind kind) => kind == UserFileKind.Fsr411bInt8;
+
+    /// <summary>True when the file is validly signed by AMD, i.e. an ordinary copy rather than the modified build.</summary>
+    public static bool IsAmdSigned(string path) => SignatureCheck.Problem(path, AmdSigners) is null;
 
     public UserFileInfo? Get(UserFileKind kind)
     {
@@ -65,6 +83,8 @@ public sealed class UserFileStore
         if (!File.Exists(source)) throw new FileNotFoundException("That file doesn't exist any more.", source);
         if (PeReader.TryRead(source) is not { Is64Bit: true })
             throw new InvalidDataException("That isn't a 64-bit Windows DLL.");
+        if (MustBeModified(kind) && IsAmdSigned(source))
+            throw new InvalidDataException("That's AMD's ordinary signed file (the one OptiScaler and games ship), not the modified 4.1.1b build.");
 
         Directory.CreateDirectory(_dir);
         var name = FileNameFor(kind);
@@ -105,6 +125,26 @@ public sealed class UserFileStore
     /// Cancelling never throws: the search stops and returns what it found so far, marked as cancelled.
     /// </summary>
     public Task<FileSearchResult> FindOnDrivesAsync(string fileName, IEnumerable<string> gameFolders,
+        IProgress<string>? status, IProgress<FoundFile>? found, CancellationToken ct) =>
+        FindAsync(fileName, gameFolders, personalOnly: false, accept: null, status, found, ct);
+
+    /// <summary>
+    /// "Find it for me" for a kind of file. For the modified FSR 4.1.1b file only Downloads, Desktop and Documents are
+    /// searched, and files inside an OptiScaler folder (an OptiScaler package) or signed by AMD are skipped: those are
+    /// the ordinary file games and OptiScaler ship, never the modified one.
+    /// </summary>
+    public Task<FileSearchResult> FindAsync(UserFileKind kind, IEnumerable<string> gameFolders,
+        IProgress<string>? status, IProgress<FoundFile>? found, CancellationToken ct) =>
+        MustBeModified(kind)
+            ? FindAsync(FileNameFor(kind), Array.Empty<string>(), personalOnly: true,
+                accept: f => !InOptiScalerPackage(f) && !IsAmdSigned(f), status, found, ct)
+            : FindOnDrivesAsync(FileNameFor(kind), gameFolders, status, found, ct);
+
+    private static bool InOptiScalerPackage(string path) =>
+        System.IO.Path.GetDirectoryName(path)!.Split(System.IO.Path.DirectorySeparatorChar)
+            .Any(part => part.StartsWith("OptiScaler", StringComparison.OrdinalIgnoreCase));
+
+    private Task<FileSearchResult> FindAsync(string fileName, IEnumerable<string> gameFolders, bool personalOnly, Func<string, bool>? accept,
         IProgress<string>? status, IProgress<FoundFile>? found, CancellationToken ct)
     {
         var games = gameFolders.ToList();
@@ -128,7 +168,7 @@ public sealed class UserFileStore
                 ("Documents", Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments))
             };
             likely.AddRange(games.Select((g, i) => ($"game folders ({i + 1} of {games.Count})", g)));
-            var drives = DriveInfo.GetDrives().Where(d => d.DriveType == DriveType.Fixed && d.IsReady).Select(d => ($"drive {d.Name.TrimEnd('\\')}", d.RootDirectory.FullName));
+            var drives = personalOnly ? Enumerable.Empty<(string, string)>() : DriveInfo.GetDrives().Where(d => d.DriveType == DriveType.Fixed && d.IsReady).Select(d => ($"drive {d.Name.TrimEnd('\\')}", d.RootDirectory.FullName));
 
             foreach (var (label, root) in likely.Concat(drives))
             {
@@ -154,6 +194,7 @@ public sealed class UserFileStore
                         foreach (var file in Directory.EnumerateFiles(dir, fileName, options))
                         {
                             if (!seenFiles.Add(file)) continue;
+                            if (accept is not null && !accept(file)) continue;
                             var hit = new FoundFile(file, FileVersions.Read(file), File.GetLastWriteTime(file));
                             hits.Add(hit);
                             found?.Report(hit);
