@@ -18,7 +18,8 @@ Get Upshift from the [Releases page](https://github.com/PCVGS-CA/Upshift/release
 - **`Upshift-Portable-x64.zip`**: no installer. Unzip it to a folder of its own and run `Upshift.exe`.
 
 Both update themselves: Upshift checks for a new version at start-up (when "Check for updates automatically" is on)
-and in Settings > About, and installs it when you choose **Restart to update**.
+and with "Check now" on the Updates page, and installs it when you press **Update** on Upshift's row there (or
+**Restart to update**).
 
 ## First launch
 
@@ -61,8 +62,12 @@ outright.
   Intel's own GitHub pages (for example DLSS 3.x to 310.9.1, DLSS 4.5, which unlocks the DLSS 4 and 4.5 models).
   Only swaps known to work are offered, only files the game already has are replaced, every new file must carry its
   vendor's digital signature, and "Restore original files" puts the exact originals back.
-- **OptiScaler options** per game: upscaler, frame generation, DLSS model and FSR 4 (INT8), each with a
-  "Which one should I pick?" guide.
+- **OptiScaler options** per game: upscaler, frame generation, DLSS model, FSR 4 (OptiScaler's built-in, or a
+  4.1.1b or 4.0.2c file you add yourself), a frame cap and an FPS counter, each with a "Which one should I pick?" guide.
+- **Measure performance:** press a key in game (F10 by default) to record 60 seconds with Intel's PresentMon, then
+  see the average and low points, compare runs, and get "What to try" (such as a frame cap you can apply). PresentMon
+  is downloaded from its GitHub page the first time you measure, and Windows asks for permission only for the
+  measuring step. Nothing measured leaves your PC.
 - **Updates:** checks each component's GitHub releases (cached, with ETags), lets you pick Stable or Beta, updates
   games while keeping your OptiScaler settings, and can undo the last update exactly. Changed or missing files are
   flagged at scan time and can be repaired.
@@ -136,6 +141,8 @@ Upshift downloads, installs or reads information from these projects. All credit
   game's DLSS Frame Generation option (bundled with OptiScaler).
 - **[fakenvapi](https://github.com/optiscaler/fakenvapi)**: Reflex support through Anti-Lag 2, LatencyFlex or XeLL
   on non-NVIDIA cards (bundled with OptiScaler).
+- **[PresentMon](https://github.com/GameTechDev/PresentMon)** by Intel (MIT License): the frame-timing tool behind
+  "Measure performance", downloaded from its GitHub releases only when you measure.
 - **[PCGamingWiki](https://www.pcgamingwiki.com/)**: engine and upscaler information for each game. PCGamingWiki
   content is available under
   [CC BY-NC-SA 3.0](https://creativecommons.org/licenses/by-nc-sa/3.0/); Upshift links back to each game's page.
@@ -153,6 +160,16 @@ trademarks of their owners.
 Use [Issues](https://github.com/PCVGS-CA/Upshift/issues/new/choose): "Bug report" for something that went wrong, or
 "Game not detected / wrong info" for a game Upshift misses or describes wrongly. Upshift keeps a log of every
 install, update, undo and repair in `%LocalAppData%\Upshift\logs`; attaching the day's log helps a lot.
+
+## Support
+
+This program is free forever. The coffee button is purely optional and unlocks nothing. It just keeps a hobo
+developer caffeinated and the AI bills paid.
+
+[Buy Me a Coffee](https://buymeacoffee.com/pcvgs)
+
+<sub>Donations go to PCVGS, not to the OptiScaler team, NVIDIA, AMD or Intel. OptiScaler does the heavy lifting: if
+you want to support them too, visit the [OptiScaler GitHub page](https://github.com/optiscaler/OptiScaler).</sub>
 
 ## License
 

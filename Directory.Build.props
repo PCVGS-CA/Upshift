@@ -5,7 +5,7 @@
     push a tag "vx.y.z" (the release workflow refuses a tag that doesn't match).
   -->
   <PropertyGroup>
-    <Version>1.0.2</Version>
+    <Version>1.1.0</Version>
     <!-- Keeps the version in About as "1.0.0" rather than "1.0.0+<commit>". -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>

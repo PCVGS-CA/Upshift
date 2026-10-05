@@ -11,8 +11,8 @@ body:
     id: version
     attributes:
       label: Upshift version
-      description: Shown in Settings > About, e.g. 1.0.0.
-      placeholder: "1.0.0"
+      description: Shown on the About page, e.g. 1.1.0.
+      placeholder: "1.1.0"
     validations:
       required: true
   - type: input

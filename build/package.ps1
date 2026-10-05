@@ -142,6 +142,15 @@ try {
     }
     finally { $zip.Dispose() }
 
+    # ---- The download files' SHA-256, at the end of the release notes (the notes inside the update package are
+    # written before these files exist, so only the GitHub release shows them) ----
+    $sums = @('', '### SHA-256', '')
+    foreach ($file in 'Upshift-Setup-x64.exe', 'Upshift-Portable-x64.zip') {
+        $hash = (Get-FileHash (Join-Path $OutDir $file) -Algorithm SHA256).Hash.ToLowerInvariant()
+        $sums += "- ``$file``: ``$hash``"
+    }
+    [IO.File]::AppendAllText($notes, ($sums -join "`n") + "`n", $utf8)
+
     Write-Host "Release files in ${OutDir}:"
     Get-ChildItem $OutDir -File | ForEach-Object { Write-Host ("  {0,-40} {1,8:N1} MB" -f $_.Name, ($_.Length / 1MB)) }
 }
