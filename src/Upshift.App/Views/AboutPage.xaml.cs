@@ -15,6 +15,8 @@ public sealed partial class AboutPage : Page
         AboutVersionText.Text = $"Version {AppInfo.Version}";
     }
 
+    private async void ReportProblem_Click(object sender, RoutedEventArgs e) => await ReportDialog.ShowAsync(XamlRoot, null);
+
     /// <summary>Opens the page in the default browser.</summary>
     private async void BuyMeACoffee_Click(object sender, RoutedEventArgs e) => await Windows.System.Launcher.LaunchUriAsync(CoffeeUri);
 }

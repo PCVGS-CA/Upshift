@@ -57,7 +57,16 @@ outright.
   from the OptiScaler wiki.
 - **Installs OptiScaler** the way its own setup does, under the loading name you choose (dxgi.dll by default).
   Every game file it overwrites is backed up first, and everything is recorded in `.upshift\manifest.json` in the
-  game folder. Uninstall removes only the files it added (if unchanged) and puts the originals back.
+  game folder.
+- **"Is it working?":** after you've played, the game's panel reads OptiScaler's own log (Upshift turns it on at its
+  lightest level) and says, for example, "According to OptiScaler's log: Working. The game's DLSS is being replaced
+  with FSR 4.", or that OptiScaler loaded but the game isn't using an upscaler it can take over, or that it didn't
+  load, with what to try.
+- **Uninstall that explains itself:** before removing anything, Upshift checks whether the game or its launcher is
+  still running, whether Windows will ask for permission, and which files changed since the install ("Leave them"
+  or "Remove anyway and restore the originals"). Afterwards it checks the folder file by file and either says it's
+  back to how it was before Upshift, or lists exactly what's left with "Open folder". If Upshift's record of a game
+  is missing or damaged, "Remove what Upshift added" lists OptiScaler's files and removes only the ones you tick.
 - **Upscaler files:** updates the DLSS, FSR and XeSS DLLs a game ships with to newer ones from NVIDIA's, AMD's and
   Intel's own GitHub pages (for example DLSS 3.x to 310.9.1, DLSS 4.5, which unlocks the DLSS 4 and 4.5 models).
   Only swaps known to work are offered, only files the game already has are replaced, every new file must carry its
@@ -73,7 +82,10 @@ outright.
   flagged at scan time and can be repaired.
 - **Play:** starts a game through its store (Steam, Epic, GOG, …), with optional launch options. Games are never
   started with admin rights.
-- **"Changes Upshift made to this game":** a dated list of everything it changed in each game folder.
+- **"Changes Upshift made to this game":** a dated list of everything it changed in each game folder, including
+  uninstalls and their results.
+- **About** (in the sidebar): the version, licence and an optional Buy Me a Coffee button, plus **Report a
+  problem**.
 - **Cover art** from Steam's local cache, GOG, Epic and the Steam store, and optionally SteamGridDB (with your own
   API key).
 
@@ -158,8 +170,13 @@ trademarks of their owners.
 ## Reporting a problem
 
 Use [Issues](https://github.com/PCVGS-CA/Upshift/issues/new/choose): "Bug report" for something that went wrong, or
-"Game not detected / wrong info" for a game Upshift misses or describes wrongly. Upshift keeps a log of every
-install, update, undo and repair in `%LocalAppData%\Upshift\logs`; attaching the day's log helps a lot.
+"Game not detected / wrong info" for a game Upshift misses or describes wrongly.
+
+Please attach Upshift's problem report: press **Report a problem with this game** in the game's panel (or **About >
+Report a problem**). It saves one zip file to your Desktop with Upshift's and Windows' versions, your graphics cards,
+today's log and, for a game, its OptiScaler details, change history, OptiScaler's log and a list of its files (names,
+sizes and versions only). Your Windows user name is taken out of every path, your SteamGridDB key and other games are
+left out, and you see what's inside before it's saved. Nothing is sent anywhere: you attach the file yourself.
 
 ## Support
 

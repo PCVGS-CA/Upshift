@@ -63,6 +63,9 @@ public sealed partial class LibraryPage : Page
         ApplyNotesState();
         RecommendationNotes.SizeChanged += (_, _) => UpdateShowAll();
 
+        // Back from playing: read OptiScaler's log again for the selected game.
+        AppServices.WindowActivated += () => DispatcherQueue.TryEnqueue(() => ViewModel.Selected?.RefreshLoadStatus());
+
         // Middle-click auto-scroll in the game grid and the game panel.
         Helpers.AutoScroll.Attach(GamesGrid);
         Helpers.AutoScroll.Attach(DetailsScroller);
@@ -394,37 +397,162 @@ public sealed partial class LibraryPage : Page
             await ShowMessageAsync(result.Success ? "OptiScaler repaired" : "OptiScaler wasn't repaired", result.Message);
     }
 
+    /// <summary>
+    /// Uninstall that explains itself. First a check (reads only): the game or its launcher still running, files in use,
+    /// files changed since the install ("Leave them" or "Remove anyway and restore the originals"), missing backups, and
+    /// whether Windows will ask for permission. Then the uninstall, and a check that the folder is back as it was.
+    /// </summary>
     private async void Uninstall_Click(object sender, RoutedEventArgs e)
     {
-        if (_dialogOpen || ViewModel.Selected is not { IsInstalledByUs: true } card) return;
+        if (_dialogOpen || ViewModel.Selected is not { IsInstalledByUs: true } card || card.Info.TargetDir is not { } target) return;
 
-        var confirm = new ContentDialog
+        OptiScalerInstaller.UninstallCheck check;
+        while (true)
+        {
+            check = await Task.Run(() => OptiScalerInstaller.CheckUninstall(target, card.Info.InstallDir));
+            if (check.Running.Count == 0 && check.InUse.Count == 0) break;
+            var what = new List<string>();
+            if (check.Running.Count > 0) what.Add("Still running from the game's folder: " + string.Join(", ", check.Running) + ".");
+            if (check.InUse.Count > 0) what.Add("In use by another program: " + string.Join(", ", check.InUse) + ".");
+            var answer = await ShowDialogAsync(new ContentDialog
+            {
+                XamlRoot = XamlRoot, Title = "Close the game and try again",
+                Content = Wrapped(string.Join("\n", what) + "\n\nOptiScaler's files can't be removed while the game (or its launcher) has them open. Close it, then press Try again."),
+                PrimaryButtonText = "Try again", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary
+            });
+            if (answer != ContentDialogResult.Primary) return;
+        }
+
+        var removeChanged = false;
+        var permission = check.NeedsPermission ? "\n\nThis folder needs Windows permission to change, so Windows will ask next." : "";
+        if (check.Changed.Count > 0 || check.MissingBackups.Count > 0)
+        {
+            var text = new List<string>();
+            if (check.Changed.Count > 0)
+            {
+                text.Add("These files changed since Upshift installed them:");
+                text.AddRange(check.Changed.Select(c => $"• {Path.Combine(target, c.Path)}: {c.What}"));
+                text.Add("\nLeave them: they stay as they are, and Upshift keeps a note of them so you can remove them later.");
+                text.Add("Remove anyway and restore the originals: Upshift's files go even though they changed, and the game's originals it backed up are put back.");
+            }
+            if (check.MissingBackups.Count > 0)
+            {
+                text.Add((text.Count > 0 ? "\n" : "") + "Upshift's backup of these originals is missing, so they can't be put back (the game launcher's \"Verify files\" can restore them):");
+                text.AddRange(check.MissingBackups.Select(m => "• " + Path.Combine(target, m)));
+            }
+            var answer = await ShowDialogAsync(new ContentDialog
+            {
+                XamlRoot = XamlRoot, Title = $"Before removing OptiScaler from {card.Name}",
+                Content = Scrollable(string.Join("\n", text) + permission),
+                PrimaryButtonText = check.Changed.Count > 0 ? "Remove anyway and restore the originals" : "Uninstall",
+                SecondaryButtonText = check.Changed.Count > 0 ? "Leave them" : "",
+                CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close
+            });
+            if (answer == ContentDialogResult.None) return;
+            removeChanged = answer == ContentDialogResult.Primary && check.Changed.Count > 0;
+        }
+        else
+        {
+            var confirm = new ContentDialog
+            {
+                XamlRoot = XamlRoot, Title = $"Remove OptiScaler from {card.Name}?",
+                Content = Wrapped("Removes the files this app installed, OptiScaler.ini and the logs OptiScaler wrote, and puts back the game files it backed up. " +
+                                  "Your OptiScaler settings are saved first, so installing again can restore them. Afterwards Upshift checks the folder file by file." + permission),
+                PrimaryButtonText = "Uninstall", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close
+            };
+            if (await ShowDialogAsync(confirm) != ContentDialogResult.Primary) return;
+        }
+
+        InstallResult? result;
+        while (true)
+        {
+            result = await ViewModel.UninstallOptiScalerAsync(card, removeChanged);
+            if (result is not { PermissionRefused: true }) break;
+            var again = await ShowDialogAsync(new ContentDialog
+            {
+                XamlRoot = XamlRoot, Title = "Windows permission was refused",
+                Content = Wrapped("This game's folder can only be changed with Windows' permission, and the prompt was declined, so nothing was changed."),
+                PrimaryButtonText = "Try again with permission", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary
+            });
+            if (again != ContentDialogResult.Primary) return;
+        }
+        if (result is null) return;
+        await ShowUninstallResultAsync(target, result);
+    }
+
+    /// <summary>"This game's folder is back to how it was before Upshift", or what remains (full paths) with Open folder.</summary>
+    private async Task ShowUninstallResultAsync(string target, InstallResult result)
+    {
+        var left = result.Remaining.Concat(result.KeptChanged.Select(k => $"{Path.Combine(target, k)}: changed since the install, left in place as you chose")).ToList();
+        var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = $"Remove OptiScaler from {card.Name}?",
-            Content = new TextBlock
-            {
-                TextWrapping = TextWrapping.Wrap,
-                Text = "Removes the files this app installed, OptiScaler.ini and the logs OptiScaler wrote, and puts back the game files it backed up. " +
-                       "Your OptiScaler settings are saved first, so installing again can restore them. Other files that changed since the install are left in place and listed."
-            },
-            PrimaryButtonText = "Uninstall",
-            CloseButtonText = "Cancel",
-            DefaultButton = ContentDialogButton.Close
+            Title = result.FolderRestored ? "OptiScaler removed" : result.Success ? "OptiScaler removed, with files left" : "OptiScaler wasn't fully removed",
+            Content = left.Count == 0 ? Wrapped(result.Message) : Scrollable(result.Message + "\n\nStill in the game's folder:\n" + string.Join("\n", left.Select(l => "• " + l))),
+            CloseButtonText = "OK", DefaultButton = ContentDialogButton.Close
         };
-        if (await ShowDialogAsync(confirm) != ContentDialogResult.Primary) return;
-
-        var result = await ViewModel.UninstallOptiScalerAsync(card);
-        if (result is null) return;
-        if (!result.Success) await ShowMessageAsync("OptiScaler wasn't fully removed", result.Message);
-        else if (result.KeptChanged.Count > 0 || result.LeftBehind.Count > 0)
-        {
-            var text = result.Message;
-            if (result.LeftBehind.Count > 0)
-                text += $" Also left in place, because OptiScaler created them while the game ran: {string.Join(", ", result.LeftBehind)}.";
-            await ShowMessageAsync("OptiScaler removed, with files left behind", text);
-        }
+        if (left.Count > 0) dialog.PrimaryButtonText = "Open folder";
+        if (await ShowDialogAsync(dialog) == ContentDialogResult.Primary)
+            System.Diagnostics.Process.Start("explorer.exe", $"\"{target}\"")?.Dispose();
     }
+
+    /// <summary>"Remove what Upshift added" without a record: lists OptiScaler's files, asks which to remove.</summary>
+    private async void RemoveWithoutRecord_Click(object sender, RoutedEventArgs e)
+    {
+        if (_dialogOpen || ViewModel.Selected is not { RecordDamaged: true } card || card.Info.TargetDir is not { } target) return;
+        var (found, backups) = await Task.Run(() => OptiScalerInstaller.ScanWithoutRecord(target));
+        var panel = new StackPanel { Spacing = 6 };
+        panel.Children.Add(Wrapped("Upshift found these in the game's folder. The ones that are surely OptiScaler's are ticked; the others may be the game's own, so check before ticking them. Nothing is removed until you press Remove."));
+        var boxes = new List<(CheckBox Box, string Path)>();
+        foreach (var f in found)
+        {
+            var box = new CheckBox { IsChecked = f.SurelyOptiScaler, Content = Wrapped($"{f.Path}{(f.IsFolder ? "\\" : "")}: {f.What}") };
+            boxes.Add((box, f.Path));
+            panel.Children.Add(box);
+        }
+        var restore = new List<(CheckBox Box, RestoreJob Job)>();
+        if (backups.Count > 0)
+        {
+            panel.Children.Add(Wrapped("\nOriginals Upshift backed up, to copy back first:"));
+            foreach (var b in backups)
+            {
+                var box = new CheckBox { IsChecked = true, Content = Wrapped($"{b.Path} (from {b.Backup})") };
+                restore.Add((box, b));
+                panel.Children.Add(box);
+            }
+        }
+        var answer = await ShowDialogAsync(new ContentDialog
+        {
+            XamlRoot = XamlRoot, Title = "Remove what Upshift added",
+            Content = new ScrollViewer { Content = panel, MaxHeight = 460 },
+            PrimaryButtonText = "Remove", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close
+        });
+        if (answer != ContentDialogResult.Primary) return;
+        var paths = boxes.Where(b => b.Box.IsChecked == true).Select(b => b.Path).ToList();
+        var jobs = restore.Where(r => r.Box.IsChecked == true).Select(r => r.Job).ToList();
+        if (paths.Count == 0 && jobs.Count == 0) return;
+        var result = await ViewModel.RemoveWithoutRecordAsync(card, paths, jobs);
+        if (result is not null) await ShowUninstallResultAsync(target, result);
+    }
+
+    /// <summary>Sets OptiScaler's log to its lightest level for this game (recorded like any other setting).</summary>
+    private async void TurnOnLogCheck_Click(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.Selected is not { } card) return;
+        await ReportAsync(ViewModel.ConfigureOptiScalerAsync(card, OptiScalerLog.LogSettings(true)), "The check wasn't turned on");
+    }
+
+    private void CheckLogAgain_Click(object sender, RoutedEventArgs e) => ViewModel.Selected?.RefreshLoadStatus();
+
+    private async void ReportGameProblem_Click(object sender, RoutedEventArgs e)
+    {
+        if (_dialogOpen || ViewModel.Selected is not { } card) return;
+        await ReportDialog.ShowAsync(XamlRoot, card, ShowDialogAsync);
+    }
+
+    private static TextBlock Wrapped(string text) => new() { Text = text, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true };
+
+    private static ScrollViewer Scrollable(string text) => new() { Content = Wrapped(text), MaxHeight = 420 };
 
     // ---------------- Upscaler files ----------------
 

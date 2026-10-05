@@ -7,19 +7,21 @@ body:
     attributes:
       value: |
         Thanks for taking the time to report this. Please don't use Upshift with online or anti-cheat games; it blocks them, and problems with them won't be looked at.
+
+        **Please attach Upshift's problem report.** In Upshift, open the game's panel and press **Report a problem with this game** (or **About > Report a problem** if it isn't about one game). It saves a zip file to your Desktop with your Upshift and Windows versions, graphics cards, logs and the game's OptiScaler details, with your Windows user name taken out of paths. Nothing is sent: drag the file into the "Problem report" box below.
   - type: input
     id: version
     attributes:
       label: Upshift version
-      description: Shown on the About page, e.g. 1.1.0.
-      placeholder: "1.1.0"
+      description: Shown on the About page, e.g. 1.2.0.
+      placeholder: "1.2.0"
     validations:
       required: true
   - type: input
     id: gpu
     attributes:
       label: Graphics card
-      description: Shown at the top of Settings, e.g. NVIDIA GeForce RTX 4070. The driver version helps too.
+      description: Shown at the top of Settings, e.g. NVIDIA GeForce RTX 4070 (it's also in the problem report).
       placeholder: "NVIDIA GeForce RTX 4070, driver 32.0.15.xxxx"
     validations:
       required: true
@@ -59,9 +61,8 @@ body:
     validations:
       required: true
   - type: textarea
-    id: log
+    id: report
     attributes:
-      label: Log
+      label: Problem report
       description: |
-        Upshift writes a log of every install, update, undo and repair to `%LocalAppData%\Upshift\logs` (paste that into the Explorer address bar). Attach or paste the file for the day it happened, `install-yyyy-MM-dd.log`. Remove anything you'd rather not share, such as your Windows user name in paths.
-      render: text
+        Drag the `Upshift-report-….zip` file from your Desktop into this box (see the top of this form for how to make it). If you can't, attach the day's log from `%LocalAppData%\Upshift\logs` instead (paste that into the Explorer address bar), after removing your Windows user name from paths.

@@ -500,6 +500,36 @@ errors and no warnings.
   - The Witcher 3: frame cap Suggested → typed → Off. OptiScaler.ini is now `FramerateLimit =auto` instead of
     `= auto` (before the spacing fix); the manifest hash matches the file.
 
+- **1.1.0 (2026-10-05) released** through the tag workflow (built on GitHub; `package.ps1` now appends the SHA-256
+  of the installer and portable zip to the notes). 1.0.1 and 1.0.2 were never published separately.
+- **1.2.0 (2026-10-05), not released: trust and troubleshooting.**
+  - **OptiScaler's log** (0.9.4):
+    - Off by default (`[Log] LogToFile=false`). Its default level is Trace (heavy). Upshift sets `LogToFile=true`,
+      `LogLevel=2` (Info) on new installs, or via "Turn on the check". It's async by default and has no per-frame
+      lines at Info.
+    - The file is `OptiScaler.log` next to the exe, truncated each run, so its last write time is the run time.
+    - Lines are "time	I	Function message". It loaded if the log exists. "Creating new <backend> upscaler/feature"
+      gives the backend ("init successful for X, upscaler changed" later replaces it).
+    - The input is the entry point logged just before: `hk_xess…CreateContext` (XeSS), `ffxCreateContext` (FSR 3.1),
+      Fsr2/Fsr3 "context created", otherwise NGX/DLSS.
+    - DLSSNR 0.2.0 has the same strings and already ships Info logging. AMD-NR wasn't checked (no source, 516 MB
+      zip), so it's excluded.
+    - "Didn't load" needs a launch Upshift saw (`GameHistoryStore.LastLaunchUtc`, from Play or Measure) with no log
+      after it.
+  - **Uninstall rewrite** (`OptiScalerInstaller.Uninstall`, `CheckUninstall`, `VerifyUninstall`, `ScanWithoutRecord`,
+    `RemoveWithoutRecord`, `InstallOperation.RemoveWithoutRecord`, `InstallPlan.RemoveChanged`,
+    `InstallResult.Remaining`/`FolderRestored`/`PermissionRefused`):
+    - Each file is tried on its own. The record keeps exactly what's left and stays active (Removed=false) when
+      something failed, so a retry finishes.
+    - Before this, a failure part-way left a record listing already-restored files as "changed since install" on the
+      next try.
+  - `GameHistoryStore` (`data\history\<game>.json`): uninstall entries for the change history, and the last launch.
+  - **Report a problem:** `Core/Services/ProblemReport` (Scrub, LogForGame, FileList, Save),
+    `App/Services/ProblemReports`, `Views/ReportDialog`. The zip goes to the Desktop, then Explorer /select.
+  - Testing: `p12_test` and `report_test` in the scratch harness. The Witcher 3's log check was turned on, tested with
+    a sample log, then turned off; the folder matches the snapshot.
+  - The "Battle.net warning" the user mentioned wasn't found in this repo, a branch, a stash or a worktree.
+
 ## Next
 
 1. **DLSS 5 follow-ups:**

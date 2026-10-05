@@ -371,7 +371,8 @@ public sealed partial class LibraryViewModel : ObservableObject
             Version = component.Version,
             ProxyName = proxyName,
             // The upscaler dropdown starts on the suggestion, so the fresh OptiScaler.ini gets it too.
-            IniSettings = SuggestedUpscalerSettings(card),
+            // OptiScaler's log at its lightest level, for "According to OptiScaler's log" in the game's panel.
+            IniSettings = SuggestedUpscalerSettings(card).Concat(OptiScalerLog.LogSettings(true)).ToList(),
             SettingsFolder = restore?.SettingsFolder ?? SavedSettings.FolderFor(AppServices.DataDir, card.Name),
             RemoveLeftovers = restore?.RemoveLeftovers ?? false,
             RestoreSettingsFrom = restore?.RestoreFrom,
@@ -436,6 +437,7 @@ public sealed partial class LibraryViewModel : ObservableObject
         var options = card.LaunchOptions;
         var result = await Task.Run(() => Core.Launch.GameLauncher.Launch(card.Info, options));
         card.LaunchError = result.Success ? null : result.Message;
+        if (result.Success) AppServices.History.Launched(card.Info.Id);
         StatusText = result.Success ? result.Message : string.Empty;
     }
 
@@ -482,16 +484,54 @@ public sealed partial class LibraryViewModel : ObservableObject
         }
     }
 
-    public Task<InstallResult?> UninstallOptiScalerAsync(GameCardViewModel card) =>
-        RunInstallAsync(card, new InstallPlan
+    /// <summary>
+    /// Uninstalls, then records the result in the game's history (it outlasts OptiScaler's own record).
+    /// <paramref name="removeChanged"/>: also remove files that changed and restore the originals.
+    /// </summary>
+    public async Task<InstallResult?> UninstallOptiScalerAsync(GameCardViewModel card, bool removeChanged = false)
+    {
+        var version = card.InstalledText;
+        var result = await RunInstallAsync(card, new InstallPlan
         {
             Operation = InstallOperation.Uninstall,
             GameId = card.Info.Id,
             GameName = card.Name,
             TargetDir = card.Info.TargetDir!,
+            RemoveChanged = removeChanged,
             // OptiScaler.ini is saved here before it's removed, for "Restore my previous OptiScaler settings".
             SettingsFolder = SavedSettings.FolderFor(AppServices.DataDir, card.Name)
         }, "Removing OptiScaler…");
+        if (result is not null && !result.PermissionRefused)
+        {
+            var left = result.Remaining.Concat(result.KeptChanged.Select(k => $"{Path.Combine(card.Info.TargetDir!, k)}: changed since the install, left in place"));
+            AppServices.History.Add(card.Info.Id,
+                result.FolderRestored ? $"Uninstalled {version.Replace(" installed as", ", loaded as")}: the folder is back to how it was"
+                    : result.Success ? $"Uninstalled {version.Replace(" installed as", ", loaded as")}, with files left in place" : "Uninstall didn't finish",
+                string.Join("\n", left.Prepend(result.Message)));
+            RefreshCardNow(card.Info.Id);
+        }
+        return result;
+    }
+
+    /// <summary>"Remove what Upshift added" when its record is missing or damaged: only what the user ticked.</summary>
+    public async Task<InstallResult?> RemoveWithoutRecordAsync(GameCardViewModel card, List<string> paths, List<RestoreJob> backups)
+    {
+        var result = await RunInstallAsync(card, new InstallPlan
+        {
+            Operation = InstallOperation.RemoveWithoutRecord, GameId = card.Info.Id, GameName = card.Name, TargetDir = card.Info.TargetDir!,
+            RemovePaths = paths, RestoreBackups = backups
+        }, "Removing OptiScaler's files…");
+        if (result is not null && !result.PermissionRefused)
+        {
+            AppServices.History.Add(card.Info.Id, $"Removed {paths.Count} OptiScaler item(s) without Upshift's record" + (backups.Count > 0 ? $", {backups.Count} original(s) restored" : ""),
+                string.Join("\n", paths.Concat(result.Remaining).Prepend(result.Message)));
+            RefreshCardNow(card.Info.Id);
+        }
+        return result;
+    }
+
+    /// <summary>Rebuilds one card (after its history changed outside an install).</summary>
+    public void RefreshCardNow(string gameId) => RefreshCard(gameId);
 
     private async Task<InstallResult?> RunInstallAsync(GameCardViewModel card, InstallPlan plan, string busyText)
     {

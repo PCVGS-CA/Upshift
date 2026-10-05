@@ -68,6 +68,13 @@ public static class AppServices
     /// <summary>Files the user supplies (DLSS 5, FSR 4.0.2c INT8). Never downloaded or bundled.</summary>
     public static UserFileStore UserFiles { get; } = new(DataDir);
 
+    /// <summary>Uninstalls and their results, and when Upshift last started each game (outlasts OptiScaler's record).</summary>
+    public static Core.Services.GameHistoryStore History { get; } = new(DataDir);
+
+    /// <summary>Raised when Upshift's window comes back to the front (e.g. after playing), so statuses can be read again.</summary>
+    public static event Action? WindowActivated;
+    public static void RaiseWindowActivated() => WindowActivated?.Invoke();
+
     /// <summary>"Measure performance" results per game (kept on this PC only).</summary>
     public static Core.Measure.MeasurementStore Measurements { get; } = new(DataDir);
 

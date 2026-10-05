@@ -36,6 +36,8 @@ public sealed partial class MainWindow : Window
         TitleBarLogo.Source = new Microsoft.UI.Xaml.Media.Imaging.SvgImageSource(new Uri(Path.Combine(assets, "Upshift.svg")));
 
         NavigateTo(typeof(LibraryPage));
+        // Back from a game: the Library reads OptiScaler's log again.
+        Activated += (_, e) => { if (e.WindowActivationState != WindowActivationState.Deactivated) AppServices.RaiseWindowActivated(); };
         _ = ShowGpuAsync();
         // The "catalogUrl" catalog and, at most every 6 hours, the release check (both in the background).
         _ = Task.Run(Services.GameUpdates.StartupAsync);

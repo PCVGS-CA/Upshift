@@ -164,9 +164,13 @@ public sealed partial class GameCardViewModel : ObservableObject
         var optiChanges = manifest is null || info.TargetDir is null
             ? new List<ChangeEntry>()
             : OptiScalerInstaller.Changes(info.TargetDir, manifest, Ui.VersionLabel);
-        // Advice applied from "Measure performance" is listed with the other changes.
+        RecordDamaged = !IsInstalledByUs && info.TargetDir is { } td && Directory.Exists(td) && OptiScalerInstaller.RecordMissingOrDamaged(td);
+        RefreshLoadStatus();
+
+        // Advice applied from "Measure performance", and uninstalls (Upshift's own history), are listed with the other changes.
         var measureChanges = AppServices.Measurements.Get(info.Id).Applied.Select(a => new ChangeEntry(a.Utc, a.Text, "From Measure performance > What to try."));
         var changes = optiChanges.Concat(Core.Install.UpscalerFiles.Changes(info.InstallDir, Ui.VersionLabel)).Concat(measureChanges)
+            .Concat(AppServices.History.Changes(info.Id))
             .OrderByDescending(c => c.Utc ?? DateTime.MinValue)
             .ToList();
         Changes = changes.Select(c => new ChangeViewModel(c)).ToList();
@@ -201,6 +205,64 @@ public sealed partial class GameCardViewModel : ObservableObject
             lines.Add($"This looks like a game update or a file check putting the game's own files back: other game files in the same folder changed at the same time ({update.ChangedLocal:d MMM yyyy, HH:mm}).");
         return string.Join("\n\n", lines);
     }
+
+    // ---------------- "According to OptiScaler's log" ----------------
+
+    /// <summary>The status line under "OptiScaler … installed", from OptiScaler's own log after the game ran.</summary>
+    [ObservableProperty] private string loadStatusText = "";
+    /// <summary>"Based on the run on 5 Oct 2026, 20:14", or the likely causes when OptiScaler didn't load.</summary>
+    [ObservableProperty] private string loadStatusDetail = "";
+    [ObservableProperty] private bool canTurnOnLogCheck;
+    public bool HasLoadStatus => LoadStatusText.Length > 0;
+    public bool HasLoadStatusDetail => LoadStatusDetail.Length > 0;
+    partial void OnLoadStatusTextChanged(string value) => OnPropertyChanged(nameof(HasLoadStatus));
+    partial void OnLoadStatusDetailChanged(string value) => OnPropertyChanged(nameof(HasLoadStatusDetail));
+
+    /// <summary>Reads OptiScaler's log again (after the game ran). Call on the UI thread.</summary>
+    public void RefreshLoadStatus()
+    {
+        var dir = Info.TargetDir;
+        var manifest = dir is null ? null : OptiScalerInstaller.ReadManifest(dir);
+        var iniPath = dir is null ? null : Path.Combine(dir, "OptiScaler.ini");
+        if (manifest is not { Removed: false } || iniPath is null || !File.Exists(iniPath))
+        {
+            LoadStatusText = LoadStatusDetail = "";
+            CanTurnOnLogCheck = false;
+            return;
+        }
+        var ini = IniFile.Load(iniPath);
+        var fsr4 = OptiScalerOptions.Fsr4InUse(dir!, manifest, ini, AppServices.Catalog.Fsr4.CommunityInt8FileName).Source != Fsr4Source.Off
+                   || AppServices.Gpu?.Generation.StartsWith("RDNA 4", StringComparison.OrdinalIgnoreCase) == true;
+        var status = OptiScalerLog.Status(dir!, manifest, ini, AppServices.History.Get(Info.Id).LastLaunchUtc, fsr4);
+        const string Prefix = "According to OptiScaler's log: ";
+        var when = status.RunLocal is { } t ? $"Based on the run on {t:d MMM yyyy, HH:mm}." : "";
+        CanTurnOnLogCheck = status.State == LoadState.LoggingOff;
+        (LoadStatusText, LoadStatusDetail) = status.State switch
+        {
+            LoadState.Working when status.GameSent == status.Used =>
+                (Prefix + $"Working. OptiScaler is handling the game's {status.GameSent}.", when),
+            LoadState.Working =>
+                (Prefix + $"Working. The game's {status.GameSent} is being replaced with {status.Used}." +
+                 (status.FellBack ? " (The upscaler chosen first couldn't start, so OptiScaler fell back to FSR 2.1.)" : ""), when),
+            LoadState.LoadedNothingTaken =>
+                (Prefix + "OptiScaler loaded, but the game isn't using an upscaler it can take over. In the game's graphics menu, choose DLSS, FSR 2 or newer, or XeSS.", when),
+            LoadState.DidNotLoad =>
+                (Prefix + "OptiScaler didn't load the last time this game ran.",
+                 (status.RunLocal is { } l ? $"Upshift started the game on {l:d MMM yyyy, HH:mm}, but OptiScaler wrote no log. " : "") +
+                 $"Likely causes: the game ran from a different .exe than the one OptiScaler sits next to; {manifest.ProxyName} isn't a file this game loads " +
+                 "(Suggestions for this game may name a better loading name); or a game update, file check or antivirus removed or blocked it. " +
+                 $"Try: Repair below, then start the game with Play. If it still doesn't load, uninstall and install again with another loading name, such as winmm.dll or version.dll."),
+            LoadState.NotRunYet => (Prefix + "Run the game once to check.", ""),
+            LoadState.LoggingOff => ("OptiScaler's log is off for this game, so Upshift can't check whether it's working.",
+                "Turning the check on sets OptiScaler's log to its lightest level (LogToFile=true, LogLevel=2): it records only events such as an upscaler starting, not every frame, so it doesn't slow the game down."),
+            _ => ("This check isn't available for the AMD-NR build: its log hasn't been checked by Upshift, so the status is only shown for standard OptiScaler and its DLSS 5 build.", "")
+        };
+    }
+
+    // ---------------- Record missing or damaged ----------------
+
+    /// <summary>OptiScaler's files are here but Upshift's record of them is missing or can't be read.</summary>
+    public bool RecordDamaged { get; }
 
     public List<ChangeViewModel> Changes { get; }
     public bool HasChanges => Changes.Count > 0;

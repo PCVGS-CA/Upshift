@@ -171,6 +171,7 @@ public static class Measurement
 
         _hotkey?.Dispose();
         _hotkey = null;
+        AppServices.History.Launched(game.Id);
         var settings = _snapshot?.Invoke() ?? new MeasuredSettings();
         var refresh = Helpers.Display.Pick(Helpers.Display.All(), AppServices.Settings.Current.FrameCapDisplay)?.RefreshHz;
         Set(MeasureState.Measuring, $"Measuring {game.Name} for {MeasureThresholds.MeasureSeconds} seconds… keep playing.", false);

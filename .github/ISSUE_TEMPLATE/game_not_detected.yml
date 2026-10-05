@@ -3,12 +3,16 @@ description: A game Upshift doesn't find, or shows wrong details for (upscalers,
 title: "[Game] "
 labels: ["game detection"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        **If the game is in your Library, please attach Upshift's problem report.** Open the game's panel and press **Report a problem with this game**. It saves a zip file to your Desktop with the game's details and a list of its files (names, sizes and versions only), with your Windows user name taken out of paths. Nothing is sent: drag the file into the "Problem report" box below.
   - type: input
     id: version
     attributes:
       label: Upshift version
-      description: Shown on the About page, e.g. 1.1.0.
-      placeholder: "1.1.0"
+      description: Shown on the About page, e.g. 1.2.0.
+      placeholder: "1.2.0"
     validations:
       required: true
   - type: input
@@ -61,3 +65,8 @@ body:
       label: Install folder (optional)
       description: Where the game is installed. Replace your Windows user name if it's in the path.
       placeholder: "D:\\SteamLibrary\\steamapps\\common\\GameName"
+  - type: textarea
+    id: report
+    attributes:
+      label: Problem report (if the game is in your Library)
+      description: Drag the `Upshift-report-….zip` file from your Desktop into this box.

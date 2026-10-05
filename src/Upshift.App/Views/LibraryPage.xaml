@@ -364,6 +364,16 @@
                                        Foreground="{StaticResource SubtleTextBrush}" />
                         </StackPanel>
 
+                        <!-- Upshift's record is missing or damaged, but OptiScaler's files are there -->
+                        <InfoBar IsOpen="{x:Bind ViewModel.Selected.RecordDamaged, Mode=OneWay}" IsClosable="False" Severity="Warning"
+                                 Title="Upshift's record for this game is missing or damaged"
+                                 Message="Upshift can't tell exactly what it installed here. It can look for OptiScaler's files and remove the ones you choose, nothing else."
+                                 Visibility="{x:Bind ViewModel.Selected.RecordDamaged, Mode=OneWay}">
+                            <InfoBar.ActionButton>
+                                <Button Content="Remove what Upshift added" Click="RemoveWithoutRecord_Click" IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}" />
+                            </InfoBar.ActionButton>
+                        </InfoBar>
+
                         <InfoBar IsOpen="{x:Bind ViewModel.Selected.HasAntiCheat, Mode=OneWay}" IsClosable="False"
                                  Severity="Warning" Title="Installs are blocked for this game"
                                  Message="{x:Bind ViewModel.Selected.AntiCheatMessage, Mode=OneWay}" />
@@ -491,6 +501,17 @@
                                     <TextBlock Text="{x:Bind ViewModel.Selected.InstalledText, Mode=OneWay}" FontWeight="SemiBold"
                                                VerticalAlignment="Center" TextWrapping="Wrap" />
                                 </StackPanel>
+                                <!-- "According to OptiScaler's log: …" and when that run was -->
+                                <StackPanel Spacing="2" Visibility="{x:Bind ViewModel.Selected.HasLoadStatus, Mode=OneWay}">
+                                    <TextBlock Text="{x:Bind ViewModel.Selected.LoadStatusText, Mode=OneWay}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                                    <TextBlock Text="{x:Bind ViewModel.Selected.LoadStatusDetail, Mode=OneWay}" FontSize="12" TextWrapping="Wrap"
+                                               Foreground="{StaticResource SubtleTextBrush}" Visibility="{x:Bind ViewModel.Selected.HasLoadStatusDetail, Mode=OneWay}" />
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <Button Content="Turn on the check" Click="TurnOnLogCheck_Click" Margin="0,4,0,0"
+                                                Visibility="{x:Bind ViewModel.Selected.CanTurnOnLogCheck, Mode=OneWay}" IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}" />
+                                        <HyperlinkButton Content="Check again" Click="CheckLogAgain_Click" Padding="0" FontSize="12" />
+                                    </StackPanel>
+                                </StackPanel>
                                 <TextBlock Text="{x:Bind ViewModel.Selected.Fsr4Text, Mode=OneWay}" FontSize="12" TextWrapping="Wrap"
                                            Visibility="{x:Bind ViewModel.Selected.HasFsr4Text, Mode=OneWay}" />
                                 <TextBlock Text="In game: press Insert to open the OptiScaler menu" FontSize="12"
@@ -569,6 +590,12 @@
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <FontIcon Glyph="&#xE838;" FontSize="14" />
                                     <TextBlock Text="Open game folder" />
+                                </StackPanel>
+                            </Button>
+                            <Button Click="ReportGameProblem_Click" AutomationProperties.Name="Report a problem with this game">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xEBE8;" FontSize="14" />
+                                    <TextBlock Text="Report a problem with this game" />
                                 </StackPanel>
                             </Button>
                         </StackPanel>

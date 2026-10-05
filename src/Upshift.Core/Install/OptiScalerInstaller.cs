@@ -6,7 +6,7 @@ using Upshift.Core.Detection;
 
 namespace Upshift.Core.Install;
 
-public enum InstallOperation { Install, Uninstall, Configure, Update, UndoUpdate, Repair, UpdateUpscalerFiles, RestoreUpscalerFiles, SwitchBuild, SwitchBack }
+public enum InstallOperation { Install, Uninstall, Configure, Update, UndoUpdate, Repair, UpdateUpscalerFiles, RestoreUpscalerFiles, SwitchBuild, SwitchBack, RemoveWithoutRecord }
 
 /// <summary>Everything needed to install or uninstall, so an elevated copy of the app can carry it out from a file.</summary>
 public sealed class InstallPlan
@@ -56,6 +56,19 @@ public sealed class InstallPlan
     public string? AddFileFrom { get; set; }
     /// <summary>Configure only: the name AddFileFrom is copied in as, e.g. amdxcffx64.dll.</summary>
     public string? AddFileAs { get; set; }
+    /// <summary>
+    /// Uninstall only: also remove files that changed since the install, and put the originals back over game files that
+    /// changed ("Remove anyway and restore the originals"). Off: such files are left in place and listed.
+    /// </summary>
+    public bool RemoveChanged { get; set; }
+
+    /// <summary>
+    /// RemoveWithoutRecord only (Upshift's record is missing or damaged): the files and folders the user ticked, relative to
+    /// the target folder, and the backed-up originals in .upshift to copy back (backup path, original path).
+    /// </summary>
+    public List<string> RemovePaths { get; set; } = new();
+    public List<RestoreJob> RestoreBackups { get; set; } = new();
+
     /// <summary>Configure only: a file this app added earlier to take out again (the game's own copy comes back if it had one).</summary>
     public string? RemoveFile { get; set; }
 
@@ -99,6 +112,23 @@ public sealed class InstallResult
     /// <summary>Files OptiScaler created while running (not ours to delete), e.g. OptiScaler.log.</summary>
     public List<string> LeftBehind { get; set; } = new();
     public InstallManifest? Manifest { get; set; }
+
+    /// <summary>
+    /// Uninstall: what is still left after it, each with its full path and why ("C:\…\dxgi.dll: in use by another
+    /// program"), from the check made after the uninstall. Empty with no KeptChanged means the folder is back to how it was.
+    /// </summary>
+    public List<string> Remaining { get; set; } = new();
+    /// <summary>Windows' permission prompt was declined (the folder needs admin rights).</summary>
+    public bool PermissionRefused { get; set; }
+    /// <summary>Uninstall: every file Upshift added is gone and every original is back, checked file by file.</summary>
+    public bool FolderRestored => Success && Remaining.Count == 0 && KeptChanged.Count == 0 && LeftBehind.Count == 0;
+}
+
+/// <summary>A backed-up original to copy back (RemoveWithoutRecord).</summary>
+public sealed class RestoreJob
+{
+    public string Backup { get; set; } = "";
+    public string Path { get; set; } = "";
 }
 
 /// <summary>What an install would do, for the confirmation dialog.</summary>
@@ -507,7 +537,7 @@ public static partial class OptiScalerInstaller
     public static InstallResult Uninstall(InstallPlan plan, InstallLog log)
     {
         var target = plan.TargetDir;
-        log.Write($"UNINSTALL {plan.GameName} | from {target}");
+        log.Write($"UNINSTALL {plan.GameName} | from {target}" + (plan.RemoveChanged ? " | changed files too" : ""));
         if (MoveLegacyState(target, log) is { } moveProblem) return Refuse(log, moveProblem);
 
         var manifest = ReadManifest(target);
@@ -517,8 +547,12 @@ public static partial class OptiScalerInstaller
             return new InstallResult { Message = "This app has no record of installing anything in this folder, so it won't remove anything." };
         }
 
+        var before = JsonSerializer.Deserialize<InstallManifest>(JsonSerializer.Serialize(manifest, Json), Json)!;
         var result = new InstallResult { Manifest = manifest };
-        var keepBackups = false;
+        var failed = new List<(string Relative, string Why)>();
+        string Why(Exception ex) => ex is UnauthorizedAccessException
+            ? "Windows didn't allow the change"
+            : ex.HResult is unchecked((int)0x80070020) or unchecked((int)0x80070021) ? "in use by another program (is the game still running?)" : ex.Message;
 
         // The user's OptiScaler.ini (whatever the in-game menu changed) is saved before anything is removed, so a later
         // install can restore it. If it can't be saved, nothing is removed.
@@ -541,81 +575,105 @@ public static partial class OptiScalerInstaller
         if (manifest.Switch is { } sw && ReadSwitchOriginal(target, sw) is { } original)
             createdFolders.AddRange(original.CreatedFolders.Where(f => !createdFolders.Contains(f, StringComparer.OrdinalIgnoreCase)));
 
-        try
+        // Every file is tried on its own: one that can't be removed doesn't stop the rest, and the record keeps exactly
+        // what is still Upshift's, so trying again later picks up where this left off.
+        var stillAdded = new List<ManifestFile>();
+        var stillReplaced = new List<ManifestFile>();
+        foreach (var file in manifest.Added)
         {
-            foreach (var file in manifest.Added)
+            var path = Path.Combine(target, file.Path);
+            try
             {
-                var path = Path.Combine(target, file.Path);
                 if (!File.Exists(path)) { log.Write($"  already gone: {file.Path}"); continue; }
-                // A file of the user's in place of OptiScaler's (the modified FSR 4.1.1b DLL) goes as well.
-                if (manifest.OverrideFor(file.Path) is { } over)
-                {
-                    File.Delete(path);
-                    log.Write($"  removed {file.Path} (your {over.Kind} file)");
-                    continue;
-                }
+                var over = manifest.OverrideFor(file.Path);
                 // OptiScaler.ini goes even when the in-game menu changed it: it was saved above.
-                if (IsIni(file.Path) && (plan.SettingsFolder is not null || Sha256(path) == file.Sha256))
-                {
-                    File.Delete(path);
-                    log.Write($"  removed {file.Path}");
-                    continue;
-                }
-                if (Sha256(path) != file.Sha256)
+                var mayRemove = over is not null || (IsIni(file.Path) && plan.SettingsFolder is not null) || plan.RemoveChanged || Sha256(path) == file.Sha256;
+                if (!mayRemove)
                 {
                     result.KeptChanged.Add(file.Path);
+                    stillAdded.Add(file);
                     log.Write($"  KEPT (changed since install): {file.Path}");
                     continue;
                 }
                 File.Delete(path);
-                log.Write($"  removed {file.Path}");
+                log.Write($"  removed {file.Path}" + (over is not null ? $" (your {over.Kind} file)" : ""));
             }
-
-            foreach (var file in manifest.Replaced)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                var path = Path.Combine(target, file.Path);
-                var backup = Path.Combine(target, file.Backup!);
-                if (File.Exists(path) && Sha256(path) != file.Sha256 && manifest.OverrideFor(file.Path) is null)
+                stillAdded.Add(file);
+                failed.Add((file.Path, Why(ex)));
+                log.Write($"  COULDN'T REMOVE {file.Path}: {ex.Message}");
+            }
+        }
+
+        foreach (var file in manifest.Replaced)
+        {
+            var path = Path.Combine(target, file.Path);
+            var backup = Path.Combine(target, file.Backup!);
+            try
+            {
+                if (File.Exists(path) && Sha256(path) == file.OriginalSha256 && !File.Exists(backup))
+                {
+                    log.Write($"  already restored: {file.Path}");   // an earlier attempt got this far
+                    continue;
+                }
+                if (File.Exists(path) && Sha256(path) != file.Sha256 && manifest.OverrideFor(file.Path) is null && !plan.RemoveChanged)
                 {
                     // Something (a game update, say) replaced our copy; don't overwrite it, and keep the backup.
                     result.KeptChanged.Add(file.Path);
-                    keepBackups = true;
+                    stillReplaced.Add(file);
                     log.Write($"  KEPT (changed since install), backup kept: {file.Path}");
                     continue;
                 }
+                if (!File.Exists(backup))
+                {
+                    stillReplaced.Add(file);
+                    failed.Add((file.Path, $"the game's original, backed up in {file.Backup}, is missing"));
+                    log.Write($"  COULDN'T RESTORE {file.Path}: backup missing");
+                    continue;
+                }
                 File.Copy(backup, path, overwrite: true);
-                if (Sha256(path) != file.OriginalSha256) throw new IOException($"Restoring {file.Path} gave a different file than the original.");
+                if (Sha256(path) != file.OriginalSha256) throw new IOException($"restoring it gave a different file than the original");
                 File.Delete(backup);
                 log.Write($"  restored {file.Path}");
             }
-
-            // Logs OptiScaler and its tools wrote next to the game while it ran.
-            foreach (var file in Directory.EnumerateFiles(target).Where(f => IsRuntimeFile(Path.GetFileName(f))).ToList())
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                try { File.Delete(file); log.Write($"  removed {Path.GetFileName(file)} (written by OptiScaler while running)"); }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { result.LeftBehind.Add(Path.GetFileName(file)); }
+                stillReplaced.Add(file);
+                failed.Add((file.Path, "couldn't put the game's original back: " + Why(ex)));
+                log.Write($"  COULDN'T RESTORE {file.Path}: {ex.Message}");
             }
+        }
 
-            // Folders the install made: whatever OptiScaler wrote into them while running goes too (files that changed
-            // since the install, and so are kept, stay with their folder).
-            foreach (var folder in createdFolders.Distinct(StringComparer.OrdinalIgnoreCase).OrderByDescending(f => f.Length))
+        // Logs OptiScaler and its tools wrote next to the game while it ran.
+        foreach (var file in Directory.EnumerateFiles(target).Where(f => IsRuntimeFile(Path.GetFileName(f))).ToList())
+        {
+            try { File.Delete(file); log.Write($"  removed {Path.GetFileName(file)} (written by OptiScaler while running)"); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { result.LeftBehind.Add(Path.GetFileName(file)); }
+        }
+
+        // Folders the install made: whatever OptiScaler wrote into them while running goes too (files kept above stay).
+        var keptPaths = stillAdded.Concat(stillReplaced).Select(f => f.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var folder in createdFolders.Distinct(StringComparer.OrdinalIgnoreCase).OrderByDescending(f => f.Length))
+        {
+            var dir = Path.Combine(target, folder);
+            if (!Directory.Exists(dir)) continue;
+            foreach (var file in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories).ToList())
             {
-                var dir = Path.Combine(target, folder);
-                if (!Directory.Exists(dir)) continue;
-                foreach (var file in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories).ToList())
-                {
-                    var relative = Path.GetRelativePath(target, file);
-                    if (result.KeptChanged.Contains(relative, StringComparer.OrdinalIgnoreCase)) continue;
-                    try { File.Delete(file); log.Write($"  removed {relative} (written by OptiScaler while running)"); }
-                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { result.LeftBehind.Add(relative); }
-                }
-                RemoveEmptyFolders(dir);
+                var relative = Path.GetRelativePath(target, file);
+                if (keptPaths.Contains(relative)) continue;
+                try { File.Delete(file); log.Write($"  removed {relative} (written by OptiScaler while running)"); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { result.LeftBehind.Add(relative); }
             }
-            // OptiScaler's own folder names, when an earlier record didn't list them but they're empty now.
-            foreach (var folder in OptiScalerFolders) RemoveEmptyFolders(Path.Combine(target, folder));
+            RemoveEmptyFolders(dir);
+        }
+        // OptiScaler's own folder names, when an earlier record didn't list them but they're empty now.
+        foreach (var folder in OptiScalerFolders) RemoveEmptyFolders(Path.Combine(target, folder));
 
-            var stateDir = Path.Combine(target, StateFolder);
-            if (!keepBackups && result.KeptChanged.Count == 0)
+        var stateDir = Path.Combine(target, StateFolder);
+        try
+        {
+            if (stillAdded.Count == 0 && stillReplaced.Count == 0)
             {
                 // Everything in .upshift except the record of upscaler files Upshift updated (when the exe folder is
                 // also the install folder, that record and its originals live here too, and outlast OptiScaler).
@@ -632,30 +690,237 @@ public static partial class OptiScalerInstaller
             }
             else
             {
-                // Keep the record of what's still ours, and any backup that wasn't restored.
-                manifest.Added = manifest.Added.Where(f => result.KeptChanged.Contains(f.Path)).ToList();
-                manifest.Replaced = manifest.Replaced.Where(f => result.KeptChanged.Contains(f.Path)).ToList();
-                manifest.Removed = true;
-                manifest.RemovedUtc = DateTime.UtcNow;
+                // Keep the record of what's still ours and any backup not restored. When files couldn't be removed,
+                // OptiScaler is still installed and the record stays active, so Uninstall can be tried again.
+                manifest.Added = stillAdded;
+                manifest.Replaced = stillReplaced;
+                manifest.Removed = failed.Count == 0;
+                if (manifest.Removed) manifest.RemovedUtc = DateTime.UtcNow;
                 TryRemoveEmptyFolder(Path.Combine(target, manifest.BackupFolder));
                 File.WriteAllText(Path.Combine(stateDir, ManifestName), JsonSerializer.Serialize(manifest, Json));
-                log.Write($"  kept {StateFolder} for {result.KeptChanged.Count} changed file(s)");
+                log.Write($"  kept the record in {StateFolder} for {stillAdded.Count + stillReplaced.Count} file(s)");
             }
-
-            result.Success = true;
-            result.Message = (result.KeptChanged.Count == 0
-                ? "OptiScaler was removed and the game's own files were put back."
-                : $"OptiScaler was removed, but {result.KeptChanged.Count} file(s) changed after install and were left in place: {string.Join(", ", result.KeptChanged)}.")
-                + (plan.SettingsFolder is not null ? " Your OptiScaler settings were saved, so a reinstall can restore them." : "");
-            log.Write("  done: " + result.Message);
-            return result;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            log.Write($"  FAILED: {ex.Message}");
-            result.Message = $"Uninstall stopped part-way: {ex.Message} The record in {StateFolder} was kept, so you can try again.";
-            return result;
+            failed.Add((StateFolder, "Upshift's record couldn't be updated: " + ex.Message));
+            log.Write($"  COULDN'T UPDATE {StateFolder}: {ex.Message}");
         }
+
+        // ---- Check the result, file by file ----
+        foreach (var (relative, why) in failed) result.Remaining.Add($"{Path.Combine(target, relative)}: {why}");
+        result.Remaining.AddRange(VerifyUninstall(target, before, result.KeptChanged, failed.Select(f => f.Relative)));
+        foreach (var left in result.LeftBehind) result.Remaining.Add($"{Path.Combine(target, left)}: written by OptiScaler while the game ran, couldn't be removed");
+        foreach (var line in result.Remaining) log.Write("  LEFT: " + line);
+
+        result.Success = failed.Count == 0;
+        var settingsNote = plan.SettingsFolder is not null ? " Your OptiScaler settings were saved, so a reinstall can restore them." : "";
+        result.Message = !result.Success
+            ? $"OptiScaler wasn't fully removed: {failed.Count} file(s) couldn't be removed or restored. Everything else was finished, and Upshift's record lists what's left, so you can try again."
+            : result.FolderRestored
+                ? "This game's folder is back to how it was before Upshift." + settingsNote
+                : result.KeptChanged.Count > 0
+                    ? $"OptiScaler was removed. {result.KeptChanged.Count} file(s) that changed since the install were left in place, as you chose." + settingsNote
+                    : "OptiScaler was removed, but some files are left (listed below)." + settingsNote;
+        log.Write((result.Success ? "  done: " : "  INCOMPLETE: ") + result.Message);
+        return result;
+    }
+
+    /// <summary>
+    /// After an uninstall: every file Upshift added is gone and every original it backed up is back and matches the
+    /// backup's record. Returns what doesn't, with full paths (files left on purpose or already reported are skipped).
+    /// </summary>
+    public static List<string> VerifyUninstall(string target, InstallManifest before, IEnumerable<string> keptOnPurpose, IEnumerable<string> alreadyReported)
+    {
+        var skip = keptOnPurpose.Concat(alreadyReported).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var left = new List<string>();
+        foreach (var file in before.Added.Where(f => !skip.Contains(f.Path)))
+            if (File.Exists(Path.Combine(target, file.Path)))
+                left.Add($"{Path.Combine(target, file.Path)}: still there");
+        foreach (var file in before.Replaced.Where(f => !skip.Contains(f.Path)))
+        {
+            var path = Path.Combine(target, file.Path);
+            if (!File.Exists(path)) left.Add($"{path}: the game's original is missing");
+            else if (Sha256(path) != file.OriginalSha256) left.Add($"{path}: doesn't match the game's original");
+        }
+        return left;
+    }
+
+    // ---------------- Before an uninstall ----------------
+
+    /// <summary>What could stop an uninstall, found before anything is changed.</summary>
+    public sealed class UninstallCheck
+    {
+        /// <summary>Programs running from the game's folder (the game or its launcher), by file name.</summary>
+        public List<string> Running { get; } = new();
+        /// <summary>Upshift's files that another program has open.</summary>
+        public List<string> InUse { get; } = new();
+        /// <summary>The folder can't be changed without Windows' permission (games under Program Files).</summary>
+        public bool NeedsPermission { get; set; }
+        /// <summary>Files that changed since Upshift installed them: (relative path, what happened).</summary>
+        public List<(string Path, string What)> Changed { get; } = new();
+        /// <summary>Backed-up originals that are missing.</summary>
+        public List<string> MissingBackups { get; } = new();
+    }
+
+    /// <summary>
+    /// Looks for problems before uninstalling: the game or its launcher running from the game's folder, files in use,
+    /// Windows permission, files changed since the install, and missing backups. Reads only.
+    /// </summary>
+    public static UninstallCheck CheckUninstall(string target, string installDir)
+    {
+        var check = new UninstallCheck();
+        if (ReadManifest(target) is not { Removed: false } manifest) return check;
+        var roots = new[] { target, installDir }.Where(d => !string.IsNullOrEmpty(d))
+            .Select(d => Path.GetFullPath(d).TrimEnd('\\') + "\\").Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        foreach (var process in System.Diagnostics.Process.GetProcesses())
+        {
+            try
+            {
+                var exe = process.MainModule?.FileName;
+                if (exe is not null && roots.Any(r => exe.StartsWith(r, StringComparison.OrdinalIgnoreCase)))
+                    check.Running.Add(Path.GetFileName(exe));
+            }
+            catch (Exception) { /* system or elevated processes can't be inspected; they don't run from a game folder */ }
+            finally { process.Dispose(); }
+        }
+        check.NeedsPermission = !CanWrite(target);
+
+        foreach (var file in manifest.Added)
+        {
+            var path = Path.Combine(target, file.Path);
+            if (!File.Exists(path)) continue;
+            if (IsLocked(path)) check.InUse.Add(file.Path);
+            if (!IsIni(file.Path) && manifest.OverrideFor(file.Path) is null && HasChanged(file, path))
+                check.Changed.Add((file.Path, "changed since Upshift installed it"));
+        }
+        foreach (var file in manifest.Replaced)
+        {
+            var path = Path.Combine(target, file.Path);
+            if (File.Exists(path) && IsLocked(path)) check.InUse.Add(file.Path);
+            if (!File.Exists(Path.Combine(target, file.Backup!))) check.MissingBackups.Add(file.Path);
+            else if (File.Exists(path) && manifest.OverrideFor(file.Path) is null && Sha256(path) != file.Sha256 && Sha256(path) != file.OriginalSha256)
+                check.Changed.Add((file.Path, "replaced by a different copy since the install (a game update, say)"));
+        }
+        check.Running.Sort(StringComparer.OrdinalIgnoreCase);
+        return check;
+    }
+
+    private static bool IsLocked(string path)
+    {
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            return false;
+        }
+        catch (UnauthorizedAccessException) { return false; }   // read-only or needs permission: not "in use"
+        catch (IOException) { return true; }
+    }
+
+    // ---------------- When Upshift's record is missing or damaged ----------------
+
+    /// <summary>An OptiScaler file or folder found without a record, and whether it's surely OptiScaler's.</summary>
+    public sealed record FoundFile(string Path, string What, bool SurelyOptiScaler, bool IsFolder);
+
+    /// <summary>True when the folder has Upshift's state folder but no readable record of an active install.</summary>
+    public static bool RecordMissingOrDamaged(string target)
+    {
+        var state = Path.Combine(target, StateFolder);
+        if (!Directory.Exists(state)) return false;
+        var path = Path.Combine(state, ManifestName);
+        // No record: only a problem when OptiScaler's files are there (.upshift may just hold the upscaler-file record).
+        if (!File.Exists(path)) return FindWithoutRecord(target).Any(f => f.SurelyOptiScaler && f.Path != StateFolder);
+        try { return JsonSerializer.Deserialize<InstallManifest>(File.ReadAllText(path), Json) is null; }
+        catch (Exception ex) when (ex is JsonException or IOException or NotSupportedException) { return true; }
+    }
+
+    /// <summary>
+    /// OptiScaler's files in the folder, found by looking (for when there's no record): OptiScaler's DLL under any
+    /// loading name, its ini, logs and folders, and its bundled tools. The FSR and XeSS DLLs may be the game's own, so
+    /// they're listed as "may be the game's". Backups Upshift made (.upshift\backup…) are offered for restoring.
+    /// </summary>
+    public static (List<FoundFile> Files, List<RestoreJob> Backups) ScanWithoutRecord(string target) =>
+        (FindWithoutRecord(target), BackupsWithoutRecord(target));
+
+    private static List<FoundFile> FindWithoutRecord(string target)
+    {
+        var found = new List<FoundFile>();
+        if (!Directory.Exists(target)) return found;
+        foreach (var file in Directory.EnumerateFiles(target))
+        {
+            var name = Path.GetFileName(file);
+            if (IsOptiScalerDll(file)) found.Add(new FoundFile(name, $"OptiScaler itself (loaded by the game as {name})", true, false));
+            else if (name.Equals("OptiScaler.ini", StringComparison.OrdinalIgnoreCase)) found.Add(new FoundFile(name, "OptiScaler's settings", true, false));
+            else if (IsRuntimeFile(name)) found.Add(new FoundFile(name, "a log OptiScaler wrote", true, false));
+            else if (name.Equals("fakenvapi.dll", StringComparison.OrdinalIgnoreCase) || name.Equals("fakenvapi.ini", StringComparison.OrdinalIgnoreCase))
+                found.Add(new FoundFile(name, "fakenvapi, bundled with OptiScaler", true, false));
+            else if (name.StartsWith("dlssg_to_fsr3", StringComparison.OrdinalIgnoreCase)) found.Add(new FoundFile(name, "dlssg-to-fsr3, bundled with OptiScaler", true, false));
+            else if (UpscalerFiles.OptiScalerFileNames.Contains(name)) found.Add(new FoundFile(name, "an upscaler DLL OptiScaler ships, but it may be the game's own", false, false));
+        }
+        foreach (var folder in new[] { "D3D12_Optiscaler", "OptiScaler" })
+            if (Directory.Exists(Path.Combine(target, folder))) found.Add(new FoundFile(folder, "OptiScaler's folder", true, true));
+        // OptiScaler ships its licences in a Licenses folder, but a game can have one of its own.
+        if (Directory.Exists(Path.Combine(target, "Licenses")))
+            found.Add(new FoundFile("Licenses", "licence files OptiScaler ships, but the folder may also be the game's", false, true));
+        if (Directory.Exists(Path.Combine(target, StateFolder))) found.Add(new FoundFile(StateFolder, "Upshift's own records for this folder", true, true));
+        return found;
+    }
+
+    private static List<RestoreJob> BackupsWithoutRecord(string target)
+    {
+        var jobs = new List<RestoreJob>();
+        var state = Path.Combine(target, StateFolder);
+        if (!Directory.Exists(state)) return jobs;
+        foreach (var dir in Directory.EnumerateDirectories(state, "backup*"))
+            foreach (var file in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
+                jobs.Add(new RestoreJob { Backup = Path.GetRelativePath(target, file), Path = Path.GetRelativePath(dir, file) });
+        return jobs;
+    }
+
+    /// <summary>
+    /// "Remove what Upshift added" (no usable record): copies the chosen backed-up originals back, then deletes the
+    /// files and folders the user ticked. Only names this scan offers can be removed.
+    /// </summary>
+    public static InstallResult RemoveWithoutRecord(InstallPlan plan, InstallLog log)
+    {
+        var target = plan.TargetDir;
+        log.Write($"REMOVE WITHOUT RECORD {plan.GameName} | {target} | {plan.RemovePaths.Count} item(s), {plan.RestoreBackups.Count} original(s) to restore");
+        var (offered, backups) = ScanWithoutRecord(target);
+        var allowed = offered.Select(f => f.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var result = new InstallResult();
+        foreach (var job in plan.RestoreBackups)
+        {
+            if (!backups.Any(b => b.Backup.Equals(job.Backup, StringComparison.OrdinalIgnoreCase) && b.Path.Equals(job.Path, StringComparison.OrdinalIgnoreCase)))
+                continue;
+            try
+            {
+                File.Copy(Path.Combine(target, job.Backup), Path.Combine(target, job.Path), overwrite: true);
+                log.Write($"  restored {job.Path} from {job.Backup}");
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                result.Remaining.Add($"{Path.Combine(target, job.Path)}: the backed-up original couldn't be copied back ({ex.Message})");
+            }
+        }
+        foreach (var relative in plan.RemovePaths.Where(allowed.Contains))
+        {
+            var path = Path.Combine(target, relative);
+            try
+            {
+                if (Directory.Exists(path)) Directory.Delete(path, recursive: true);
+                else if (File.Exists(path)) File.Delete(path);
+                log.Write($"  removed {relative}");
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                result.Remaining.Add($"{path}: couldn't be removed ({ex.Message})");
+            }
+        }
+        foreach (var line in result.Remaining) log.Write("  LEFT: " + line);
+        result.Success = result.Remaining.Count == 0;
+        result.Message = result.Success ? "The files you chose were removed." : "Some files couldn't be removed (listed below).";
+        log.Write("  done: " + result.Message);
+        return result;
     }
 
     /// <summary>

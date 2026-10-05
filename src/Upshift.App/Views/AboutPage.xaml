@@ -33,6 +33,17 @@
                 </Grid>
             </Border>
 
+            <!-- Report a problem: a zip on the Desktop for a GitHub issue -->
+            <Border CornerRadius="8" Padding="16,14" Background="{StaticResource CardSurfaceBrush}"
+                    BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Something not working?" FontWeight="SemiBold" />
+                    <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource SubtleTextBrush}"
+                               Text="Saves one zip file to your Desktop with Upshift's version, your Windows version, your graphics cards and today's Upshift log, to attach to a GitHub issue. Nothing is sent anywhere. For a problem with one game, use Report a problem with this game in that game's panel instead." />
+                    <Button Content="Report a problem" Click="ReportProblem_Click" />
+                </StackPanel>
+            </Border>
+
             <!-- Support: shown only here. Upshift never asks for donations anywhere else. -->
             <Border CornerRadius="8" Padding="16,14" Background="{StaticResource CardSurfaceBrush}"
                     BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1">

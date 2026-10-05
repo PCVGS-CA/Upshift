@@ -59,7 +59,7 @@ public static class InstallRunner
         catch (Win32Exception ex) when (ex.NativeErrorCode == ErrorCancelled)
         {
             log.Write("  admin prompt declined; nothing changed");
-            return new InstallResult { Message = "Windows didn't get permission to change the game folder, so nothing was changed." };
+            return new InstallResult { Message = "Windows didn't get permission to change the game folder, so nothing was changed.", PermissionRefused = true };
         }
         finally
         {
@@ -117,6 +117,8 @@ public static class InstallRunner
         InstallOperation.RestoreUpscalerFiles => UpscalerFiles.Restore(plan, log),
         InstallOperation.SwitchBuild => OptiScalerInstaller.Update(plan, log),
         InstallOperation.SwitchBack => OptiScalerInstaller.SwitchBack(plan, log),
+        // Only names a fresh scan of the folder offers are removed (checked inside).
+        InstallOperation.RemoveWithoutRecord => OptiScalerInstaller.RemoveWithoutRecord(plan, log),
         _ => OptiScalerInstaller.Uninstall(plan, log)
     };
 
@@ -158,7 +160,7 @@ public static class InstallRunner
             return "The plan points at files outside the app's download folder, so nothing was done.";
 
         if (plan.Operation is InstallOperation.Uninstall or InstallOperation.UndoUpdate or InstallOperation.RestoreUpscalerFiles
-            or InstallOperation.SwitchBack) return null;
+            or InstallOperation.SwitchBack or InstallOperation.RemoveWithoutRecord) return null;
         if (plan.Operation == InstallOperation.SwitchBuild)
         {
             // Like an update, plus the user's DLSS 5 file from the user-files folder under its known name.
