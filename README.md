@@ -117,15 +117,18 @@ Or from a Developer Command Prompt: `msbuild Upshift.sln /p:Configuration=Debug 
 3. Commit, then push a tag with the same version: `git tag v1.2.3` and `git push origin v1.2.3`.
 
 The [Release workflow](.github/workflows/release.yml) builds Release x64, makes the installer, the portable zip and
-the self-update packages, and publishes them as a GitHub release. It stops if the tag and the version differ.
+the self-update packages, and publishes them as a GitHub release, with the SHA-256 of the installer and the portable
+zip added to the notes. It stops if the tag and the version differ.
 
 ## Where it keeps things
 
 Everything Upshift stores lives in `%LocalAppData%\Upshift`: the library cache, settings (including an optional
-SteamGridDB key), cover art, downloaded components, files you supply, wiki caches and `logs\`. None of it is part of
-this repository. The installed program is in a separate folder, `%LocalAppData%\Upshift.App`, so uninstalling never
-touches your data unless you ask it to. In game folders, Upshift only writes the files it installs and its own
-`.upshift` folder.
+SteamGridDB key), cover art, downloaded components (PresentMon too, once you've measured), files you supply, wiki
+caches, your saved OptiScaler settings (`saved-settings\`), measurements (`measurements\`), each game's uninstall
+history (`history\`) and `logs\`. None of it is part of this repository, and none of it is sent anywhere. The
+installed program is in a separate folder, `%LocalAppData%\Upshift.App`, so uninstalling never touches your data
+unless you ask it to. In game folders, Upshift only writes the files it installs and its own `.upshift` folder.
+A problem report is only written when you press "Report a problem", as a zip on your Desktop.
 
 ## Project layout
 

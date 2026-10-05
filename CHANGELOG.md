@@ -4,20 +4,19 @@ All notable changes to Upshift. Each release's section becomes its GitHub releas
 
 ## [1.2.0]
 
-Trust and troubleshooting.
+Trust and troubleshooting: Upshift can now tell you whether OptiScaler is working, explains every uninstall, and makes reporting a problem easy.
 
 ### New
 
 - **"Is it working?" for each game:** after you've played, the game's panel says what OptiScaler's own log shows, for example "According to OptiScaler's log: Working. The game's DLSS is being replaced with FSR 4." It also tells you when OptiScaler loaded but the game isn't using an upscaler it can take over (and what to pick in the game's menu), when OptiScaler didn't load (with the likely causes and what to try), or to run the game once first, with the date and time of the run it's based on. New installs turn OptiScaler's log on at its lightest level, which doesn't slow games down; for games installed earlier, press "Turn on the check". Shown for standard OptiScaler and its DLSS 5 build; the AMD-NR build's log hasn't been checked yet.
+- **Uninstall that explains itself:** before removing anything, Upshift checks for problems and says how to fix each: the game or its launcher is still running ("Close the game and try again"), the folder needs Windows' permission ("Try again with permission" if the prompt was declined), or files changed since the install (listed, with "Leave them" or "Remove anyway and restore the originals"). Afterwards it checks the folder file by file and says "This game's folder is back to how it was before Upshift", or lists what remains with an "Open folder" button. Uninstalls and their results are kept in the game's change history.
+- **Remove what Upshift added:** if Upshift's record for a game is missing or damaged, it lists the OptiScaler files it finds (the ones that may be the game's own are unticked) and its backed-up originals, and removes only what you tick.
 - **Report a problem:** "Report a problem" on the About page and "Report a problem with this game" in each game's panel save one zip file to your Desktop for a GitHub issue: Upshift's and Windows' versions, your graphics cards, today's log and crash log, and for a game its OptiScaler settings and version, Upshift's record, the change history, OptiScaler's log and a list of the game's files (names, sizes and versions only). Your Windows user name is taken out of every path, your SteamGridDB key and other games are left out, and you see what's inside before it's saved. Nothing is sent anywhere. The GitHub issue forms now ask for this file.
 
-### Uninstall that explains itself
+### Fixes
 
-- Before removing anything, Upshift checks for problems and says how to fix each: the game or its launcher is still running ("Close the game and try again"), the folder needs Windows' permission ("Try again with permission" if the prompt was declined), or files changed since the install (listed, with "Leave them" or "Remove anyway and restore the originals").
-- An uninstall is never left half done without saying so: if a file can't be removed (because the game has it open, say), everything else is still finished, Upshift's record keeps exactly what's left, and the full paths are listed, so trying again picks up where it stopped. A missing backup is reported instead of being skipped.
-- Afterwards Upshift checks the folder file by file: "This game's folder is back to how it was before Upshift", or a list of what remains with an "Open folder" button.
-- If Upshift's record for a game is missing or damaged, "Remove what Upshift added" lists the OptiScaler files it finds (the ones that may be the game's own are unticked) and its backed-up originals, and removes only what you tick.
-- Uninstalls and their results are kept in the game's change history and in Upshift's log.
+- **An uninstall is never left half done without saying so:** if a file can't be removed (because the game has it open, say), everything else is still finished, the exact paths of what's left are listed, and trying again picks up where it stopped. Before, it stopped at the first such file, and trying again could mistake files it had already put back for files that had changed.
+- **A missing backup is reported:** if Upshift's copy of a game's original file has gone missing, the uninstall says so (with the path) instead of skipping it.
 
 ## [1.1.0]
 
