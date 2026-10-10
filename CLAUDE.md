@@ -561,10 +561,14 @@ errors and no warnings.
     entry point in the app (`HelixSrGames`, the Updates row's drawing and buttons, the report) catches everything but
     OutOfMemory; the setup has a final catch-all. Tested: 68 harness checks, and the app started with HelixSR complete,
     half-finished (DLL only + a staging folder), missing, a damaged record, and a file where the folder should be.
-  - Silent Hill 2's record hash (`9b10b5a8…`) no longer matches its OptiScaler.ini (`ffdc74e0…`) since the shader
-    experiment's direct ini edit; the user's frame cap change at 2026-10-07 12:14 then wasn't stamped. Upshift treats the
-    ini as edited by hand (uninstall would leave it). The Witcher 3's record (`0b9ffc8f…`) didn't match its ini
-    (`a590e925…`) before the experiment either.
+  - Silent Hill 2's OptiScaler.ini was put back to its pre-experiment content on 2026-10-10 at the user's request
+    (`[Framerate] FramerateLimit` auto → 40, undoing the user's own 2026-10-07 change), so it matches its record
+    (`9b10b5a8…`) again; its write time was set back to the record's. The Witcher 3's record (`0b9ffc8f…`) has never
+    matched its ini.
+  - **Shader test restarted (2026-10-10, RTX 4070 PC only, The Witcher 3 and Resident Evil Requiem):** The Witcher 3's
+    OptiScaler.ini has the four recorder values again (`7cfa1ff8…`; back to "auto" gives `a590e925…`). Kit:
+    `experiments\upshift_warm\dist\shader_proof_rtx4070`; record: `proof/game-changes.txt` on experiment/shader-warm
+    (8cb7264). Requiem: the user installs REFramework and OptiScaler first; Claude then sets the same four values.
   - **Second batch (2026-10-10), "still in testing":** the RX 6600 PC is gone; HelixSR ships labelled so, off by default.
     - `Services/HelixSrSetupSession.cs`: the setup runs app-wide, independent of the page; each Updates page builds its
       own `HelixSrRowView`, which reattaches to the session (the old shared, re-parented row was the likely tab-switch
@@ -589,7 +593,7 @@ errors and no warnings.
     `Url` = settings' `CatalogUrl`), whose helixSr entry points at a fake release on `http://127.0.0.1:47312`; throwaway
     games added with "Add a game folder…" from the scratchpad (`uitest\games`, a `D3D12` folder makes them DirectX 12).
     Scripts: scratchpad `uitest\make_fake.py`, `addfolder.ps1`, `setlength.ps1`. Settings and catalog were restored
-    afterwards; Claude's library still lists the two throwaway games.
+    afterwards, and the throwaway games, fake HelixSR files and sample measurement were deleted.
 
 ## Next
 
