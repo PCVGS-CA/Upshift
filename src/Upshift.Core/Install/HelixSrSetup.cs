@@ -72,11 +72,16 @@ public static class HelixSrSetup
             if (!started) return new HelixSrSetupResult(false, $"Windows didn't start HelixSR's setup: {tail}", tail, MaybeBlocked: true);
             if (exit != 0)
             {
-                var error = tail.Split('\n').Select(l => l.Trim()).LastOrDefault(l => l.Contains("error", StringComparison.OrdinalIgnoreCase) || l.StartsWith("failed", StringComparison.OrdinalIgnoreCase))
-                            ?? tail.Split('\n').Select(l => l.Trim()).LastOrDefault(l => l.Length > 0) ?? $"exit code {exit}";
+                var lines = tail.Split('\n').Select(l => l.Trim()).ToList();
+                var error = lines.LastOrDefault(l => l.Contains("error", StringComparison.OrdinalIgnoreCase) || l.StartsWith("failed", StringComparison.OrdinalIgnoreCase));
                 var blocked = tail.Contains("Application Control", StringComparison.OrdinalIgnoreCase) || tail.Contains("blocked", StringComparison.OrdinalIgnoreCase)
                               || tail.Contains("0xc0e90002", StringComparison.OrdinalIgnoreCase) || tail.Contains("not recognized as", StringComparison.OrdinalIgnoreCase);
-                return new HelixSrSetupResult(false, $"HelixSR's setup stopped: {error}", tail, blocked);
+                if (error is not null) return new HelixSrSetupResult(false, $"HelixSR's setup stopped: {error}", tail, blocked);
+                // No error line: the process ended some other way (closed, killed, out of memory…). Say where it was.
+                var during = lines.Select(StepFor).LastOrDefault(s => s is not null)?.Step;
+                return new HelixSrSetupResult(false,
+                    $"HelixSR's setup ended without finishing (exit code {exit}){(during is null ? "" : $", during \"{during}\"")}. Nothing was changed; you can try again.",
+                    tail, blocked);
             }
 
             // ---- 4. the finished folder ----
@@ -188,7 +193,12 @@ public static class HelixSrSetup
 
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancel);
             timeout.CancelAfter(TimeSpan.FromMinutes(45));
-            try { await process.WaitForExitAsync(timeout.Token); }
+            try
+            {
+                // Watch the process itself, not its output: a helper the setup started (Python, the shader compiler) can
+                // keep the output pipe open after the setup has ended, and the end must still be noticed.
+                while (!process.HasExited) await Task.Delay(500, timeout.Token);
+            }
             catch (OperationCanceledException)
             {
                 try { process.Kill(entireProcessTree: true); } catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) { }
@@ -196,7 +206,7 @@ public static class HelixSrSetup
                 Keep("Upshift stopped the setup after 45 minutes.");
                 return (-1, Joined(), true);
             }
-            process.WaitForExit();   // the last output lines
+            process.WaitForExit(3000);   // a moment for the last output lines, never longer
             return (process.ExitCode, Joined(), true);
         }
 
@@ -216,7 +226,8 @@ public static class HelixSrSetup
         {
             var n = text[0] - '0';
             var what = text[4..].Trim();
-            return new($"Building the network, step {n} of 5 ({what})", 0.2 + 0.15 * (n - 1));
+            // Step 5 (compiling the shaders) prints nothing for several minutes.
+            return new($"Building the network, step {n} of 5 ({what}{(n == 5 ? "; this step takes several minutes" : "")})", 0.2 + 0.15 * (n - 1));
         }
         if (text.StartsWith("using sm_", StringComparison.OrdinalIgnoreCase)) return null;
         if (text.StartsWith("done", StringComparison.OrdinalIgnoreCase) || text.StartsWith("HelixSR is ready", StringComparison.OrdinalIgnoreCase))

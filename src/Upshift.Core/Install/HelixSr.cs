@@ -45,7 +45,7 @@ public sealed record HelixSrLogStatus(bool Exists, DateTime? WrittenLocal, bool?
 public static class HelixSr
 {
     public const string ChoiceId = "helixsr";
-    public const string ChoiceLabel = "DLSS 3.7 via HelixSR (experimental)";
+    public const string ChoiceLabel = "DLSS 3.7 via HelixSR (experimental, still in testing)";
     public const string RowName = "HelixSR";
     public const string Experimental = "Experimental";
     public const string RowSubtitle = "For AMD RDNA 1 and RDNA 2 cards (RX 5000 and RX 6000 series). DLSS 3.7 upscaling for cards without FSR 4.";

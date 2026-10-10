@@ -192,10 +192,8 @@ public sealed partial class UpdatesPage : Page
                 panel.Children.Add(BuildBundledRow(bundled, primary));
         }
 
-        // HelixSR (experimental): one row for the whole session, so a running setup keeps its progress.
-        if (HelixSrRowView.Shared.Parent is Panel oldParent) oldParent.Children.Remove(HelixSrRowView.Shared);
-        HelixSrRowView.Shared.Refresh();
-        UsedNowPanel.Children.Add(HelixSrRowView.Shared);
+        // HelixSR (experimental): a row of this page's own, showing the setup session (which runs independently of pages).
+        UsedNowPanel.Children.Add(new HelixSrRowView());
     }
 
     /// <summary>Each card's component with the ones shown on it (AMD-NR's runtime on AMD-NR's).</summary>

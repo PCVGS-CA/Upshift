@@ -4,20 +4,37 @@ All notable changes to Upshift. Each release's section becomes its GitHub releas
 
 ## [1.3.0]
 
-HelixSR support: a DLSS-based upscaler for Radeon RX 5000 and RX 6000 cards. **Experimental.**
+HelixSR support (experimental, still in testing), a warning for Capcom RE Engine games, and a more flexible Measure performance.
 
 ### New
 
-- **HelixSR (experimental), for AMD RDNA 1 and RDNA 2 cards (RX 5000 and RX 6000 series, and Radeon 680M-class graphics):** HelixSR is an unofficial project, not affiliated with NVIDIA or AMD, that runs NVIDIA's DLSS 3.7 network on Radeon cards without FSR 4. On those cards, the Updates page has a HelixSR row with "Set up". After you accept a notice (what HelixSR is, everything its setup downloads and from where, that its source code isn't published and nothing it ships is signed, and how long it takes), Upshift runs the HelixSR author's own setup once, with progress. It downloads only the HelixSR release Upshift has checked, verifies it and its scripts against pinned SHA-256 values, and stops with the real error if anything goes wrong, leaving nothing half-installed.
-- **"DLSS 3.7 via HelixSR (experimental)"** is then an upscaler choice in Direct3D 12 games with OptiScaler installed by Upshift. Choosing it points OptiScaler at HelixSR's files in Upshift's data folder; nothing is added to the game folder, and choosing another upscaler or uninstalling puts OptiScaler.ini back exactly. HelixSR and FSR 4 both use OptiScaler's FSR slot, so turning one on turns the other off, and Upshift says so.
-- **"Which upscaler should I pick?"** on RX 6000 cards now compares HelixSR with FSR 4.1.1b and suggests trying both with Measure performance.
+- **HelixSR (experimental, still in testing), for AMD RDNA 1 and RDNA 2 cards (RX 5000 and RX 6000 series, and Radeon 680M-class graphics):** HelixSR is an unofficial project, not affiliated with NVIDIA or AMD, that runs NVIDIA's DLSS 3.7 network on Radeon cards without FSR 4. It's off by default. On those cards, the Updates page has a HelixSR row with "Set up". After you accept a notice (what HelixSR is, everything its setup downloads and from where, that its source code isn't published and nothing it ships is signed, and how long it takes), Upshift runs the HelixSR author's own setup once. It downloads only the HelixSR release Upshift has checked, verifies it and its scripts against pinned SHA-256 values, and stops with the real error if anything goes wrong, leaving nothing half-installed.
+- **Setup progress you can leave:** the setup keeps running if you switch to another page, and the HelixSR row picks it up again when you come back. The time keeps counting through the last step (compiling shaders), which takes several minutes and prints nothing while it works. If the setup ends for any reason, including being closed from outside, Upshift notices and shows the result.
+- **"DLSS 3.7 via HelixSR (experimental, still in testing)"** is then an upscaler choice in Direct3D 12 games with OptiScaler installed by Upshift. Choosing it points OptiScaler at HelixSR's files in Upshift's data folder; nothing is added to the game folder, and choosing another upscaler or uninstalling puts OptiScaler.ini back exactly. HelixSR and FSR 4 both use OptiScaler's FSR slot, so turning one on turns the other off, and Upshift says so.
+- **Safety net:** if Upshift didn't close properly last time and a game is set to HelixSR, Upshift switches that game back to its previous upscaler at start-up and offers "Turn HelixSR back on".
+- **Which option to pick in the game's own menu:** once OptiScaler is installed, its options say which upscaler to choose in the game's graphics menu: the OptiScaler wiki's advice for that game when it has some, otherwise DLSS when the game offers it, otherwise FSR 3.1, then XeSS. The same line shows when HelixSR is selected.
+- **Capcom RE Engine games:** OptiScaler's wiki says these games need REFramework to work with OptiScaler (Resident Evil 2, 3, 4, 7, Village and Requiem, Devil May Cry 5, Monster Hunter Wilds, Monster Hunter Stories 3, Dragon's Dogma 2, Onimusha: Way of the Sword, PRAGMATA). Installing OptiScaler into one without REFramework in its folder now asks first: "This game crashes with OptiScaler unless REFramework is installed first." Upshift never downloads or installs REFramework.
+- **Measure performance:**
+  - Choose how long to measure, from 10 seconds to 30 minutes (60 seconds by default); Upshift remembers your choice.
+  - Press the hotkey again during a measurement to stop early and keep the result.
+  - Each result shows how long it really ran.
+  - New: **Max FPS**, the best one-second average (not the single fastest frame), in results, history and the comparison. Older results show a dash.
+  - While waiting, Upshift says "Waiting for you to press F10 in the game" instead of just spinning.
+- **"Which upscaler should I pick?"** on RX 6000 cards compares HelixSR with FSR 4.1.1b and suggests trying both with Measure performance.
 - **"Is it working?"** also reads HelixSR's own log and says whether its DLSS network actually ran. "Report a problem" includes that log, never HelixSR's network files.
 - **Safe if something's missing:** if a game is set to HelixSR and HelixSR's files are gone, Upshift switches the game back to the upscaler it had before and tells you. "Remove HelixSR" switches every game using it back first, then deletes its files, and offers to delete the setup's tools too. If HelixSR's files are incomplete or can't be read (a setup that didn't finish, a damaged record), it shows as "Not set up" with the reason and a "Remove what's there" link; HelixSR's state can never stop Upshift from starting.
 
-**HelixSR is experimental and hasn't yet been tested on Radeon hardware by Upshift's developer.** If you have an RX 5000 or RX 6000 card, please try it and tell us how it went, good or bad, with **Report a problem** (About page, or in the game's panel). On other cards the HelixSR row explains why it isn't needed.
+**Where HelixSR stands:**
+
+- HelixSR's setup has completed once, on a Radeon RX 6600.
+- HelixSR has never been run in a game.
+- A crash of Upshift after that setup was hardened against, but it isn't confirmed fixed.
+
+If you have an RX 5000 or RX 6000 card and try it, please tell us how it went, good or bad, with **Report a problem** (About page, or in the game's panel). On other cards the HelixSR row explains why it isn't needed.
 
 ### Fixes
 
+- The PresentMon row on the Updates page showed a greyed-out "No download" when PresentMon wasn't on the PC; it's a working Download button again.
 - Restoring your previous OptiScaler settings after a reinstall no longer brings back settings that pointed at HelixSR's files.
 
 ## [1.2.0]

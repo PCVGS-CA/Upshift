@@ -15,8 +15,9 @@ public enum MeasureState { Idle, Preparing, Armed, Measuring }
 /// 1. Arm: PresentMon is downloaded the first time (from its GitHub releases), then, unless this account can already
 ///    read frame timings, Windows is asked once for permission to start the measuring helper (Upshift.exe --measure,
 ///    elevated); the main window stays a normal app. The hotkey is registered.
-/// 2. The hotkey (F10 by default) starts 60 seconds of PresentMon for the game's process only, with a beep at the start
-///    and at the end.
+/// 2. The hotkey (F10 by default) starts PresentMon for the game's process only, for the length the user chose (10 to
+///    1800 seconds, 60 by default), with a beep at the start and at the end. The same key stops it early, keeping what
+///    was recorded.
 /// 3. The CSV is read, its folder deleted, and the run saved with the settings the game had. Nothing leaves the PC.
 /// Changed is raised on the UI thread.
 /// </summary>
@@ -30,6 +31,17 @@ public static class Measurement
     private static GameInfo? _game;
     private static Func<MeasuredSettings>? _snapshot;
     private static CancellationTokenSource? _armCts;
+    /// <summary>Stops a direct (no helper) run early, keeping its frames.</summary>
+    private static CancellationTokenSource? _stopCts;
+    /// <summary>This measurement's length in seconds (the user's choice, 10 to 1800).</summary>
+    private static int _seconds = MeasureThresholds.MeasureSeconds;
+
+    /// <summary>The length the next measurement will have: the last value typed (10 to 1800 seconds).</summary>
+    public static int ChosenSeconds => MeasureThresholds.ClampSeconds(AppServices.Settings.Current.MeasureSeconds);
+
+    /// <summary>When the current run started (for the elapsed time), or null.</summary>
+    public static DateTime? MeasuringSinceUtc { get; private set; }
+    public static int CurrentSeconds => _seconds;
 
     public static MeasureState State { get; private set; } = MeasureState.Idle;
     /// <summary>The game the current measurement is for (null when idle).</summary>
@@ -63,6 +75,7 @@ public static class Measurement
         _ui = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
         _game = game;
         _snapshot = snapshot;
+        _seconds = ChosenSeconds;
         _armCts = new CancellationTokenSource();
         var ct = _armCts.Token;
         Set(MeasureState.Preparing, "Getting PresentMon ready…", false);
@@ -102,13 +115,13 @@ public static class Measurement
         {
             // This account may already read frame timings (Performance Log Users): no helper, no prompt.
             _directWorkDir = work;
-            _job = new MeasureJob { PresentMonPath = presentMon, WorkDir = work };
+            _job = new MeasureJob { PresentMonPath = presentMon, WorkDir = work, Seconds = _seconds };
         }
         else
         {
             _job = new MeasureJob
             {
-                PresentMonPath = presentMon, WorkDir = work, ParentProcessId = Environment.ProcessId,
+                PresentMonPath = presentMon, WorkDir = work, ParentProcessId = Environment.ProcessId, Seconds = _seconds,
                 DeadlineUtc = DateTime.UtcNow.AddMinutes(30)
             };
             var jobPath = Path.Combine(work, "job.json");
@@ -139,8 +152,33 @@ public static class Measurement
         }
         _hotkey.Pressed += () => _ui?.TryEnqueue(async () => await StartAsync());
         Set(MeasureState.Armed,
-            $"Ready. Start {game.Name} and get to a normal gameplay area, then press {HotkeyName}. You'll hear a beep when measuring starts " +
-            $"and two when it ends ({MeasureThresholds.MeasureSeconds} seconds). Waits up to 30 minutes.", false);
+            $"Waiting for you to press {HotkeyName} in the game. Start {game.Name}, get to a normal gameplay area, then press {HotkeyName}. " +
+            $"You'll hear a beep when measuring starts and two when it ends ({Length(_seconds)}; press {HotkeyName} again to stop early). " +
+            "Waits up to 30 minutes.", false);
+    }
+
+    /// <summary>"60 seconds", "5 minutes", "2 minutes 30 seconds".</summary>
+    public static string Length(double seconds)
+    {
+        var s = (int)Math.Round(seconds);
+        if (s < 120) return s == 1 ? "1 second" : $"{s} seconds";
+        var m = s / 60;
+        var rest = s % 60;
+        return rest == 0 ? $"{m} minutes" : $"{m} minutes {rest} seconds";
+    }
+
+    /// <summary>
+    /// The hotkey pressed again during a run: stop now and keep what was recorded (direct runs through their token, the
+    /// helper through its stop signal).
+    /// </summary>
+    public static void StopEarly()
+    {
+        if (State != MeasureState.Measuring || _job is not { } job) return;
+        _hotkey?.Dispose();
+        _hotkey = null;
+        if (_directWorkDir is not null) _stopCts?.Cancel();
+        else try { File.WriteAllText(job.StopFile, "stop"); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        Set(MeasureState.Measuring, "Stopping and keeping what was recorded…", false);
     }
 
     /// <summary>Stops waiting (or a measurement in progress). The helper sees the cancel signal and quits.</summary>
@@ -174,17 +212,30 @@ public static class Measurement
         AppServices.History.Launched(game.Id);
         var settings = _snapshot?.Invoke() ?? new MeasuredSettings();
         var refresh = Helpers.Display.Pick(Helpers.Display.All(), AppServices.Settings.Current.FrameCapDisplay)?.RefreshHz;
-        Set(MeasureState.Measuring, $"Measuring {game.Name} for {MeasureThresholds.MeasureSeconds} seconds… keep playing.", false);
+        MeasuringSinceUtc = DateTime.UtcNow;
+        Set(MeasureState.Measuring, $"Measuring {game.Name} for {Length(_seconds)}… keep playing. Press {HotkeyName} again to stop early and keep the result.", false);
         _ = Task.Run(() => { Beep(880, 120); Beep(1320, 160); });
 
+        // The same key now stops the run early.
+        _hotkey = GlobalHotkey.TryRegister(AppServices.Settings.Current.MeasureHotkey);
+        if (_hotkey is not null) _hotkey.Pressed += () => _ui?.TryEnqueue(StopEarly);
+
         MeasureRunResult? result;
+        var seconds = _seconds;
         if (_directWorkDir is not null)
-            result = await Task.Run(() => PresentMonRunner.Run(job.PresentMonPath, process.Id, job.CsvFile, MeasureThresholds.MeasureSeconds, CancellationToken.None));
+        {
+            _stopCts = new CancellationTokenSource();
+            var stop = _stopCts.Token;
+            result = await Task.Run(() => PresentMonRunner.Run(job.PresentMonPath, process.Id, job.CsvFile, seconds, CancellationToken.None, stop));
+        }
         else
         {
             await File.WriteAllTextAsync(job.StartFile, process.Id.ToString());
-            result = await WaitForResultAsync(job, TimeSpan.FromSeconds(MeasureThresholds.MeasureSeconds + 45));
+            result = await WaitForResultAsync(job, TimeSpan.FromSeconds(seconds + 45));
         }
+        _hotkey?.Dispose();
+        _hotkey = null;
+        MeasuringSinceUtc = null;
         _ = Task.Run(() => { Beep(1320, 120); Beep(880, 120); Beep(660, 220); });
 
         var gameClosed = process.HasExited;
@@ -196,13 +247,17 @@ public static class Measurement
             Finish(Why(result, gameClosed), problem: true);
             return;
         }
+        var stoppedEarly = result?.StoppedEarly == true;
         AppServices.Measurements.Add(game.Id, new MeasurementRun
         {
-            Utc = DateTime.UtcNow, AverageFps = stats.AverageFps, LowFps = stats.LowFps, Frames = stats.Frames, Seconds = stats.Seconds,
+            Utc = DateTime.UtcNow, AverageFps = stats.AverageFps, LowFps = stats.LowFps, MaxFps = stats.MaxFps, Frames = stats.Frames,
+            Seconds = stats.Seconds, PlannedSeconds = seconds, StoppedEarly = stoppedEarly,
             GeneratedFrames = stats.GeneratedFrames, RefreshHz = refresh, Settings = settings
         });
-        Finish($"Measured {game.Name}: {Math.Round(stats.AverageFps)} fps average, low points {Math.Round(stats.LowFps)} fps." +
-               (gameClosed ? " The game closed before the end, so this covers less than a minute." : ""), problem: false);
+        Finish($"Measured {game.Name} for {Length(stats.Seconds)}: {Math.Round(stats.AverageFps)} fps average, low points {Math.Round(stats.LowFps)} fps" +
+               (stats.MaxFps is { } max ? $", max {Math.Round(max)} fps." : ".") +
+               (stoppedEarly ? $" You stopped it early (of {Length(seconds)})." : "") +
+               (gameClosed && !stoppedEarly ? $" The game closed before the end, so this covers less than {Length(seconds)}." : ""), problem: false);
     }
 
     /// <summary>A plain reason for an empty measurement.</summary>
@@ -289,6 +344,7 @@ public static class Measurement
     {
         _hotkey?.Dispose();
         _hotkey = null;
+        MeasuringSinceUtc = null;
         Set(MeasureState.Idle, message, problem);
         _game = null;
     }

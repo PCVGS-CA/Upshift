@@ -23,6 +23,8 @@ public sealed class MeasureJob
 
     public string StartFile => Path.Combine(WorkDir, "start.txt");     // contains the game's process id
     public string CancelFile => Path.Combine(WorkDir, "cancel.txt");
+    /// <summary>The hotkey was pressed again: stop now and keep what was recorded.</summary>
+    public string StopFile => Path.Combine(WorkDir, "stop.txt");
     public string CsvFile => Path.Combine(WorkDir, "frames.csv");
     public string ResultFile => Path.Combine(WorkDir, "result.json");
 }
@@ -35,6 +37,8 @@ public sealed class MeasureRunResult
     /// <summary>The last lines PresentMon wrote to its error output (to explain a failure).</summary>
     public string ErrorText { get; set; } = "";
     public bool TimedOut { get; set; }
+    /// <summary>Stopped early on request; what was recorded until then is kept.</summary>
+    public bool StoppedEarly { get; set; }
     public string? Problem { get; set; }
 }
 
@@ -61,9 +65,11 @@ public static class PresentMonRunner
 
     /// <summary>
     /// Records <paramref name="seconds"/> of frames for one process into a CSV and waits for PresentMon to quit. It is
-    /// stopped if it overruns, so it never keeps running in the background.
+    /// stopped if it overruns, so it never keeps running in the background. <paramref name="ct"/> cancels (the result
+    /// isn't wanted); <paramref name="stop"/> stops early and keeps what was recorded: PresentMon's trace session is
+    /// ended, so PresentMon finishes its file and quits by itself (it's only killed if it hasn't after 8 seconds).
     /// </summary>
-    public static MeasureRunResult Run(string presentMon, int processId, string csv, int seconds, CancellationToken ct)
+    public static MeasureRunResult Run(string presentMon, int processId, string csv, int seconds, CancellationToken ct, CancellationToken stop = default)
     {
         var result = new MeasureRunResult();
         var info = new ProcessStartInfo
@@ -89,12 +95,22 @@ public static class PresentMonRunner
         process.BeginErrorReadLine();
         process.BeginOutputReadLine();
 
-        bool finished;
-        try { finished = process.WaitForExitAsync(ct).Wait(TimeSpan.FromSeconds(seconds + 20)); }
-        catch (AggregateException) { finished = false; }   // cancelled
-        if (!finished)
+        var exited = process.WaitForExitAsync();
+        var deadline = Task.Delay(TimeSpan.FromSeconds(seconds + 20));
+        var cancelled = Task.Delay(Timeout.Infinite, ct);
+        var stopped = Task.Delay(Timeout.Infinite, stop);
+        var first = Task.WhenAny(exited, deadline, cancelled, stopped).GetAwaiter().GetResult();
+        if (first == stopped && !process.HasExited)
         {
-            result.TimedOut = !ct.IsCancellationRequested;
+            // Stop early, keeping the frames: end the trace session; PresentMon writes the rest and quits.
+            result.StoppedEarly = true;
+            StopSession(presentMon);
+            if (!exited.Wait(TimeSpan.FromSeconds(8)))
+                try { process.Kill(entireProcessTree: true); } catch (Exception) { }
+        }
+        else if (first != exited)
+        {
+            result.TimedOut = first == deadline;
             try { process.Kill(entireProcessTree: true); } catch (Exception) { }
             StopSession(presentMon);
         }
@@ -131,6 +147,7 @@ public static class PresentMonRunner
         if (!File.Exists(jobPath) || OptiScalerInstaller.Sha256(jobPath) != expectedHash) return 2;
         var job = JsonSerializer.Deserialize<MeasureJob>(File.ReadAllText(jobPath));
         if (job is null) return 2;
+        if (job.Seconds is < MeasureThresholds.MinSeconds or > MeasureThresholds.MaxSeconds) return 2;
         var result = new MeasureRunResult();
         try
         {
@@ -150,16 +167,19 @@ public static class PresentMonRunner
                     if (File.Exists(job.StartFile) && int.TryParse(File.ReadAllText(job.StartFile).Trim(), out var pid))
                     {
                         using var cancel = new CancellationTokenSource();
+                        using var stop = new CancellationTokenSource();
+                        using var done = new CancellationTokenSource();
                         var watch = Task.Run(async () =>
                         {
-                            while (!cancel.IsCancellationRequested)
+                            while (!done.IsCancellationRequested)
                             {
                                 if (File.Exists(job.CancelFile) || !IsRunning(job.ParentProcessId)) { cancel.Cancel(); break; }
+                                if (File.Exists(job.StopFile)) { stop.Cancel(); break; }
                                 await Task.Delay(250);
                             }
                         });
-                        result = Run(job.PresentMonPath, pid, job.CsvFile, job.Seconds, cancel.Token);
-                        cancel.Cancel();
+                        result = Run(job.PresentMonPath, pid, job.CsvFile, job.Seconds, cancel.Token, stop.Token);
+                        done.Cancel();
                         break;
                     }
                     Thread.Sleep(150);

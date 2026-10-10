@@ -8,7 +8,9 @@ namespace Upshift.Core.Measure;
 /// <param name="AverageFps">Frames per second over the whole capture.</param>
 /// <param name="LowFps">The "1% low": the average frame rate of the slowest 1% of frames.</param>
 /// <param name="GeneratedFrames">Frames PresentMon marked as generated (frame generation), when it can tell.</param>
-public sealed record FrameStats(int Frames, double Seconds, double AverageFps, double LowFps, int GeneratedFrames, bool FrameTypeKnown);
+/// <param name="MaxFps">The highest one-second average: the frames in the best whole second of the run. Null when the run
+/// was shorter than one whole second. A single very fast frame (a loading screen) can't set it on its own.</param>
+public sealed record FrameStats(int Frames, double Seconds, double AverageFps, double LowFps, int GeneratedFrames, bool FrameTypeKnown, double? MaxFps = null);
 
 /// <summary>Reads PresentMon's CSV (console app 2.x).</summary>
 public static class PresentMonCsv
@@ -51,7 +53,26 @@ public static class PresentMonCsv
         // The slowest 1% of frames (at least one), averaged: the frame rate the game drops to in its worst moments.
         var slowest = times.OrderByDescending(t => t).Take(Math.Max(1, times.Count / 100)).Average();
         var generated = frames.Count(f => IsGenerated(f.Type));
-        return new FrameStats(frames.Count, seconds, frames.Count / seconds, 1000.0 / slowest, generated, typeCol >= 0);
+        return new FrameStats(frames.Count, seconds, frames.Count / seconds, 1000.0 / slowest, generated, typeCol >= 0, MaxOneSecondFps(times));
+    }
+
+    /// <summary>
+    /// The highest one-second average: the run is cut into whole seconds by when each frame ended, and the second with
+    /// the most frames gives the result. The last, unfinished second isn't counted. Null for runs under one second.
+    /// </summary>
+    public static double? MaxOneSecondFps(IReadOnlyList<double> frameTimesMs)
+    {
+        var perSecond = new Dictionary<int, int>();
+        double clock = 0;
+        foreach (var ms in frameTimesMs)
+        {
+            clock += ms;
+            var second = (int)(clock / 1000.0);
+            perSecond[second] = perSecond.TryGetValue(second, out var n) ? n + 1 : 1;
+        }
+        var whole = (int)(clock / 1000.0);   // seconds 0 .. whole-1 are complete
+        var counts = perSecond.Where(p => p.Key < whole).Select(p => p.Value).ToList();
+        return counts.Count == 0 ? null : counts.Max();
     }
 
     /// <summary>

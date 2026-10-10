@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Upshift.App.ViewModels;
 using Upshift.Core.Hardware;
+using Upshift.Core.Detection;
 using Upshift.Core.Install;
 using Upshift.Core.Models;
 using Upshift.Core.UserFiles;
@@ -117,10 +118,20 @@ public sealed class OptiScalerOptionsView : UserControl
             await Save(card, settings);
         };
         body.Children.Add(WithGuide(upscalerBox, catalog.Guides.Upscaler, upscalers.Select(u => (u.Id, u.Label)), gpu));
+
+        // Which upscaler to choose in the game's own menu (OptiScaler replaces that one), leaving out OptiScaler's own files.
+        var addedByOpti = manifest.Added
+            .Select(f => Path.GetRelativePath(card.Info.InstallDir, Path.GetFullPath(Path.Combine(dir!, f.Path))))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var wikiInput = card.Suggestions?.InGameInput;
+        var inGamePick = InGameChoice.Pick(card.Upscalers.CoreRows, wikiInput, addedByOpti);
+        var inGameLine = InGameChoice.Line(inGamePick, wikiInput is not null, currentUpscaler == HelixSr.ChoiceId);
         if (currentUpscaler == HelixSr.ChoiceId)
-            body.Children.Add(Subtle("HelixSR is experimental. It and FSR 4 both use OptiScaler's FSR slot, so FSR 4 is off while HelixSR is the upscaler. " +
-                                     "OptiScaler.ini points at HelixSR's files in Upshift's shared folder; nothing of HelixSR's is put in the game folder. " +
-                                     "In the game, choose DLSS, FSR or XeSS as usual."));
+            body.Children.Add(Subtle("HelixSR is experimental and still in testing. It and FSR 4 both use OptiScaler's FSR slot, so FSR 4 is off while HelixSR is the upscaler. " +
+                                     "OptiScaler.ini points at HelixSR's files in Upshift's shared folder; nothing of HelixSR's is put in the game folder." +
+                                     (inGameLine is null ? "" : " " + inGameLine)));
+        else if (inGameLine is not null)
+            body.Children.Add(Subtle(inGameLine));
         else if (helixOffered && helixMissing is not null)
             body.Children.Add(Subtle($"{HelixSr.ChoiceLabel} can be added to this list: set HelixSR up first, on the Updates page."));
 
@@ -150,7 +161,9 @@ public sealed class OptiScalerOptionsView : UserControl
         if (int8Shown)
             body.Children.Add(Fsr4Section(card, gpu!, ini, manifest, communityName, currentUpscaler == HelixSr.ChoiceId));
 
-        body.Children.Add(Subtle("Set the game's upscaler to DLSS or XeSS, load a save, then press Insert to check."));
+        body.Children.Add(Subtle(inGamePick is null
+            ? "This game has no DLSS, FSR or XeSS in its menu that Upshift knows of, so OptiScaler may have nothing to replace. Load a save, then press Insert to check."
+            : "To check: load a save, then press Insert for OptiScaler's menu."));
         if (card.Suggestions is { FromWiki: true })
             body.Children.Add(Subtle("Tips for this game from the OptiScaler wiki are under Suggestions for this game."));
 

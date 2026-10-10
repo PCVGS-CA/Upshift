@@ -102,7 +102,19 @@ public sealed partial class LibraryViewModel : ObservableObject
 
     public bool HasHelixSrNotice => HelixSrNotice.Length > 0;
 
+    /// <summary>HelixSR was switched off after a bad exit: the notice offers "Turn HelixSR back on".</summary>
+    [ObservableProperty]
+    private bool hasHelixSrPaused;
+
     public void DismissHelixSrNotice() => HelixSrNotice = "";
+
+    public async Task ResumeHelixSrAsync()
+    {
+        HelixSrNotice = "";
+        ShowHelixSrNotices(await Services.HelixSrGames.ResumeAsync());
+        HasHelixSrPaused = Services.HelixSrGames.Paused.Count > 0;
+        AppServices.RaiseEffectiveGpuChanged();
+    }
 
     private void ShowHelixSrNotices(IReadOnlyList<string> messages) =>
         HelixSrNotice = string.Join("\n", (HelixSrNotice.Length > 0 ? new[] { HelixSrNotice } : Array.Empty<string>()).Concat(messages));
@@ -253,6 +265,9 @@ public sealed partial class LibraryViewModel : ObservableObject
 
         // A game set to HelixSR whose files are missing goes back to its previous upscaler (and the user is told).
         Services.HelixSrGames.Notices += ShowHelixSrNotices;
+        // After a bad exit, games using HelixSR start without it (it might have been the cause), with an offer to turn it back on.
+        ShowHelixSrNotices(await Services.HelixSrGames.PauseAfterBadExitAsync());
+        HasHelixSrPaused = Services.HelixSrGames.Paused.Count > 0;
         ShowHelixSrNotices(await Services.HelixSrGames.CheckAllAsync());
     }
 

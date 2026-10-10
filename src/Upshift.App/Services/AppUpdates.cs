@@ -129,9 +129,15 @@ public static class AppUpdates
 
     private static bool IsWorkRunning() => GameUpdates.IsBusy || InstallRunner.IsRunning;
 
-    /// <summary>"1.0.3" is newer than "1.0.2"; anything that isn't a plain version counts as not newer.</summary>
-    public static bool IsNewer(string candidate, string current) =>
-        System.Version.TryParse(candidate.Split('-')[0], out var a) && System.Version.TryParse(current.Split('-')[0], out var b) && a > b;
+    /// <summary>
+    /// "1.0.3" is newer than "1.0.2", and a release is newer than its own test builds ("1.3.0" than "1.3.0-test.2");
+    /// anything that isn't a version counts as not newer.
+    /// </summary>
+    public static bool IsNewer(string candidate, string current)
+    {
+        if (!System.Version.TryParse(candidate.Split('-')[0], out var a) || !System.Version.TryParse(current.Split('-')[0], out var b)) return false;
+        return a > b || (a == b && !candidate.Contains('-') && current.Contains('-'));
+    }
 
     private static void Set(AppUpdateState state, string message)
     {

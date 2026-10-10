@@ -5,6 +5,12 @@ public static class MeasureThresholds
 {
     /// <summary>How long a measurement runs.</summary>
     public const int MeasureSeconds = 60;
+    /// <summary>The lengths a measurement may have, in seconds.</summary>
+    public const int MinSeconds = 10, MaxSeconds = 1800;
+
+    /// <summary>A typed length, whole and within 10 to 1800 seconds.</summary>
+    public static int ClampSeconds(double seconds) =>
+        double.IsNaN(seconds) ? MeasureSeconds : (int)Math.Clamp(Math.Round(seconds), MinSeconds, MaxSeconds);
     /// <summary>Older runs kept per game, besides the two most recent.</summary>
     public const int OlderRunsKept = 10;
     /// <summary>The caps "What to try" offers: at or just under the low points, never above the display's rate.</summary>

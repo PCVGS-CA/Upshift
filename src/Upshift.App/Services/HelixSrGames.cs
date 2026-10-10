@@ -130,6 +130,103 @@ public static class HelixSrGames
         return messages;
     }
 
+    // ---------------- the safety net after a bad exit ----------------
+
+    private static string PausedPath => Path.Combine(AppServices.DataDir, "helixsr-paused.json");
+
+    /// <summary>Games HelixSR was switched off in after a bad exit, with the upscaler each went back to.</summary>
+    public static Dictionary<string, string> Paused
+    {
+        get
+        {
+            try
+            {
+                return File.Exists(PausedPath)
+                    ? System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(PausedPath)) ?? new()
+                    : new();
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { return new(); }
+        }
+    }
+
+    private static void SavePaused(Dictionary<string, string> paused)
+    {
+        try
+        {
+            if (paused.Count == 0) { if (File.Exists(PausedPath)) File.Delete(PausedPath); return; }
+            File.WriteAllText(PausedPath, System.Text.Json.JsonSerializer.Serialize(paused));
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { }
+    }
+
+    public static void ClearPaused() => SavePaused(new());
+
+    /// <summary>
+    /// At start-up, when the last session didn't close properly and HelixSR is set up: every game using it goes back to
+    /// its previous upscaler (HelixSR might have been the cause), and is remembered, so "Turn HelixSR back on" can put
+    /// HelixSR back in exactly those games.
+    /// </summary>
+    public static async Task<List<string>> PauseAfterBadExitAsync()
+    {
+        var messages = new List<string>();
+        try
+        {
+            if (!RunMarker.LastRunEndedBadly || !State.IsSetUp) return messages;
+            var paused = Paused;
+            foreach (var game in GamesUsingIt())
+            {
+                var previous = PreviousChoice(game).Id;
+                var message = await SwitchBackAsync(game, "Upshift didn't close properly last time");
+                if (!InUse(game))
+                {
+                    paused[game.Id] = previous;
+                    message += " HelixSR stays off there, to be safe, until you turn it back on.";
+                }
+                messages.Add(message);
+            }
+            SavePaused(paused);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            messages.Add($"Upshift couldn't switch HelixSR off after the last session ended badly: {ex.Message}");
+        }
+        return messages;
+    }
+
+    /// <summary>"Turn HelixSR back on": HelixSR again in the games it was switched off in (still offered and set up).</summary>
+    public static async Task<List<string>> ResumeAsync()
+    {
+        var messages = new List<string>();
+        try
+        {
+            if (!State.IsSetUp)
+            {
+                messages.Add("HelixSR isn't set up any more, so it can't be turned back on.");
+                ClearPaused();
+                return messages;
+            }
+            foreach (var (gameId, previous) in Paused)
+            {
+                if (AppServices.Library.Current.FirstOrDefault(g => g.Id == gameId) is not { } game) continue;
+                if (!OfferedFor(game)) { messages.Add($"{game.Name}: HelixSR isn't offered for this game on this card now, so it stays on its upscaler."); continue; }
+                HelixSr.SetPreviousChoice(AppServices.DataDir, game.Id, previous);
+                var plan = new InstallPlan
+                {
+                    Operation = InstallOperation.Configure, GameId = game.Id, GameName = game.Name, TargetDir = game.TargetDir!,
+                    IniSettings = HelixSr.Settings(FilesDir)
+                };
+                var result = await GameUpdates.RunExclusiveAsync(game, () => InstallRunner.RunAsync(plan));
+                messages.Add(result.Success ? $"{game.Name}: HelixSR is the upscaler again." : $"{game.Name}: HelixSR couldn't be turned back on: {result.Message}");
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            messages.Add($"HelixSR couldn't be turned back on: {ex.Message}");
+        }
+        ClearPaused();
+        return messages;
+    }
+
     /// <summary>One game: switched back when it's set to HelixSR and a file is missing; null when nothing was needed.</summary>
     public static async Task<string?> CheckAsync(GameInfo game)
     {

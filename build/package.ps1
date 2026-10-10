@@ -23,7 +23,11 @@ param(
     [string]$Tag = "",
     # Local testing only: a different package id (e.g. "Upshift.App.Test"), so the test installer goes into
     # %LocalAppData%\<id> and leaves an installed Upshift alone. Never used for a release.
-    [string]$TestPackId = ""
+    [string]$TestPackId = "",
+    # Numbered test builds of the next release (e.g. 2 gives "1.3.0-test.2"): each installs over the one before, and the
+    # release itself ("1.3.0") installs over all of them, because a pre-release sorts below its release. The notes are
+    # the release's "## [x.y.z]" section. Never used for a release.
+    [int]$TestBuild = 0
 )
 
 $ErrorActionPreference = 'Stop'
@@ -84,14 +88,21 @@ try {
     if ($Tag -and $Tag -ne "v$version") {
         throw "The tag '$Tag' doesn't match the version $version in Directory.Build.props. Tag the release 'v$version'."
     }
+    $notesVersion = $version
+    if ($TestBuild -ne 0) {
+        if ($Tag) { throw "-TestBuild is for test installers only and can't be used with -Tag." }
+        if ($TestBuild -lt 1) { throw "-TestBuild must be 1 or more." }
+        if ($version -match '-') { throw "-TestBuild needs a plain x.y.z version in Directory.Build.props (got '$version')." }
+        $version = "$version-test.$TestBuild"
+    }
     Write-Host "Upshift $version"
 
     # ---- Release notes (CHANGELOG.md) ----
     $changelog = [IO.File]::ReadAllText((Join-Path $root 'CHANGELOG.md'), $utf8)
-    $pattern = '(?ms)^## \[' + [regex]::Escape($version) + '\][^\n]*\n(.*?)(?=^## \[|\z)'
+    $pattern = '(?ms)^## \[' + [regex]::Escape($notesVersion) + '\][^\n]*\n(.*?)(?=^## \[|\z)'
     $match = [regex]::Match($changelog, $pattern)
     if (-not $match.Success -or -not $match.Groups[1].Value.Trim()) {
-        throw "CHANGELOG.md has no '## [$version]' section with notes."
+        throw "CHANGELOG.md has no '## [$notesVersion]' section with notes."
     }
     New-Item -ItemType Directory -Force $OutDir | Out-Null
     $notes = Join-Path $OutDir 'release-notes.md'
@@ -100,7 +111,7 @@ try {
     # ---- Publish Release x64, self-contained ----
     if (Test-Path $PublishDir) { Remove-Item -Recurse -Force $PublishDir }
     Invoke-Checked 'dotnet publish' {
-        dotnet publish src/Upshift.App/Upshift.App.csproj -nologo -c Release -p:Platform=x64 -r win-x64 --self-contained -o $PublishDir
+        dotnet publish src/Upshift.App/Upshift.App.csproj -nologo -c Release -p:Platform=x64 -r win-x64 --self-contained -o $PublishDir "-p:Version=$version"
     }
     # The exe carries the icon (Explorer, the taskbar fallback); the window loads Assets\Upshift.ico next to it.
     Assert-ExeIcon (Join-Path $PublishDir 'Upshift.exe') 'published Upshift.exe'

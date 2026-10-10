@@ -207,7 +207,12 @@
                 <!-- A game set to HelixSR went back to its previous upscaler (HelixSR's files were missing or removed) -->
                 <InfoBar IsOpen="{x:Bind ViewModel.HasHelixSrNotice, Mode=OneWay}" Severity="Warning"
                          Title="HelixSR (experimental)" Message="{x:Bind ViewModel.HelixSrNotice, Mode=OneWay}" Closed="HelixSrNotice_Closed"
-                         Visibility="{x:Bind ViewModel.HasHelixSrNotice, Mode=OneWay}" AutomationProperties.Name="HelixSR notice" />
+                         Visibility="{x:Bind ViewModel.HasHelixSrNotice, Mode=OneWay}" AutomationProperties.Name="HelixSR notice">
+                    <InfoBar.ActionButton>
+                        <Button Content="Turn HelixSR back on" Click="ResumeHelixSr_Click" AutomationProperties.Name="Turn HelixSR back on"
+                                Visibility="{x:Bind ViewModel.HasHelixSrPaused, Mode=OneWay}" />
+                    </InfoBar.ActionButton>
+                </InfoBar>
             </StackPanel>
 
             <TextBox Grid.Row="2"

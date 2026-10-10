@@ -47,7 +47,10 @@ public partial class App : Application
             if (commandLine.Contains("--crash-test"))
                 throw new InvalidOperationException("Crash test: Upshift was started with --crash-test.");
 
+            // Whether the last session closed properly (HelixSR's safety net uses it); this one's marker goes when its window closes.
+            Services.RunMarker.Start();
             MainAppWindow = new MainWindow();
+            MainAppWindow.Closed += (_, _) => Services.RunMarker.End();
             MainAppWindow.Activate();
 
             // An installed copy repairs its own shortcuts if they point elsewhere or lost the icon (in the background).

@@ -125,8 +125,14 @@ public sealed partial class ComponentStore : IDisposable
     }
 
     /// <summary>True when the release has something this app can download for the component.</summary>
+    /// <summary>
+    /// A pinned version that isn't in the release list Upshift has (no check yet, or the list is older) comes as a
+    /// stand-in with no files and no date: it's downloaded by its tag, which fetches its real file list then, so it
+    /// counts as downloadable. If the real release turns out to have no matching file, the download says so.
+    /// </summary>
     public static bool IsDownloadable(CatalogComponent component, ReleaseInfo release) =>
-        component.RepoFilePath is not null || PickAsset(component, release) is not null;
+        component.RepoFilePath is not null || PickAsset(component, release) is not null
+        || (component.AssetPattern is not null && release.Published is null && release.Assets.Count == 0 && release.Tag == component.PinnedVersion);
 
     private async Task<CachedComponent> DownloadReleaseAsync(CatalogComponent component, string version, IProgress<string>? progress, CancellationToken ct)
     {

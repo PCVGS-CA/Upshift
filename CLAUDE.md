@@ -565,6 +565,31 @@ errors and no warnings.
     experiment's direct ini edit; the user's frame cap change at 2026-10-07 12:14 then wasn't stamped. Upshift treats the
     ini as edited by hand (uninstall would leave it). The Witcher 3's record (`0b9ffc8f…`) didn't match its ini
     (`a590e925…`) before the experiment either.
+  - **Second batch (2026-10-10), "still in testing":** the RX 6600 PC is gone; HelixSR ships labelled so, off by default.
+    - `Services/HelixSrSetupSession.cs`: the setup runs app-wide, independent of the page; each Updates page builds its
+      own `HelixSrRowView`, which reattaches to the session (the old shared, re-parented row was the likely tab-switch
+      crash). A 1 s timer keeps "m:ss so far" counting through the silent step 5. `HelixSrSetup` polls `HasExited`
+      and reports "ended without finishing (exit code N), during …" when the process dies without an error line.
+    - `Services/RunMarker.cs` (`data\running\<pid>.txt`) + `HelixSrGames.PauseAfterBadExitAsync`/`ResumeAsync`
+      (`helixsr-paused.json`): after a bad exit, games set to HelixSR go back to their previous upscaler; the Library's
+      InfoBar offers "Turn HelixSR back on". `ui2.ps1 close` kills the app, so it counts as a bad exit; `quit` doesn't.
+  - **RE Engine:** `Core/Detection/ReEngineGames.cs`. List from the OptiScaler wiki (2026-10-10): the "Capcom RE engine
+    games" page ("require REFramework") plus each game page saying REFramework is required; Monster Hunter Rise is left
+    out (its page says not required). Match = wiki title (or the title without its number, ≥3 words left) and
+    `re_chunk_000.pak` next to the exe. REFramework present = `dinput8.dll`, `ReShade64.dll` or a `reframework` folder.
+    The install dialog's first step asks "Install anyway"/"Cancel". Resident Evil Requiem (Steam) has no REFramework now.
+  - **In-game choice:** `Core/Detection/InGameChoice.cs`; wiki advice → DLSS → FSR 3.1+ → XeSS → FSR, leaving out
+    OptiScaler's own added files. Shown in the OptiScaler options panel (and with HelixSR).
+  - **Measure:** length 10–1800 s (`AppSettings.MeasureSeconds`), hotkey again stops early (`stop.txt`), Max FPS =
+    best whole one-second average (`PresentMonCsv.MaxOneSecondFps`). PresentMon "No download" was the pinned stand-in
+    release (v2.6.0 not in the cached list); `ComponentStore.IsDownloadable` accepts it.
+  - **Test builds:** `build\package.ps1 -TestBuild N` builds `x.y.z-test.N` (notes from `## [x.y.z]`); Velopack sorts
+    test.N below x.y.z. `AppUpdates.IsNewer` also treats a release as newer than its test builds.
+  - **How the app was tested here:** a stand-in catalog in Claude's data copy (`catalog\remote-catalog.json` with
+    `Url` = settings' `CatalogUrl`), whose helixSr entry points at a fake release on `http://127.0.0.1:47312`; throwaway
+    games added with "Add a game folder…" from the scratchpad (`uitest\games`, a `D3D12` folder makes them DirectX 12).
+    Scripts: scratchpad `uitest\make_fake.py`, `addfolder.ps1`, `setlength.ps1`. Settings and catalog were restored
+    afterwards; Claude's library still lists the two throwaway games.
 
 ## Next
 

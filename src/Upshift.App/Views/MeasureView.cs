@@ -60,7 +60,7 @@ public sealed class MeasureView : UserControl
         });
 
         var body = new StackPanel { Spacing = 12 };
-        body.Children.Add(Subtle($"Records the game's frame rate for {MeasureThresholds.MeasureSeconds} seconds with PresentMon, Intel's free frame-timing tool " +
+        body.Children.Add(Subtle("Records the game's frame rate for as long as you choose, with PresentMon, Intel's free frame-timing tool " +
                                  "(downloaded from its GitHub page the first time). Nothing measured leaves this PC."));
         body.Children.Add(Controls(card));
         if (runs.Count > 0) body.Children.Add(Comparison(card, runs));
@@ -88,9 +88,35 @@ public sealed class MeasureView : UserControl
 
         if (thisGame && Measurement.State != MeasureState.Idle)
         {
-            if (Measurement.State is MeasureState.Preparing or MeasureState.Armed or MeasureState.Measuring)
-                buttons.Children.Add(new ProgressRing { IsActive = true, Width = 18, Height = 18 });
-            var cancel = new Button { Content = Measurement.State == MeasureState.Measuring ? "Stop measuring" : "Cancel" };
+            buttons.Children.Add(new ProgressRing { IsActive = true, Width = 18, Height = 18 });
+            // Say what's happening next to the spinner, not just the spinner.
+            var status = new TextBlock { VerticalAlignment = VerticalAlignment.Center, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap };
+            switch (Measurement.State)
+            {
+                case MeasureState.Preparing:
+                    status.Text = "Getting ready…";
+                    break;
+                case MeasureState.Armed:
+                    status.Text = $"Waiting for you to press {Measurement.HotkeyName} in the game";
+                    break;
+                case MeasureState.Measuring:
+                    status.Text = Elapsed();
+                    // Counts up every second while the panel is shown.
+                    var tick = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+                    tick.Tick += (_, _) => status.Text = Elapsed();
+                    status.Loaded += (_, _) => tick.Start();
+                    status.Unloaded += (_, _) => tick.Stop();
+                    break;
+            }
+            buttons.Children.Add(status);
+            if (Measurement.State == MeasureState.Measuring)
+            {
+                var stop = new Button { Content = "Stop and keep result" };
+                stop.Click += (_, _) => Measurement.StopEarly();
+                buttons.Children.Add(stop);
+            }
+            var cancel = new Button { Content = "Cancel" };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(cancel, "Cancel measuring");
             cancel.Click += (_, _) => Measurement.Cancel();
             buttons.Children.Add(cancel);
         }
@@ -99,6 +125,7 @@ public sealed class MeasureView : UserControl
             var measure = new Button { Content = "Measure this game", Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
             measure.Click += async (_, _) => await MeasureAsync(card);
             buttons.Children.Add(measure);
+            buttons.Children.Add(LengthBox());
             if (Measurement.State != MeasureState.Idle && Measurement.GameId is not null)
                 panel.Children.Add(Subtle("A measurement is armed for another game; this replaces it."));
         }
@@ -115,6 +142,44 @@ public sealed class MeasureView : UserControl
             panel.Children.Add(Subtle($"Press Measure this game, then start the game, get to a normal gameplay area and press {Measurement.HotkeyName} " +
                                       "(change the key in Settings). A beep marks the start and two beeps the end."));
         return panel;
+    }
+
+    /// <summary>"Measuring… 0:23 of 1:00 (F10 stops early)".</summary>
+    private static string Elapsed()
+    {
+        var since = Measurement.MeasuringSinceUtc;
+        var elapsed = since is { } s ? DateTime.UtcNow - s : TimeSpan.Zero;
+        var total = TimeSpan.FromSeconds(Measurement.CurrentSeconds);
+        if (elapsed > total) elapsed = total;
+        string F(TimeSpan t) => t.TotalHours >= 1 ? t.ToString(@"h\:mm\:ss") : t.ToString(@"m\:ss");
+        return $"Measuring… {F(elapsed)} of {F(total)} ({Measurement.HotkeyName} stops early)";
+    }
+
+    /// <summary>The length box: whole seconds, 10 to 1800, remembered for next time (empty or invalid goes back to the last value).</summary>
+    private static FrameworkElement LengthBox()
+    {
+        var box = new NumberBox
+        {
+            Value = Measurement.ChosenSeconds, Minimum = MeasureThresholds.MinSeconds, Maximum = MeasureThresholds.MaxSeconds,
+            SmallChange = 10, LargeChange = 60, Width = 110, AcceptsExpression = false,
+            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
+            ValidationMode = NumberBoxValidationMode.InvalidInputOverwritten, VerticalAlignment = VerticalAlignment.Center
+        };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(box, "Measuring length in seconds");
+        ToolTipService.SetToolTip(box, $"How long to measure, in seconds ({MeasureThresholds.MinSeconds} to {MeasureThresholds.MaxSeconds}).");
+        box.ValueChanged += (_, e) =>
+        {
+            var seconds = double.IsNaN(e.NewValue) ? Measurement.ChosenSeconds : MeasureThresholds.ClampSeconds(e.NewValue);
+            if (box.Value != seconds) box.Value = seconds;   // whole seconds, within range
+            var settings = AppServices.Settings.Current;
+            if (settings.MeasureSeconds == seconds) return;
+            settings.MeasureSeconds = seconds;
+            try { AppServices.Settings.Save(settings); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        };
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
+        row.Children.Add(box);
+        row.Children.Add(new TextBlock { Text = "seconds", VerticalAlignment = VerticalAlignment.Center });
+        return row;
     }
 
     private async Task MeasureAsync(GameCardViewModel card)
@@ -218,6 +283,9 @@ public sealed class MeasureView : UserControl
             previous is null ? null : Diff(latest.AverageFps, previous.AverageFps), strong: true);
         Add("Low points (1%)", $"{Math.Round(latest.LowFps)} fps", previous is null ? null : $"{Math.Round(previous.LowFps)} fps",
             previous is null ? null : Diff(latest.LowFps, previous.LowFps), strong: true);
+        Add("Max (best second)", Fps(latest.MaxFps), previous is null ? null : Fps(previous.MaxFps),
+            previous is null ? null : latest.MaxFps is { } lm && previous.MaxFps is { } pm ? Diff(lm, pm) : "–", strong: true);
+        Add("Length", RunLength(latest), previous is null ? null : RunLength(previous));
         Add("Frame generation", Fg(latest), previous is null ? null : Fg(previous));
         Add("Upscaler", latest.Settings.Upscaler, previous?.Settings.Upscaler);
         Add("Frame gen. mode", latest.Settings.FrameGeneration, previous?.Settings.FrameGeneration);
@@ -269,6 +337,7 @@ public sealed class MeasureView : UserControl
             {
                 FontSize = 13, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center,
                 Text = $"{run.Utc.ToLocalTime():d MMM yyyy, HH:mm} · {Math.Round(run.AverageFps)} fps average · low points {Math.Round(run.LowFps)} fps" +
+                       $" · max {Fps(run.MaxFps)} · {RunLength(run)}" +
                        (run.FrameGenOn ? " · frame generation on" : "") + $" · {run.Settings.Upscaler}"
             });
             var delete = new Button { Content = "Delete", Padding = new Thickness(10, 3, 10, 4) };
@@ -280,6 +349,13 @@ public sealed class MeasureView : UserControl
         }
         return panel;
     }
+
+    /// <summary>"143 fps", or a dash for runs saved before Max existed.</summary>
+    private static string Fps(double? fps) => fps is { } f ? $"{Math.Round(f)} fps" : "–";
+
+    /// <summary>The run's real length: "58 seconds", "45 seconds (stopped early)".</summary>
+    private static string RunLength(MeasurementRun run) =>
+        Measurement.Length(run.Seconds) + (run.StoppedEarly ? " (stopped early)" : "");
 
     private void Delete(GameCardViewModel card, MeasurementRun run)
     {

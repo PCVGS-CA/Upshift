@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 using Upshift.App.ViewModels;
 using Upshift.Core.Components;
+using Upshift.Core.Detection;
 using Upshift.Core.Install;
 using Windows.Storage.Pickers;
 
@@ -191,6 +192,21 @@ public sealed partial class LibraryPage : Page
     private async void Install_Click(object sender, RoutedEventArgs e)
     {
         if (_dialogOpen || ViewModel.Selected is not { CanInstall: true } card || card.Info.TargetDir is not { } target) return;
+
+        // Capcom RE Engine games crash with OptiScaler without REFramework (OptiScaler's wiki). Upshift never installs it.
+        if (ReEngineGames.NeedsWarning(card.Info))
+        {
+            var warning = new ContentDialog
+            {
+                XamlRoot = XamlRoot,
+                Title = "REFramework isn't installed",
+                Content = new TextBlock { Text = ReEngineGames.Warning, TextWrapping = TextWrapping.Wrap },
+                PrimaryButtonText = "Install anyway",
+                CloseButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Close
+            };
+            if (await ShowDialogAsync(warning) != ContentDialogResult.Primary) return;
+        }
 
         var component = await ViewModel.PrepareOptiScalerAsync();
         if (component is null) return;
@@ -632,6 +648,12 @@ public sealed partial class LibraryPage : Page
     private void DlssNotice_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.DismissDlssNotice();
 
     private void HelixSrNotice_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.DismissHelixSrNotice();
+
+    private async void ResumeHelixSr_Click(object sender, RoutedEventArgs e)
+    {
+        try { await ViewModel.ResumeHelixSrAsync(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { Services.CrashLog.Write(ex, "Turn HelixSR back on"); }
+    }
 
     private void OpenIni_Click(object sender, RoutedEventArgs e)
     {

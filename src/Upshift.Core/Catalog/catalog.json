@@ -41,7 +41,7 @@
       "id": "presentmon",
       "name": "PresentMon",
       "kind": "tool",
-      "description": "Intel's frame-timing tool (MIT licence). Upshift's Measure performance runs its console app for 60 seconds per measurement. Downloaded the first time you measure; never bundled.",
+      "description": "Intel's frame-timing tool (MIT licence). Upshift's Measure performance runs its console app for the length the user chooses (60 seconds by default). Downloaded the first time you measure; never bundled.",
       "repo": "GameTechDev/PresentMon",
       "assetPattern": "(?i)^PresentMon-[\\d.]+-x64\\.exe$",
       "pinnedVersion": "v2.6.0",
@@ -340,7 +340,7 @@
         { "id": "fsr22", "text": "An older FSR, only worth trying if FSR 3.1 misbehaves in this game." },
         {
           "id": "helixsr",
-          "name": "DLSS 3.7 via HelixSR (experimental)",
+          "name": "DLSS 3.7 via HelixSR (experimental, still in testing)",
           "text": "Experimental. NVIDIA's DLSS 3.7 network running on your Radeon's normal shader cores, through HelixSR, an unofficial project not affiliated with NVIDIA or AMD. It aims at DLSS-like sharpness and stability, costs more GPU time than FSR 3.1, and its author hasn't tested it on Windows."
         }
       ],

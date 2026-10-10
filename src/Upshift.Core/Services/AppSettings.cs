@@ -39,6 +39,9 @@ public sealed class AppSettings
     /// <summary>The key that starts a measurement while a game runs (a Windows virtual-key code; F10 by default).</summary>
     public int MeasureHotkey { get; set; } = 0x79;
 
+    /// <summary>How long a measurement runs, in seconds (the last value typed; 10 to 1800).</summary>
+    public int MeasureSeconds { get; set; } = Measure.MeasureThresholds.MeasureSeconds;
+
     /// <summary>Collapsible sections the user left open (true) or closed (false), by a fixed key such as "game.changes".</summary>
     public Dictionary<string, bool> OpenSections { get; set; } = new();
 

@@ -23,8 +23,15 @@ public sealed class MeasurementRun
     public DateTime Utc { get; set; }
     public double AverageFps { get; set; }
     public double LowFps { get; set; }
+    /// <summary>The highest one-second average (FrameStats.MaxFps). Null for runs saved before Upshift 1.3.0.</summary>
+    public double? MaxFps { get; set; }
     public int Frames { get; set; }
+    /// <summary>The time the frames covered: the real length of the run.</summary>
     public double Seconds { get; set; }
+    /// <summary>The length that was asked for (null for runs saved before Upshift 1.3.0, which were all 60 seconds).</summary>
+    public int? PlannedSeconds { get; set; }
+    /// <summary>The run was stopped early with the hotkey.</summary>
+    public bool StoppedEarly { get; set; }
     public int GeneratedFrames { get; set; }
     /// <summary>The display's refresh rate at the time (for the advice).</summary>
     public int? RefreshHz { get; set; }
