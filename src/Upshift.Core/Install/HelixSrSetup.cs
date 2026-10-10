@@ -117,6 +117,11 @@ public static class HelixSrSetup
         {
             return Fail($"The HelixSR setup failed: {ex.Message}");
         }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Anything else is reported the same way; the setup never takes Upshift down.
+            return Fail($"The HelixSR setup failed unexpectedly: {ex.GetType().Name}: {ex.Message}");
+        }
         finally
         {
             TryDelete(staging);

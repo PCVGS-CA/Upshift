@@ -48,12 +48,25 @@ public sealed class HelixSrRowView : UserControl
         Refresh();
     }
 
+    /// <summary>Draws the row. Never throws: if anything about HelixSR can't be shown, a plain "Not set up" row says why.</summary>
     public void Refresh()
+    {
+        try { RefreshCore(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _body.Children.Clear();
+            _body.Children.Add(new TextBlock { Text = $"{HelixSr.RowName} ({HelixSr.Experimental}): Not set up", FontWeight = FontWeights.SemiBold });
+            _body.Children.Add(Line($"Upshift couldn't show HelixSR's state: {ex.Message}"));
+        }
+    }
+
+    private void RefreshCore()
     {
         _body.Children.Clear();
         var release = HelixSrGames.Release;
         var card = HelixSrGames.Card;
-        var installed = HelixSrGames.Installed;
+        var state = HelixSrGames.State;
+        var installed = state.Installed;
         var busy = HelixSrSetup.Running;
 
         // ---- name, Experimental, version, button ----
@@ -74,13 +87,13 @@ public sealed class HelixSrRowView : UserControl
         else if (installed is not null && !newer)
         {
             button.Content = "Remove";
-            button.Click += async (_, _) => await RemoveAsync();
+            button.Click += async (_, _) => await Guarded(RemoveAsync);
         }
         else
         {
             button.Content = newer ? $"Set up v{release!.Version}" : "Set up";
             button.IsEnabled = card.CanSetUp && release is not null;
-            button.Click += async (_, _) => await SetUpAsync();
+            button.Click += async (_, _) => await Guarded(SetUpAsync);
         }
 
         // The same columns as the other rows on the Updates page; the button stops where theirs do (before their chevron).
@@ -102,6 +115,20 @@ public sealed class HelixSrRowView : UserControl
         _body.Children.Add(grid);
 
         _body.Children.Add(Subtle(HelixSr.RowSubtitle));
+
+        // ---- a setup that's incomplete or can't be read: "Not set up", and why ----
+        if (!busy && state.Status == HelixSrStatus.Incomplete)
+            _body.Children.Add(Line($"Not set up: {state.Missing} is missing from HelixSR's shared folder (a setup that didn't finish, or files removed by hand). " +
+                                    (card.CanSetUp ? "Set it up again, or remove what's there." : "Remove what's there."), strong: true));
+        if (!busy && state.Status == HelixSrStatus.Unreadable)
+            _body.Children.Add(Line($"Not set up: Upshift couldn't read HelixSR's state. {state.Problem?.TrimEnd('.')}. " +
+                                    (card.CanSetUp ? "Set it up again, or remove what's there." : "Remove what's there."), strong: true));
+        if (!busy && state.Status is HelixSrStatus.Incomplete or HelixSrStatus.Unreadable)
+        {
+            var clean = new HyperlinkButton { Content = "Remove what's there", Padding = new Thickness(0), FontSize = 12 };
+            clean.Click += async (_, _) => await Guarded(RemoveAsync);
+            _body.Children.Add(clean);
+        }
 
         // ---- why not, untested, testing ----
         if (!card.CanSetUp && card.Reason is { } why) _body.Children.Add(Line(why, strong: true));
@@ -132,10 +159,20 @@ public sealed class HelixSrRowView : UserControl
                                       (using_.Count == 0 ? "No game uses it yet: choose it as the upscaler in a game's OptiScaler options."
                                                          : $"Used by {string.Join(", ", using_.Select(g => g.Name))}.")));
         }
-        if (release is not null)
+        if (release is not null && Uri.TryCreate(release.PageUrl, UriKind.Absolute, out var page))
+            _body.Children.Add(new HyperlinkButton { Content = "HelixSR on GitHub", NavigateUri = page, Padding = new Thickness(0), FontSize = 12 });
+    }
+
+    /// <summary>Runs a button's action; anything unexpected is shown on the row instead of closing Upshift.</summary>
+    private async Task Guarded(Func<Task> action)
+    {
+        try { await action(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            var link = new HyperlinkButton { Content = "HelixSR on GitHub", NavigateUri = new Uri(release.PageUrl), Padding = new Thickness(0), FontSize = 12 };
-            _body.Children.Add(link);
+            _lastFailure = new HelixSrSetupResult(false, "");
+            _lastMessage = $"Something went wrong: {ex.Message} No game was changed by it.";
+            _progress.Visibility = _bar.Visibility = Visibility.Collapsed;
+            Refresh();
         }
     }
 

@@ -82,7 +82,10 @@ public static class ProblemReports
             // HelixSR (experimental): its text files only. Its two network files (helixsr_weights.bin and
             // helixsr_kernels.pak) hold NVIDIA's network and are never put in a report.
             var iniPath = Path.Combine(dir, "OptiScaler.ini");
-            if (File.Exists(iniPath) && HelixSr.InUse(IniFile.Load(iniPath), AppServices.DataDir))
+            bool helix;
+            try { helix = File.Exists(iniPath) && HelixSr.InUse(IniFile.Load(iniPath), AppServices.DataDir); }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { helix = false; }
+            if (helix)
             {
                 var helixDir = HelixSr.FilesDir(AppServices.DataDir);
                 game.AppendLine(HelixSr.Installed(AppServices.DataDir) is { } h

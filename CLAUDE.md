@@ -555,6 +555,12 @@ errors and no warnings.
   - Tested: `helixtest` harness in the scratchpad (53 checks: cards, list, ini round trips on a copy of Silent Hill 2's
     ini and record, FSR 4 interplay, setup failures with fake releases on a local server) and the real setup on the
     RTX 4070 PC in Claude's sandbox.
+  - **Never crash on HelixSR's state** (2026-10-10, after a crash report from the RX 6600 PC whose files came through
+    unreadable, so the actual cause wasn't seen): `HelixSr.ReadState` never throws (NotSetUp / SetUp / Incomplete /
+    Unreadable with the reason); an unreadable state is never treated as missing files (no switch back); every HelixSR
+    entry point in the app (`HelixSrGames`, the Updates row's drawing and buttons, the report) catches everything but
+    OutOfMemory; the setup has a final catch-all. Tested: 68 harness checks, and the app started with HelixSR complete,
+    half-finished (DLL only + a staging folder), missing, a damaged record, and a file where the folder should be.
   - Silent Hill 2's record hash (`9b10b5a8…`) no longer matches its OptiScaler.ini (`ffdc74e0…`) since the shader
     experiment's direct ini edit; the user's frame cap change at 2026-10-07 12:14 then wasn't stamped. Upshift treats the
     ini as edited by hand (uninstall would leave it). The Witcher 3's record (`0b9ffc8f…`) didn't match its ini

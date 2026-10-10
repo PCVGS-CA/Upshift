@@ -18,6 +18,19 @@ public sealed class HelixSrInstalled
     public string? Card { get; set; }
 }
 
+/// <summary>
+/// HelixSR's state on this PC, read so that it never throws. SetUp: complete and readable. NotSetUp: nothing there.
+/// Incomplete: some files are there but not all (a setup that didn't finish, or files deleted by hand); Missing names
+/// the first missing file. Unreadable: the state couldn't be read at all; Problem says why. Everything but SetUp is
+/// shown as "Not set up".
+/// </summary>
+public enum HelixSrStatus { NotSetUp, SetUp, Incomplete, Unreadable }
+
+public sealed record HelixSrState(HelixSrStatus Status, HelixSrInstalled? Installed, string? Missing, string? Problem)
+{
+    public bool IsSetUp => Status == HelixSrStatus.SetUp;
+}
+
 /// <summary>What helixsr.log says about the last run. NetworkRan is null when the log doesn't say clearly.</summary>
 public sealed record HelixSrLogStatus(bool Exists, DateTime? WrittenLocal, bool? NetworkRan, string? Evidence, IReadOnlyList<string> KeyLines);
 
@@ -113,13 +126,17 @@ public static class HelixSr
         new("Libraries", "FfxDx12SRPath", null)
     };
 
-    /// <summary>True when the game's OptiScaler.ini points either FidelityFX path into Upshift's HelixSR folder.</summary>
+    /// <summary>True when the game's OptiScaler.ini points either FidelityFX path into Upshift's HelixSR folder. Never throws.</summary>
     public static bool InUse(IniFile ini, string dataDir)
     {
-        var root = Path.GetFullPath(Root(dataDir)).TrimEnd('\\') + "\\";
-        bool Points(string key) => ini.Get("Libraries", key) is { } v && v != OptiScalerOptions.Auto
-                                   && TryFull(v)?.StartsWith(root, StringComparison.OrdinalIgnoreCase) == true;
-        return Points("FfxDx12Path") || Points("FfxDx12SRPath");
+        try
+        {
+            var root = Path.GetFullPath(Root(dataDir)).TrimEnd('\\') + "\\";
+            bool Points(string key) => ini.Get("Libraries", key) is { } v && v != OptiScalerOptions.Auto
+                                       && TryFull(v)?.StartsWith(root, StringComparison.OrdinalIgnoreCase) == true;
+            return Points("FfxDx12Path") || Points("FfxDx12SRPath");
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return false; }
     }
 
     private static string? TryFull(string path)
@@ -129,20 +146,51 @@ public static class HelixSr
 
     // ---------------- the shared folder ----------------
 
-    /// <summary>The first file a game needs that's missing from the shared folder, or null when everything is there.</summary>
-    public static string? MissingFile(string dataDir) =>
-        RequiredFiles.FirstOrDefault(f => !File.Exists(Path.Combine(FilesDir(dataDir), f)) || new FileInfo(Path.Combine(FilesDir(dataDir), f)).Length == 0);
-
-    /// <summary>What's set up in the shared folder (null when nothing is, or it's incomplete).</summary>
-    public static HelixSrInstalled? Installed(string dataDir)
+    /// <summary>
+    /// HelixSR's state, read without ever throwing: whatever goes wrong while reading it (a damaged record, a folder
+    /// Windows won't let Upshift read, a file where a folder should be) comes back as Unreadable with the reason, which
+    /// the screens show as "Not set up".
+    /// </summary>
+    public static HelixSrState ReadState(string dataDir)
     {
-        if (MissingFile(dataDir) is not null) return null;
         try
         {
-            return JsonSerializer.Deserialize<HelixSrInstalled>(File.ReadAllText(Path.Combine(FilesDir(dataDir), MarkerName)));
+            var files = FilesDir(dataDir);
+            if (File.Exists(files)) return new HelixSrState(HelixSrStatus.Unreadable, null, null, $"{files} is a file, not a folder.");
+            if (!Directory.Exists(files))
+                return new HelixSrState(HelixSrStatus.NotSetUp, null, null, null);
+            var missing = RequiredFiles.FirstOrDefault(f => !File.Exists(Path.Combine(files, f)) || new FileInfo(Path.Combine(files, f)).Length == 0);
+            if (missing is not null) return new HelixSrState(HelixSrStatus.Incomplete, null, missing, null);
+            var marker = Path.Combine(files, MarkerName);
+            if (!File.Exists(marker)) return new HelixSrState(HelixSrStatus.Incomplete, null, MarkerName, null);
+            var installed = JsonSerializer.Deserialize<HelixSrInstalled>(File.ReadAllText(marker));
+            return installed is { Version.Length: > 0 }
+                ? new HelixSrState(HelixSrStatus.SetUp, installed, null, null)
+                : new HelixSrState(HelixSrStatus.Unreadable, null, null, $"Upshift's record of the setup ({MarkerName}) is empty or damaged.");
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { return null; }
+        catch (JsonException)
+        {
+            return new HelixSrState(HelixSrStatus.Unreadable, null, null, $"Upshift's record of the setup ({MarkerName}) is damaged.");
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return new HelixSrState(HelixSrStatus.Unreadable, null, null, ex.Message);
+        }
     }
+
+    /// <summary>
+    /// The first file a game needs that's missing from the shared folder, or null when everything is there. A state
+    /// that can't be read isn't reported as a missing file, so a passing read error never switches games back.
+    /// </summary>
+    public static string? MissingFile(string dataDir) => ReadState(dataDir) switch
+    {
+        { Status: HelixSrStatus.SetUp } or { Status: HelixSrStatus.Unreadable } => null,
+        { Status: HelixSrStatus.Incomplete, Missing: { } m } => m,
+        _ => DllName
+    };
+
+    /// <summary>What's set up in the shared folder (null when nothing is, it's incomplete or it can't be read).</summary>
+    public static HelixSrInstalled? Installed(string dataDir) => ReadState(dataDir).Installed;
 
     // ---------------- the game's previous upscaler ----------------
 
@@ -153,12 +201,18 @@ public static class HelixSr
     public static string? PreviousChoice(string dataDir, string gameId) =>
         ReadPrevious(dataDir).TryGetValue(gameId, out var id) ? id : null;
 
-    public static void SetPreviousChoice(string dataDir, string gameId, string? choiceId)
+    /// <summary>Remembers (or forgets) a game's previous upscaler. Never throws: false when it couldn't be saved.</summary>
+    public static bool SetPreviousChoice(string dataDir, string gameId, string? choiceId)
     {
-        var all = ReadPrevious(dataDir);
-        if (choiceId is null) all.Remove(gameId); else all[gameId] = choiceId;
-        Directory.CreateDirectory(dataDir);
-        File.WriteAllText(Path.Combine(dataDir, "helixsr-previous.json"), JsonSerializer.Serialize(all, new JsonSerializerOptions { WriteIndented = true }));
+        try
+        {
+            var all = ReadPrevious(dataDir);
+            if (choiceId is null) all.Remove(gameId); else all[gameId] = choiceId;
+            Directory.CreateDirectory(dataDir);
+            File.WriteAllText(Path.Combine(dataDir, "helixsr-previous.json"), JsonSerializer.Serialize(all, new JsonSerializerOptions { WriteIndented = true }));
+            return true;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return false; }
     }
 
     private static Dictionary<string, string> ReadPrevious(string dataDir)
@@ -168,7 +222,7 @@ public static class HelixSr
             var path = Path.Combine(dataDir, "helixsr-previous.json");
             return File.Exists(path) ? JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(path)) ?? new() : new();
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { return new(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return new(); }
     }
 
     // ---------------- helixsr.log ----------------
@@ -181,22 +235,21 @@ public static class HelixSr
     /// </summary>
     public static HelixSrLogStatus ReadLog(string dataDir, DateTime? sinceUtc)
     {
-        var path = Path.Combine(FilesDir(dataDir), LogName);
-        if (!File.Exists(path) || (sinceUtc is { } since && File.GetLastWriteTimeUtc(path) < since))
-            return new HelixSrLogStatus(false, null, null, null, Array.Empty<string>());
-        List<string> lines;
         try
         {
-            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            using var reader = new StreamReader(stream);
-            lines = new List<string>();
-            while (reader.ReadLine() is { } line) lines.Add(line);
+            var path = Path.Combine(FilesDir(dataDir), LogName);
+            if (!File.Exists(path) || (sinceUtc is { } since && File.GetLastWriteTimeUtc(path) < since))
+                return new HelixSrLogStatus(false, null, null, null, Array.Empty<string>());
+            var lines = new List<string>();
+            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+            using (var reader = new StreamReader(stream))
+                while (reader.ReadLine() is { } line) lines.Add(line);
+            return ParseLog(lines) with { Exists = true, WrittenLocal = File.GetLastWriteTime(path) };
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             return new HelixSrLogStatus(false, null, null, null, Array.Empty<string>());
         }
-        return ParseLog(lines) with { Exists = true, WrittenLocal = File.GetLastWriteTime(path) };
     }
 
     private static readonly string[] NotRunWords = { "missing", "placeholder", "not supported", "simple upscale", "failed", "error" };
