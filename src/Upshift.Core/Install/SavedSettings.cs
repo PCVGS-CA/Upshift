@@ -89,6 +89,10 @@ public static class SavedSettings
             if (string.Equals(fresh.Get(section, key), value, StringComparison.Ordinal)) continue;
             if (oldDefaults is not null && string.Equals(oldDefaults.Get(section, key), value, StringComparison.Ordinal)) continue;
             if (list.Any(s => s.Section.Equals(section, StringComparison.OrdinalIgnoreCase) && s.Key.Equals(key, StringComparison.OrdinalIgnoreCase))) continue;
+            // HelixSR's paths (into Upshift's own helixsr folder) aren't brought back by a reinstall: HelixSR may be gone
+            // by then, and choosing it again in the game's OptiScaler options records it properly.
+            if (section.Equals("Libraries", StringComparison.OrdinalIgnoreCase) && key.StartsWith("FfxDx12", StringComparison.OrdinalIgnoreCase)
+                && value.Contains(@"\Upshift\helixsr\", StringComparison.OrdinalIgnoreCase)) continue;
             list.Add(new IniSetting(section, key, value));
         }
         return list;

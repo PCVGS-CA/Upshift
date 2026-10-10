@@ -2,6 +2,24 @@
 
 All notable changes to Upshift. Each release's section becomes its GitHub release notes, so the heading must be `## [x.y.z]` with the same version as `Directory.Build.props` (a date after it is fine).
 
+## [1.3.0]
+
+HelixSR support: a DLSS-based upscaler for Radeon RX 5000 and RX 6000 cards. **Experimental.**
+
+### New
+
+- **HelixSR (experimental), for AMD RDNA 1 and RDNA 2 cards (RX 5000 and RX 6000 series, and Radeon 680M-class graphics):** HelixSR is an unofficial project, not affiliated with NVIDIA or AMD, that runs NVIDIA's DLSS 3.7 network on Radeon cards without FSR 4. On those cards, the Updates page has a HelixSR row with "Set up". After you accept a notice (what HelixSR is, everything its setup downloads and from where, that its source code isn't published and nothing it ships is signed, and how long it takes), Upshift runs the HelixSR author's own setup once, with progress. It downloads only the HelixSR release Upshift has checked, verifies it and its scripts against pinned SHA-256 values, and stops with the real error if anything goes wrong, leaving nothing half-installed.
+- **"DLSS 3.7 via HelixSR (experimental)"** is then an upscaler choice in Direct3D 12 games with OptiScaler installed by Upshift. Choosing it points OptiScaler at HelixSR's files in Upshift's data folder; nothing is added to the game folder, and choosing another upscaler or uninstalling puts OptiScaler.ini back exactly. HelixSR and FSR 4 both use OptiScaler's FSR slot, so turning one on turns the other off, and Upshift says so.
+- **"Which upscaler should I pick?"** on RX 6000 cards now compares HelixSR with FSR 4.1.1b and suggests trying both with Measure performance.
+- **"Is it working?"** also reads HelixSR's own log and says whether its DLSS network actually ran. "Report a problem" includes that log, never HelixSR's network files.
+- **Safe if something's missing:** if a game is set to HelixSR and HelixSR's files are gone, Upshift switches the game back to the upscaler it had before and tells you. "Remove HelixSR" switches every game using it back first, then deletes its files, and offers to delete the setup's tools too.
+
+**HelixSR is experimental and hasn't yet been tested on Radeon hardware by Upshift's developer.** If you have an RX 5000 or RX 6000 card, please try it and tell us how it went, good or bad, with **Report a problem** (About page, or in the game's panel). On other cards the HelixSR row explains why it isn't needed.
+
+### Fixes
+
+- Restoring your previous OptiScaler settings after a reinstall no longer brings back settings that pointed at HelixSR's files.
+
 ## [1.2.0]
 
 Trust and troubleshooting: Upshift can now tell you whether OptiScaler is working, explains every uninstall, and makes reporting a problem easy.

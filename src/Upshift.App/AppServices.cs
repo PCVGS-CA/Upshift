@@ -129,12 +129,26 @@ public static class AppServices
         new GpuInfo("AMD Radeon RX 7900 XTX", Core.Models.GpuVendor.Amd, 0x1002, 0x744C, "32.0.21013.1000", "RDNA 3", false),
         new GpuInfo("AMD Radeon RX 6800", Core.Models.GpuVendor.Amd, 0x1002, 0x73BF, "32.0.21013.1000", "RDNA 2", false),
         new GpuInfo("AMD Radeon RX 6600", Core.Models.GpuVendor.Amd, 0x1002, 0x73FF, "32.0.21013.1000", "RDNA 2", false),
+        new GpuInfo("AMD Radeon RX 5700 XT", Core.Models.GpuVendor.Amd, 0x1002, 0x731F, "32.0.21013.1000", "RDNA 1", false),
+        new GpuInfo("AMD Radeon 680M", Core.Models.GpuVendor.Amd, 0x1002, 0x1681, "32.0.21013.1000", "RDNA 2 integrated", true),
         new GpuInfo("Intel Arc B580 Graphics", Core.Models.GpuVendor.Intel, 0x8086, 0xE20B, "32.0.101.6979", "Battlemage", false)
     };
 
     public static void SetPretendGpu(GpuInfo? gpu)
     {
         PretendGpu = gpu;
+        EffectiveGpuChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// Developer option (Settings, opened with Shift held): offer HelixSR on this PC's card even though it's normally
+    /// only offered on RDNA 1 and RDNA 2, so the whole flow can be tried on any card. Off at every start, never saved.
+    /// </summary>
+    public static bool ShowHelixSrForTesting { get; private set; }
+
+    public static void SetShowHelixSrForTesting(bool on)
+    {
+        ShowHelixSrForTesting = on;
         EffectiveGpuChanged?.Invoke();
     }
 

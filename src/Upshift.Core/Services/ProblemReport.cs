@@ -84,6 +84,8 @@ public static class ProblemReport
     /// <summary>Writes the items (already scrubbed) into a zip, with a README listing them.</summary>
     public static void Save(string zipPath, IReadOnlyList<ReportItem> items)
     {
+        // Never HelixSR's network files (NVIDIA's network), whatever adds them: .bin and .pak entries are left out.
+        items = items.Where(i => !Install.HelixSr.IsNetworkFile(i.Name)).ToList();
         var temp = zipPath + ".tmp";
         using (var zip = ZipFile.Open(temp, ZipArchiveMode.Create))
         {

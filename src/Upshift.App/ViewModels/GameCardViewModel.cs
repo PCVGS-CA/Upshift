@@ -234,6 +234,9 @@ public sealed partial class GameCardViewModel : ObservableObject
         var fsr4 = OptiScalerOptions.Fsr4InUse(dir!, manifest, ini, AppServices.Catalog.Fsr4.CommunityInt8FileName).Source != Fsr4Source.Off
                    || AppServices.Gpu?.Generation.StartsWith("RDNA 4", StringComparison.OrdinalIgnoreCase) == true;
         var status = OptiScalerLog.Status(dir!, manifest, ini, AppServices.History.Get(Info.Id).LastLaunchUtc, fsr4);
+        // With HelixSR, OptiScaler's FSR 3.1 slot runs HelixSR's DLL: name it, and add what helixsr.log says.
+        var helix = HelixSr.InUse(ini, AppServices.DataDir);
+        if (helix && status.State == LoadState.Working && status.Used == "FSR 3.1") status = status with { Used = "HelixSR (DLSS 3.7, experimental)" };
         const string Prefix = "According to OptiScaler's log: ";
         var when = status.RunLocal is { } t ? $"Based on the run on {t:d MMM yyyy, HH:mm}." : "";
         CanTurnOnLogCheck = status.State == LoadState.LoggingOff;
@@ -256,6 +259,24 @@ public sealed partial class GameCardViewModel : ObservableObject
             LoadState.LoggingOff => ("OptiScaler's log is off for this game, so Upshift can't check whether it's working.",
                 "Turning the check on sets OptiScaler's log to its lightest level (LogToFile=true, LogLevel=2): it records only events such as an upscaler starting, not every frame, so it doesn't slow the game down."),
             _ => ("This check isn't available for the AMD-NR build: its log hasn't been checked by Upshift, so the status is only shown for standard OptiScaler and its DLSS 5 build.", "")
+        };
+        if (helix) LoadStatusDetail = string.Join(" ", new[] { LoadStatusDetail, HelixLogText(manifest) }.Where(s => s.Length > 0));
+    }
+
+    /// <summary>What helixsr.log says (HelixSR writes one log next to its DLL, shared by every game that uses it).</summary>
+    private static string HelixLogText(InstallManifest manifest)
+    {
+        var chosen = manifest.IniChanges.FirstOrDefault(c => c.Section == "Libraries" && c.Key == "FfxDx12Path")?.ChangedUtc;
+        var log = HelixSr.ReadLog(AppServices.DataDir, chosen);
+        const string Shared = "helixsr.log is shared by every game that uses HelixSR, so it describes the game that ran with it last.";
+        if (!log.Exists) return "HelixSR (experimental): helixsr.log has no run since HelixSR was chosen. Run the game once to check.";
+        var when = log.WrittenLocal is { } t ? $" (last written {t:d MMM, HH:mm})" : "";
+        return log.NetworkRan switch
+        {
+            true => $"HelixSR (experimental): according to helixsr.log{when}, its DLSS network ran: \"{log.Evidence}\". {Shared}",
+            false => $"HelixSR (experimental): according to helixsr.log{when}, its DLSS network did NOT run: \"{log.Evidence}\". Without it HelixSR does only a simple upscale. {Shared}",
+            _ => $"HelixSR (experimental): helixsr.log{when} doesn't say clearly whether its network ran" +
+                 (log.KeyLines.Count > 0 ? $"; its main lines: {string.Join(" | ", log.KeyLines)}" : "") + $". {Shared}"
         };
     }
 

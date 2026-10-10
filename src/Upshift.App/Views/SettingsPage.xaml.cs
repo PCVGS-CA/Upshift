@@ -252,9 +252,10 @@ public sealed partial class SettingsPage : Page
     {
         var shift = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Shift)
             .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
-        if (!shift && AppServices.PretendGpu is null) return;
+        if (!shift && AppServices.PretendGpu is null && !AppServices.ShowHelixSrForTesting) return;
         DeveloperPanel.Visibility = Visibility.Visible;
         _building = true;
+        ShowHelixSrSwitch.IsOn = AppServices.ShowHelixSrForTesting;
         PretendGpuBox.Items.Clear();
         PretendGpuBox.Items.Add(new ComboBoxItem { Content = $"Off (this PC's card: {AppServices.Gpu?.Name ?? "not detected"})" });
         foreach (var gpu in AppServices.PretendGpus)
@@ -265,6 +266,12 @@ public sealed partial class SettingsPage : Page
     }
 
     private bool _building;
+
+    private void ShowHelixSr_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_building) return;
+        AppServices.SetShowHelixSrForTesting(ShowHelixSrSwitch.IsOn);
+    }
 
     private void PretendGpu_Changed(object sender, SelectionChangedEventArgs e)
     {

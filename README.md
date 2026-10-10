@@ -73,6 +73,9 @@ outright.
   vendor's digital signature, and "Restore original files" puts the exact originals back.
 - **OptiScaler options** per game: upscaler, frame generation, DLSS model, FSR 4 (OptiScaler's built-in, or a
   4.1.1b or 4.0.2c file you add yourself), a frame cap and an FPS counter, each with a "Which one should I pick?" guide.
+- **HelixSR (experimental)** for Radeon RX 5000 and RX 6000 cards: "DLSS 3.7 via HelixSR" as an upscaler choice in
+  Direct3D 12 games. HelixSR is an unofficial project that runs NVIDIA's DLSS network on AMD cards; Upshift sets it up
+  once, with its author's own setup, after you accept a notice. See [Files Upshift never ships](#files-upshift-never-ships).
 - **Measure performance:** press a key in game (F10 by default) to record 60 seconds with Intel's PresentMon, then
   see the average and low points, compare runs, and get "What to try" (such as a frame cap you can apply). PresentMon
   is downloaded from its GitHub page the first time you measure, and Windows asks for permission only for the
@@ -129,6 +132,34 @@ history (`history\`) and `logs\`. None of it is part of this repository, and non
 installed program is in a separate folder, `%LocalAppData%\Upshift.App`, so uninstalling never touches your data
 unless you ask it to. In game folders, Upshift only writes the files it installs and its own `.upshift` folder.
 A problem report is only written when you press "Report a problem", as a zip on your Desktop.
+If you set up HelixSR, its files are in `%LocalAppData%\Upshift\helixsr`, and its setup's own tools (Python, numpy and
+Microsoft's shader compiler) in `%LocalAppData%\HelixSR`, a folder the setup chooses itself.
+
+## Files Upshift never ships
+
+Upshift's installer and portable zip contain only Upshift. Some files it can work with are never bundled or downloaded
+by Upshift, for licensing reasons or because they're modified versions of a vendor's file:
+
+- **The DLSS 5 file** (`nvngx_dlssnr.dll`) and **the modified FSR 4 files** (4.1.1b, and 4.0.2c's `amdxcffx64.dll`):
+  you add them yourself under "Optional files you supply" in Settings. Upshift checks them and copies them into the
+  games you choose.
+- **HelixSR (experimental)**, the unofficial project that runs NVIDIA's DLSS network on Radeon RX 5000 and RX 6000
+  cards. Its release contains no NVIDIA files: its setup builds the two network files (`helixsr_weights.bin` and
+  `helixsr_kernels.pak`) on your PC from NVIDIA's own DLSS file. So Upshift, only after you accept a notice:
+  - downloads the one HelixSR release it has reviewed, from HelixSR's GitHub releases, and checks it and every file
+    it will run (the setup scripts, the author's helper program and the DLL) against SHA-256 values pinned in
+    `catalog.json`. Nothing runs if one doesn't match, and a newer HelixSR is only offered after its scripts have been
+    read again and its hashes pinned;
+  - runs the author's own setup unchanged. It downloads Python (python.org), numpy (PyPI), Microsoft's shader compiler
+    (Microsoft's GitHub) and NVIDIA's DLSS 310.7.0 file (NVIDIA's GitHub, under NVIDIA's licence), builds the network
+    files, and deletes NVIDIA's file;
+  - keeps the result in one shared folder in its data folder. Games point at it through OptiScaler.ini
+    (`Dx12Upscaler`, `FfxDx12Path`, `FfxDx12SRPath`), so no HelixSR file is put in a game folder.
+
+  HelixSR, its network files and NVIDIA's files are never in Upshift's installer, never copied anywhere else, and never
+  put in a problem report. HelixSR's source code isn't published, so it can't be verified as safe, and nothing it ships
+  is signed. "Remove HelixSR" switches the games that use it back to their previous upscaler, deletes the shared
+  folder, and offers to delete the setup's tools too.
 
 ## Project layout
 

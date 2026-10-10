@@ -631,6 +631,8 @@ public sealed partial class LibraryPage : Page
 
     private void DlssNotice_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.DismissDlssNotice();
 
+    private void HelixSrNotice_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.DismissHelixSrNotice();
+
     private void OpenIni_Click(object sender, RoutedEventArgs e)
     {
         var ini = ViewModel.Selected?.IniPath;

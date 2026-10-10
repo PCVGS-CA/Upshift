@@ -196,13 +196,19 @@
             </Grid>
 
             <!-- After a newer DLSS file finished downloading: how many games could use it -->
-            <InfoBar Grid.Row="1" IsOpen="{x:Bind ViewModel.HasDlssNotice, Mode=OneWay}" Severity="Success"
-                     Title="{x:Bind ViewModel.DlssNotice, Mode=OneWay}" Closed="DlssNotice_Closed"
-                     Visibility="{x:Bind ViewModel.HasDlssNotice, Mode=OneWay}" AutomationProperties.Name="DLSS notice">
-                <InfoBar.ActionButton>
-                    <Button Content="Review" Click="DlssNoticeReview_Click" />
-                </InfoBar.ActionButton>
-            </InfoBar>
+            <StackPanel Grid.Row="1">
+                <InfoBar IsOpen="{x:Bind ViewModel.HasDlssNotice, Mode=OneWay}" Severity="Success"
+                         Title="{x:Bind ViewModel.DlssNotice, Mode=OneWay}" Closed="DlssNotice_Closed"
+                         Visibility="{x:Bind ViewModel.HasDlssNotice, Mode=OneWay}" AutomationProperties.Name="DLSS notice">
+                    <InfoBar.ActionButton>
+                        <Button Content="Review" Click="DlssNoticeReview_Click" />
+                    </InfoBar.ActionButton>
+                </InfoBar>
+                <!-- A game set to HelixSR went back to its previous upscaler (HelixSR's files were missing or removed) -->
+                <InfoBar IsOpen="{x:Bind ViewModel.HasHelixSrNotice, Mode=OneWay}" Severity="Warning"
+                         Title="HelixSR (experimental)" Message="{x:Bind ViewModel.HelixSrNotice, Mode=OneWay}" Closed="HelixSrNotice_Closed"
+                         Visibility="{x:Bind ViewModel.HasHelixSrNotice, Mode=OneWay}" AutomationProperties.Name="HelixSR notice" />
+            </StackPanel>
 
             <TextBox Grid.Row="2"
                      PlaceholderText="{x:Bind ViewModel.SearchPlaceholder, Mode=OneWay}"

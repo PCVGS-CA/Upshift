@@ -949,11 +949,12 @@ public static partial class OptiScalerInstaller
             return Refuse(log, "OptiScaler.ini is missing from the game folder.");
 
         // ---- 1. Check everything before anything changes, so a refusal never leaves half a change behind ----
-        // Only keys that exist in OptiScaler's own ini can be written, so a plan can't add arbitrary settings.
+        // Only keys that exist in OptiScaler's own ini can be written, so a plan can't add arbitrary settings. Putting a
+        // value back (null) is fine for any key: one that was never changed is simply left alone.
         if (plan.IniSettings.Count > 0)
         {
             var current = IniFile.Load(iniPath);
-            var unknown = plan.IniSettings.Where(s => !current.Has(s.Section, s.Key) && !IsAddableIniKey(s.Section, s.Key))
+            var unknown = plan.IniSettings.Where(s => s.Value is not null && !current.Has(s.Section, s.Key) && !IsAddableIniKey(s.Section, s.Key))
                 .Select(s => $"[{s.Section}] {s.Key}").ToList();
             if (unknown.Count > 0) return Refuse(log, $"OptiScaler.ini has no setting called {string.Join(", ", unknown)}.");
         }

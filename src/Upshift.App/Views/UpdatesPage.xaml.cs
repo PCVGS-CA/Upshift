@@ -70,7 +70,7 @@ public sealed partial class UpdatesPage : Page
     private string? _gamesMessage;
     private bool _updatingGames;
 
-    private const double NameWidth = 230, OnPcWidth = 230, LatestWidth = 190;
+    internal const double NameWidth = 230, OnPcWidth = 230, LatestWidth = 190;
 
     public UpdatesPage()
     {
@@ -191,6 +191,11 @@ public sealed partial class UpdatesPage : Page
             foreach (var bundled in all.Where(c => c.BundledIn == primary.Id))
                 panel.Children.Add(BuildBundledRow(bundled, primary));
         }
+
+        // HelixSR (experimental): one row for the whole session, so a running setup keeps its progress.
+        if (HelixSrRowView.Shared.Parent is Panel oldParent) oldParent.Children.Remove(HelixSrRowView.Shared);
+        HelixSrRowView.Shared.Refresh();
+        UsedNowPanel.Children.Add(HelixSrRowView.Shared);
     }
 
     /// <summary>Each card's component with the ones shown on it (AMD-NR's runtime on AMD-NR's).</summary>

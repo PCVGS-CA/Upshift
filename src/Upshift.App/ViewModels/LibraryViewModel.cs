@@ -95,6 +95,18 @@ public sealed partial class LibraryViewModel : ObservableObject
 
     public bool HasDlssNotice => DlssNotice.Length > 0;
 
+    /// <summary>Games switched back from HelixSR because its files were missing (or HelixSR was removed).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasHelixSrNotice))]
+    private string helixSrNotice = "";
+
+    public bool HasHelixSrNotice => HelixSrNotice.Length > 0;
+
+    public void DismissHelixSrNotice() => HelixSrNotice = "";
+
+    private void ShowHelixSrNotices(IReadOnlyList<string> messages) =>
+        HelixSrNotice = string.Join("\n", (HelixSrNotice.Length > 0 ? new[] { HelixSrNotice } : Array.Empty<string>()).Concat(messages));
+
     /// <summary>The filter's label, naming what's out of date across the library: "DLSS + XeSS updates (7)".</summary>
     [ObservableProperty]
     private string upscalerFilterLabel = "Upscaler updates";
@@ -238,6 +250,10 @@ public sealed partial class LibraryViewModel : ObservableObject
 
         if (_all.Count == 0) await RunScanAsync(includeDriveScan: false);
         else StartBackgroundLookups();
+
+        // A game set to HelixSR whose files are missing goes back to its previous upscaler (and the user is told).
+        Services.HelixSrGames.Notices += ShowHelixSrNotices;
+        ShowHelixSrNotices(await Services.HelixSrGames.CheckAllAsync());
     }
 
     [RelayCommand]

@@ -530,6 +530,36 @@ errors and no warnings.
     a sample log, then turned off; the folder matches the snapshot.
   - The "Battle.net warning" the user mentioned wasn't found in this repo, a branch, a stash or a worktree.
 
+- **1.3.0 (2026-10-10), not released: HelixSR (experimental).** Branch `feature/helixsr`.
+  - HelixSR (github.com/lonewolf0622/HelixSR) is an unofficial FSR 3.1-compatible DLL that runs NVIDIA's DLSS Model E
+    network on AMD cards. Its source isn't published (freeware licence; setup scripts Apache 2.0); nothing it ships is
+    signed. The release zip has no NVIDIA files: its setup (`helixsr-setup.ps1 OUT -Yes`) downloads Python 3.14.8,
+    numpy 2.5.3 and DXC 1.9.2607 into `%LOCALAPPDATA%\HelixSR` (fixed in the script), downloads NVIDIA's DLSS 310.7.0 DLL
+    from NVIDIA's GitHub, runs the author's `launch_synth.exe`, builds `helixsr_weights.bin` + `helixsr_kernels.pak`, and
+    deletes NVIDIA's DLL.
+  - `catalog.json` `helixSr`: the pinned release (1.4.3), its zip SHA-256, and SHA-256 of `helixsr-setup.ps1`,
+    `setup/helixsr_setup.py`, `launch_synth.exe` and the DLL. **Never change the version without reading the new
+    scripts again and pinning their hashes.** Not a `components` entry, so GitHub checks never offer a new version.
+  - Core: `Install/HelixSr.cs` (cards: RDNA 1, RDNA 2, RDNA 2 integrated; reasons for other cards; ini values
+    `Dx12Upscaler=fsr31`, `FfxDx12Path`/`FfxDx12SRPath` → `%LocalAppData%\Upshift\helixsr\files`; previous-choice record
+    `helixsr-previous.json`; `helixsr.log` reading by keywords, not yet checked against a real log),
+    `Install/HelixSrSetup.cs` (download, hash checks, run, staging folder moved into place only on success, Remove),
+    `Services/SmartAppControl.cs` (reads `VerifiedAndReputablePolicyState`).
+  - Every non-HelixSR upscaler choice also puts the two `[Libraries]` paths back (null); Configure now skips "put back"
+    values for keys an ini doesn't have. Reinstall's settings restore leaves HelixSR's paths out.
+  - App: `Views/HelixSrRowView.cs` (Updates row, notice, setup, Remove), `Services/HelixSrGames.cs` (offered for a game,
+    games using it, switch back when files are missing: at Library start-up and when a game's options open, once per
+    game per session), options view (choice, FSR 4 exclusion both ways), "Is it working?" with helixsr.log, problem
+    report (helixsr.log, setup json, ini; `.bin`/`.pak` refused in `ProblemReport.Save`). Developer option
+    "Show HelixSR on this card (testing)", session-only.
+  - Tested: `helixtest` harness in the scratchpad (53 checks: cards, list, ini round trips on a copy of Silent Hill 2's
+    ini and record, FSR 4 interplay, setup failures with fake releases on a local server) and the real setup on the
+    RTX 4070 PC in Claude's sandbox.
+  - Silent Hill 2's record hash (`9b10b5a8…`) no longer matches its OptiScaler.ini (`ffdc74e0…`) since the shader
+    experiment's direct ini edit; the user's frame cap change at 2026-10-07 12:14 then wasn't stamped. Upshift treats the
+    ini as edited by hand (uninstall would leave it). The Witcher 3's record (`0b9ffc8f…`) didn't match its ini
+    (`a590e925…`) before the experiment either.
+
 ## Next
 
 1. **DLSS 5 follow-ups:**

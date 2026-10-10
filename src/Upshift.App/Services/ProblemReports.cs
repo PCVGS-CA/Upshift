@@ -78,6 +78,21 @@ public static class ProblemReports
             Add(items, Path.Combine(dir, "OptiScaler.ini"), "OptiScaler.ini", "The game's OptiScaler.ini");
             Add(items, Path.Combine(dir, OptiScalerInstaller.StateFolder, "manifest.json"), "upshift-record.json", "Upshift's record of what it installed in this game");
             Add(items, Path.Combine(dir, OptiScalerLog.FileName), "OptiScaler.log", "OptiScaler's own log from the last run", 2_000_000);
+
+            // HelixSR (experimental): its text files only. Its two network files (helixsr_weights.bin and
+            // helixsr_kernels.pak) hold NVIDIA's network and are never put in a report.
+            var iniPath = Path.Combine(dir, "OptiScaler.ini");
+            if (File.Exists(iniPath) && HelixSr.InUse(IniFile.Load(iniPath), AppServices.DataDir))
+            {
+                var helixDir = HelixSr.FilesDir(AppServices.DataDir);
+                game.AppendLine(HelixSr.Installed(AppServices.DataDir) is { } h
+                    ? $"HelixSR (experimental): v{h.Version}, set up {h.SetUpUtc.ToLocalTime():yyyy-MM-dd HH:mm}, in {helixDir}"
+                    : $"HelixSR (experimental): chosen for this game, but {HelixSr.MissingFile(AppServices.DataDir)} is missing from {helixDir}");
+                Add(items, Path.Combine(helixDir, HelixSr.LogName), "helixsr.log", "HelixSR's own log (shared by every game that uses it; the last run)", 2_000_000);
+                Add(items, Path.Combine(helixDir, "helixsr_setup.json"), "helixsr_setup.json", "What HelixSR's setup built (versions and hashes, no network data)");
+                Add(items, Path.Combine(helixDir, "helixsr.ini"), "helixsr.ini", "HelixSR's settings");
+                items[items.FindIndex(i => i.Name == "game.txt")] = new ReportItem("game.txt", "The game's name, store, folders, OptiScaler version and loading file, and its status", game.ToString());
+            }
         }
         Add(items, UpscalerFiles.RecordPath(info.InstallDir), "upshift-upscaler-files.json", "Upshift's record of the DLSS, FSR and XeSS files it updated");
 

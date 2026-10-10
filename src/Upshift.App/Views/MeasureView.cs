@@ -148,7 +148,9 @@ public sealed class MeasureView : UserControl
         var ini = IniFile.Load(iniPath);
         var catalog = AppServices.Catalog;
         var fsr4 = OptiScalerOptions.Fsr4InUse(dir!, manifest, ini, catalog.Fsr4.CommunityInt8FileName);
-        var upscalers = OptiScalerOptions.Upscalers(AppServices.Gpu, card.Info.Api, catalog.Fsr4, fsr4.Source != Fsr4Source.Off);
+        // HelixSR is listed when the game uses it, so a run with it is recorded as "DLSS 3.7 via HelixSR (experimental)".
+        var helixDir = HelixSr.InUse(ini, AppServices.DataDir) ? HelixSr.FilesDir(AppServices.DataDir) : null;
+        var upscalers = OptiScalerOptions.Upscalers(AppServices.Gpu, card.Info.Api, catalog.Fsr4, fsr4.Source != Fsr4Source.Off, helixDir);
         var upscalerId = OptiScalerOptionsView.CurrentUpscaler(ini, upscalers);
         var frameGen = OptiScalerOptions.CurrentFrameGen(ini);
         var cap = OptiScalerOptions.CurrentFrameCap(ini);

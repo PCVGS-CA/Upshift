@@ -54,8 +54,9 @@ public static class OptiScalerOptions
 
     /// <summary>
     /// Only the upscalers OptiScaler can use on this card. FSR 4 is listed when it's official on the card or an INT8 option is on.
+    /// HelixSR (experimental) is listed when <paramref name="helixFilesDir"/> is given: the card and game qualify and it's set up.
     /// </summary>
-    public static List<UpscalerChoice> Upscalers(GpuInfo? gpu, GraphicsApi api, Fsr4Support fsr4, bool int8On)
+    public static List<UpscalerChoice> Upscalers(GpuInfo? gpu, GraphicsApi api, Fsr4Support fsr4, bool int8On, string? helixFilesDir = null)
     {
         var key = UpscalerKey(api);
         var dx11 = key == "Dx11Upscaler";
@@ -73,14 +74,23 @@ public static class OptiScalerOptions
             list.Add(new("fsr4", "FSR 4", Up(key, dx11 || vulkan ? "fsr31_12" : "fsr31", "0")));
         list.Add(new("fsr31", "FSR 3.1", Up(key, "fsr31", "1")));
         list.Add(new("fsr22", "FSR 2.2", Up(key, "fsr22", Auto)));
+        if (helixFilesDir is not null && key == "Dx12Upscaler")
+            list.Add(new(HelixSr.ChoiceId, HelixSr.ChoiceLabel, HelixSr.Settings(helixFilesDir)));
         return list;
     }
 
+    /// <summary>
+    /// A choice's values. Every choice other than HelixSR also puts OptiScaler's own FidelityFX paths back
+    /// ([Libraries] FfxDx12Path / FfxDx12SRPath, which HelixSR points at its DLL); when they were never changed, that's
+    /// no change at all.
+    /// </summary>
     private static List<IniSetting> Up(string key, string value, string fsrIndex) => new()
     {
         new("Upscalers", key, value),
         // [FSR] UpscalerIndex: 0 = FSR 4, 1 = FSR 3.1.5, 2 = FSR 2.3.4.
-        new("FSR", "UpscalerIndex", fsrIndex)
+        new("FSR", "UpscalerIndex", fsrIndex),
+        new("Libraries", "FfxDx12Path", null),
+        new("Libraries", "FfxDx12SRPath", null)
     };
 
     /// <summary>Maps a suggestion ("DLSS", "XeSS through OptiScaler", "FSR 4"…) to an upscaler choice id.</summary>

@@ -71,20 +71,58 @@ public sealed class OptiScalerOptionsView : UserControl
         // ---- FSR 4 (INT8) state first: it decides whether FSR 4 is in the upscaler list ----
         var int8Shown = OptiScalerOptions.Int8OptionsShown(gpu, catalog.Fsr4);
         var communityName = catalog.Fsr4.CommunityInt8FileName;
-        var fsr4On = OptiScalerOptions.Fsr4InUse(dir!, manifest, ini, communityName).Source != Fsr4Source.Off;
+        var (fsr4Source, _) = OptiScalerOptions.Fsr4InUse(dir!, manifest, ini, communityName);
+        var fsr4On = fsr4Source != Fsr4Source.Off;
+
+        // ---- HelixSR (experimental): offered on RDNA 1/2 (or the testing switch), in Direct3D 12 games, once set up ----
+        var helixInUse = HelixSr.InUse(ini, AppServices.DataDir);
+        var helixMissing = HelixSr.MissingFile(AppServices.DataDir);
+        if (helixInUse && helixMissing is not null && AppServices.PretendGpu is null && HelixFallbackTried.Add(card.Info.Id))
+        {
+            // Its files are gone: the game goes back to its previous upscaler, and the Library says so.
+            _building = false;
+            _ = SwitchBackFromHelixAsync(card);
+            Content = new ProgressRing { IsActive = true, Width = 20, Height = 20, HorizontalAlignment = HorizontalAlignment.Left };
+            return;
+        }
+        var helixOffered = Services.HelixSrGames.OfferedFor(card.Info);
+        var helixDir = (helixOffered || helixInUse) && helixMissing is null ? Services.HelixSrGames.FilesDir : null;
 
         // ---- Upscaler ----
-        var upscalers = OptiScalerOptions.Upscalers(gpu, card.Info.Api, catalog.Fsr4, int8Shown && fsr4On);
+        var upscalers = OptiScalerOptions.Upscalers(gpu, card.Info.Api, catalog.Fsr4, int8Shown && fsr4On, helixDir);
         var suggested = card.Recommendation?.ChoiceId;
         var upscalerBox = Combo("Upscaler", upscalers.Select(u => Item(u.Id, u.Id == suggested ? $"{u.Label} (suggested)" : u.Label)));
+        var currentUpscaler = CurrentUpscaler(ini, upscalers);
         upscalerBox.SelectedItem = upscalerBox.Items.OfType<ComboBoxItem>().FirstOrDefault(i =>
-            (string)i.Tag == CurrentUpscaler(ini, upscalers)) ?? upscalerBox.Items[0];
+            (string)i.Tag == currentUpscaler) ?? upscalerBox.Items[0];
         upscalerBox.SelectionChanged += async (_, _) =>
         {
             if (_building || upscalerBox.SelectedItem is not ComboBoxItem { Tag: string id }) return;
-            await Save(card, upscalers.First(u => u.Id == id).Settings);
+            var settings = upscalers.First(u => u.Id == id).Settings.ToList();
+            if (id == HelixSr.ChoiceId)
+            {
+                // HelixSR and FSR 4 both use OptiScaler's FSR slot: choosing HelixSR turns FSR 4 off in the same change.
+                if (AppServices.PretendGpu is null && currentUpscaler != HelixSr.ChoiceId)
+                    HelixSr.SetPreviousChoice(AppServices.DataDir, card.Info.Id, currentUpscaler);
+                if (fsr4On)
+                {
+                    settings.AddRange(OptiScalerOptions.Fsr411bSettings(false));
+                    await Save(card, settings,
+                        removeFile: fsr4Source == Fsr4Source.File402c ? communityName : null,
+                        removeOverride: fsr4Source == Fsr4Source.File411b ? manifest.Overrides!.First(o => o.Kind == OptiScalerOptions.Fsr411bKind).Path : null);
+                    return;
+                }
+            }
+            else if (AppServices.PretendGpu is null) HelixSr.SetPreviousChoice(AppServices.DataDir, card.Info.Id, null);
+            await Save(card, settings);
         };
         body.Children.Add(WithGuide(upscalerBox, catalog.Guides.Upscaler, upscalers.Select(u => (u.Id, u.Label)), gpu));
+        if (currentUpscaler == HelixSr.ChoiceId)
+            body.Children.Add(Subtle("HelixSR is experimental. It and FSR 4 both use OptiScaler's FSR slot, so FSR 4 is off while HelixSR is the upscaler. " +
+                                     "OptiScaler.ini points at HelixSR's files in Upshift's shared folder; nothing of HelixSR's is put in the game folder. " +
+                                     "In the game, choose DLSS, FSR or XeSS as usual."));
+        else if (helixOffered && helixMissing is not null)
+            body.Children.Add(Subtle($"{HelixSr.ChoiceLabel} can be added to this list: set HelixSR up first, on the Updates page."));
 
         // ---- Frame generation ----
         var modes = OptiScalerOptions.FrameGenModes(gpu, card.Info, card.Suggestions?.HiddenFrameGen ?? new HashSet<string>());
@@ -110,7 +148,7 @@ public sealed class OptiScalerOptionsView : UserControl
 
         // ---- FSR 4 (INT8) ----
         if (int8Shown)
-            body.Children.Add(Fsr4Section(card, gpu!, ini, manifest, communityName));
+            body.Children.Add(Fsr4Section(card, gpu!, ini, manifest, communityName, currentUpscaler == HelixSr.ChoiceId));
 
         body.Children.Add(Subtle("Set the game's upscaler to DLSS or XeSS, load a save, then press Insert to check."));
         if (card.Suggestions is { FromWiki: true })
@@ -129,6 +167,17 @@ public sealed class OptiScalerOptionsView : UserControl
         });
         Content = panel;
         _building = false;
+    }
+
+    /// <summary>Games whose switch back from HelixSR was tried this session (tried once, so a failure can't loop).</summary>
+    private static readonly HashSet<string> HelixFallbackTried = new();
+
+    /// <summary>The game is set to HelixSR but its files are missing: back to its previous upscaler; the Library says so.</summary>
+    private async Task SwitchBackFromHelixAsync(GameCardViewModel card)
+    {
+        if (await Services.HelixSrGames.CheckAsync(card.Info) is { } message)
+            Services.HelixSrGames.RaiseNotices(new[] { message });
+        Build();
     }
 
     private FrameworkElement DlssSection(GameCardViewModel card, IniFile ini, GpuInfo gpu)
@@ -250,7 +299,7 @@ public sealed class OptiScalerOptionsView : UserControl
     /// one source at a time: switching takes the previous source's file out of the game folder. Turning it on picks, on an
     /// RX 6000 (RDNA 2), 4.1.1b, then 4.0.2c, then built-in; on other cards, built-in. Plus OptiScaler's watermark.
     /// </summary>
-    private FrameworkElement Fsr4Section(GameCardViewModel card, GpuInfo gpu, IniFile ini, InstallManifest manifest, string communityName)
+    private FrameworkElement Fsr4Section(GameCardViewModel card, GpuInfo gpu, IniFile ini, InstallManifest manifest, string communityName, bool helixActive)
     {
         var dir = card.Info.TargetDir!;
         var (inUse, inUseVersion) = OptiScalerOptions.Fsr4InUse(dir, manifest, ini, communityName);
@@ -300,6 +349,13 @@ public sealed class OptiScalerOptionsView : UserControl
                 Fsr4Source.BuiltIn => new List<IniSetting> { new("FSR", "Fsr4ForceEnableInt8", "true"), new("FSR", "Fsr4Update", null) },
                 _ => OptiScalerOptions.Fsr411bSettings(false)
             };
+            if (helixActive && with != Fsr4Source.Off)
+            {
+                // HelixSR and FSR 4 both use OptiScaler's FSR slot: turning FSR 4 on makes FSR 4 the upscaler instead.
+                var fsr4Choice = OptiScalerOptions.Upscalers(gpu, card.Info.Api, AppServices.Catalog.Fsr4, int8On: true).First(c => c.Id == "fsr4");
+                settings.AddRange(fsr4Choice.Settings);
+                if (AppServices.PretendGpu is null) HelixSr.SetPreviousChoice(AppServices.DataDir, card.Info.Id, null);
+            }
             await Save(card, settings,
                 addFileFrom: with == Fsr4Source.File402c ? file402!.Path : null,
                 addFileAs: with == Fsr4Source.File402c ? communityName : null,
@@ -338,6 +394,7 @@ public sealed class OptiScalerOptionsView : UserControl
 
         return Group(
             toggle,
+            helixActive ? Subtle("HelixSR is the upscaler now. Turning FSR 4 on switches the upscaler from HelixSR to FSR 4, because both use OptiScaler's FSR slot.") : null,
             source,
             Subtle(Explain()),
             inUse != Fsr4Source.Off ? Subtle("In use: " + OptiScalerOptions.Fsr4Label(inUse, inUseVersion)!["FSR 4: ".Length..]) : null,

@@ -24,6 +24,9 @@ public sealed class UpscalerCatalog
 
     /// <summary>Newer copies of the DLSS, FSR and XeSS files games ship, and which game files each may replace.</summary>
     public UpscalerFileCatalog UpscalerFiles { get; set; } = new();
+
+    /// <summary>HelixSR (experimental): the one reviewed release Upshift may download and set up, with its hashes.</summary>
+    public HelixSrRelease? HelixSr { get; set; }
 }
 
 public sealed class UpscalerFileCatalog
@@ -298,4 +301,43 @@ public sealed class OptiScalerWikiSource
     public string? WebListUrl { get; set; }
     public int RefreshDays { get; set; } = 7;
     public string UserAgent { get; set; } = "Upshift/1.0";
+}
+
+/// <summary>
+/// HelixSR: an unofficial FSR 3.1-compatible upscaler DLL that runs NVIDIA's DLSS network on AMD cards. Its release has
+/// no NVIDIA files: its own setup builds them on the user's PC from NVIDIA's DLSS DLL. Upshift only downloads the one
+/// release named here, checks it against these hashes, and runs the author's setup script, which it checks too. A new
+/// version is offered only after its scripts have been read again and these values changed (never automatically).
+/// </summary>
+public sealed class HelixSrRelease
+{
+    public string Version { get; set; } = "";
+    public string PageUrl { get; set; } = "";
+    public string AssetUrl { get; set; } = "";
+    public long AssetSize { get; set; }
+    public string AssetSha256 { get; set; } = "";
+    /// <summary>The folder the zip unpacks into, e.g. "HelixSR-1.4.3".</summary>
+    public string ZipFolder { get; set; } = "";
+    /// <summary>Files inside ZipFolder Upshift runs, with their SHA-256: never run when one doesn't match.</summary>
+    public Dictionary<string, string> ScriptSha256 { get; set; } = new();
+    /// <summary>The script Upshift runs (it calls the other one).</summary>
+    public string SetupScript { get; set; } = "helixsr-setup.ps1";
+    /// <summary>What the setup downloads, for the notice: name and where from.</summary>
+    public List<HelixSrDownload> SetupDownloads { get; set; } = new();
+    public string DlssLicenseUrl { get; set; } = "";
+    public int SetupMinutes { get; set; }
+    /// <summary>Rough disk use: Upshift's shared folder and the setup's tools folder (%LOCALAPPDATA%\HelixSR), in MB.</summary>
+    public int FilesMb { get; set; }
+    public int ToolsMb { get; set; }
+    /// <summary>Cards HelixSR is offered on (GpuInfo.Generation), and those among them nobody has tested yet.</summary>
+    public List<string> Generations { get; set; } = new();
+    public List<string> UntestedGenerations { get; set; } = new();
+    public string? Notes { get; set; }
+}
+
+public sealed class HelixSrDownload
+{
+    public string Name { get; set; } = "";
+    public string From { get; set; } = "";
+    public string Url { get; set; } = "";
 }
