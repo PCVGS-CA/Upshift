@@ -542,6 +542,9 @@ errors and no warnings.
 
 ## Known open items
 
+- **Upshift fix (user's list, 2026-10-08):** the scan shows The Witcher 3's DirectX 12 build
+  (`bin\x64_dx12\witcher3.exe`, GOG) with graphics API "None". It should say Direct3D 12. Not looked into yet; the game
+  was updated by GOG that morning, so check whether the detection broke with the new exe or was always missing.
 - Play still runs the store's reported exe, which for The Witcher 3 (GOG) is REDprelauncher. Launchers are now kept
   out of the Library.
 - Upscaler files, not tested:
