@@ -37,6 +37,9 @@ public sealed class MeasurementRun
     public int? RefreshHz { get; set; }
     public MeasuredSettings Settings { get; set; } = new();
 
+    /// <summary>The user's note: resolution and in-game settings, which Upshift can't read. Null when there's none.</summary>
+    public string? Note { get; set; }
+
     // Bottleneck details (Upshift 1.3.0). Each is null for older runs, or when its source wasn't available on the PC.
 
     /// <summary>Per rendered frame, from PresentMon: the game's CPU work, then waiting (FrameTiming).</summary>
@@ -116,6 +119,33 @@ public sealed class MeasurementStore
     });
 
     public void Delete(string gameId, string runId) => Change(gameId, m => m.Runs.RemoveAll(r => r.Id == runId));
+
+    /// <summary>Saves the user's note on one run (empty clears it).</summary>
+    public void SetNote(string gameId, string runId, string? note) => Change(gameId, m =>
+    {
+        if (m.Runs.FirstOrDefault(r => r.Id == runId) is { } run) run.Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+    });
+
+    /// <summary>Every game with saved runs: its id and runs (newest first). For "Export all results".</summary>
+    public List<(string GameId, List<MeasurementRun> Runs)> All()
+    {
+        var result = new List<(string, List<MeasurementRun>)>();
+        lock (_sync)
+        {
+            try
+            {
+                if (!Directory.Exists(_dir)) return result;
+                foreach (var file in Directory.EnumerateFiles(_dir, "*.json"))
+                {
+                    var id = Path.GetFileNameWithoutExtension(file);
+                    var runs = Get(id).Runs;
+                    if (runs.Count > 0) result.Add((id, runs));
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
+        return result;
+    }
 
     public void RecordApplied(string gameId, string text) => Change(gameId, m => m.Applied.Add(new AppliedAdvice { Utc = DateTime.UtcNow, Text = text }));
 

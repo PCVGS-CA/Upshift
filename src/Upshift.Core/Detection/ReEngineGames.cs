@@ -54,6 +54,21 @@ public static class ReEngineGames
         return ReFrameworkWarning.Likely;
     }
 
+    /// <summary>
+    /// The game page's notice: null when it doesn't apply (not an RE Engine game, anti-cheat, or one the wiki says
+    /// doesn't need REFramework); otherwise whether REFramework was found and, if not, how firm the warning is.
+    /// </summary>
+    public static (bool Found, ReFrameworkWarning Warning)? Notice(GameInfo game, ReEngineCatalog? catalog)
+    {
+        if (game.HasAntiCheat || game.TargetDir is not { } dir || !IsReEngine(dir, catalog)) return null;
+        if (catalog is not null && Matches(game.Name, catalog.NoWarning)) return null;
+        if (HasReFramework(dir, catalog)) return (true, ReFrameworkWarning.None);
+        return (false, catalog is not null && Matches(game.Name, catalog.RequiresReFramework) ? ReFrameworkWarning.Confirmed : ReFrameworkWarning.Likely);
+    }
+
+    /// <summary>Where to get REFramework: its own nightly releases (Upshift never downloads it).</summary>
+    public const string DownloadPage = "https://github.com/praydog/REFramework-nightly/releases";
+
     /// <summary>One of the engine's files is next to the exe.</summary>
     public static bool IsReEngine(string exeDir, ReEngineCatalog? catalog) =>
         AnyExists(exeDir, catalog is { EngineFiles.Count: > 0 } ? catalog.EngineFiles : DefaultEngineFiles);

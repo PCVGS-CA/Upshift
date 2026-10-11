@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:vm="using:Upshift.App.ViewModels"
     xmlns:views="using:Upshift.App.Views"
+    xmlns:helpers="using:Upshift.App.Helpers"
     Background="Transparent">
 
     <Page.Resources>
@@ -148,16 +149,24 @@
                 </StackPanel>
             </Grid>
         </DataTemplate>
+        <!-- The game page's cards -->
+        <Style x:Key="GameCardStyle" TargetType="Border">
+            <Setter Property="Padding" Value="16,14" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Background" Value="{StaticResource CardSurfaceBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource HairlineBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <Style x:Key="CardTitleStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
     </Page.Resources>
 
-    <Grid>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="670" />
-            <ColumnDefinition Width="*" />
-        </Grid.ColumnDefinitions>
+    <Grid x:Name="PageRoot">
 
-        <!-- ================= Game grid ================= -->
-        <Grid Padding="24,16,12,0" RowSpacing="12">
+        <!-- ================= Library: the game grid, full width ================= -->
+        <Grid x:Name="LibraryView" Padding="24,16,24,0" RowSpacing="12">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -249,10 +258,11 @@
                         Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay}" />
             </Grid>
 
+            <!-- A click (or Enter) on a card opens its game page -->
             <GridView Grid.Row="5" x:Name="GamesGrid"
                       ItemsSource="{x:Bind ViewModel.Games}"
                       ItemTemplate="{StaticResource GameCardTemplate}"
-                      SelectionMode="Single"
+                      SelectionMode="Single" IsItemClickEnabled="True" ItemClick="GamesGrid_ItemClick"
                       SelectionChanged="GamesGrid_SelectionChanged"
                       Padding="0,0,0,24" />
 
@@ -264,117 +274,130 @@
             </StackPanel>
         </Grid>
 
-        <!-- ================= Details pane ================= -->
-        <Border Grid.Column="1" Background="{ThemeResource LayerFillColorDefaultBrush}"
-                BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1,0,0,0">
-            <Grid>
-                <StackPanel Visibility="{x:Bind ViewModel.HasNoSelection, Mode=OneWay}"
-                            VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="6">
-                    <TextBlock Text="Pick a game" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                    <TextBlock Text="Its upscalers, graphics API and install options show up here."
-                               Foreground="{StaticResource SubtleTextBrush}" />
-                </StackPanel>
+        <!-- ================= Game page: header, five tabs ================= -->
+        <Grid x:Name="GameView" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
 
-                <ScrollViewer x:Name="DetailsScroller" Visibility="{x:Bind ViewModel.HasSelection, Mode=OneWay}">
-                    <StackPanel Padding="32,28,32,32" Spacing="20" MaxWidth="820" HorizontalAlignment="Left">
+            <!-- Header: the game's art, large and dimmed, with its name, source, graphics API and main actions -->
+            <Grid x:Name="Header" Height="188" SizeChanged="Header_SizeChanged">
+                <!-- Wide art when there is some; otherwise the cover, shrunk to a few pixels and spread out (blurred, never stretched) -->
+                <Image x:Name="HeaderArt" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                <Border>
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                            <GradientStop Color="#E6101010" Offset="0" />
+                            <GradientStop Color="#B3101010" Offset="0.55" />
+                            <GradientStop Color="#80101010" Offset="1" />
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
+                <Border>
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                            <GradientStop Color="#00101010" Offset="0.5" />
+                            <GradientStop Color="#99101010" Offset="1" />
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
 
-                        <StackPanel Spacing="6">
-                            <TextBlock Text="{x:Bind ViewModel.Selected.SourceText, Mode=OneWay}" FontSize="12"
-                                       Foreground="{StaticResource SubtleTextBrush}" />
-                            <Grid ColumnSpacing="16">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="{x:Bind ViewModel.Selected.Name, Mode=OneWay}" FontSize="30"
-                                           FontWeight="SemiBold" TextWrapping="Wrap" />
-                                <Button Grid.Column="1" Style="{StaticResource AccentButtonStyle}" Click="Play_Click"
-                                        VerticalAlignment="Center" Padding="18,8" AutomationProperties.Name="Play"
-                                        IsEnabled="{x:Bind ViewModel.CanPlaySelected, Mode=OneWay}"
-                                        ToolTipService.ToolTip="{x:Bind ViewModel.Selected.PlayTip, Mode=OneWay}">
-                                    <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <FontIcon Glyph="&#xE768;" FontSize="14" />
-                                        <TextBlock Text="Play" FontWeight="SemiBold" />
-                                    </StackPanel>
-                                </Button>
-                            </Grid>
-                            <TextBlock Text="{x:Bind ViewModel.Selected.TargetText, Mode=OneWay}" FontFamily="Consolas"
-                                       FontSize="12" Foreground="{StaticResource SubtleTextBrush}"
-                                       TextTrimming="CharacterEllipsis" IsTextSelectionEnabled="True" />
-                            <InfoBar IsOpen="{x:Bind ViewModel.Selected.HasLaunchError, Mode=OneWay}" Severity="Error"
-                                     Title="The game didn't start" Message="{x:Bind ViewModel.Selected.LaunchError, Mode=OneWay}"
-                                     Closed="LaunchError_Closed" />
+                <Grid Padding="20,14,24,18" ColumnSpacing="18" RowSpacing="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Button x:Name="BackButton" Click="Back_Click" Padding="10,6" Background="#33FFFFFF" Foreground="White" BorderThickness="0"
+                            AutomationProperties.Name="Back to the Library" ToolTipService.ToolTip="Back to the Library (Esc)">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE72B;" FontSize="13" />
+                            <TextBlock Text="Library" />
                         </StackPanel>
+                    </Button>
 
-                        <Grid ColumnSpacing="10">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Border Padding="14,12" CornerRadius="8" Background="{StaticResource CardSurfaceBrush}"
-                                    BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1">
-                                <StackPanel Spacing="4">
-                                    <TextBlock Text="Graphics API" FontSize="12" Foreground="{StaticResource SubtleTextBrush}" />
-                                    <TextBlock Text="{x:Bind ViewModel.Selected.ApiText, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                </StackPanel>
-                            </Border>
-                            <Border Grid.Column="1" Padding="14,12" CornerRadius="8" Background="{StaticResource CardSurfaceBrush}"
-                                    BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1">
-                                <StackPanel Spacing="4">
-                                    <TextBlock Text="Engine" FontSize="12" Foreground="{StaticResource SubtleTextBrush}" />
-                                    <TextBlock Text="{x:Bind ViewModel.Selected.EngineText, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                </StackPanel>
-                            </Border>
-                            <Border Grid.Column="2" Padding="14,12" CornerRadius="8" Background="{StaticResource CardSurfaceBrush}"
-                                    BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1">
-                                <StackPanel Spacing="4">
-                                    <TextBlock Text="Build" FontSize="12" Foreground="{StaticResource SubtleTextBrush}" />
-                                    <TextBlock Text="{x:Bind ViewModel.Selected.BuildText, Mode=OneWay}" FontWeight="SemiBold" />
-                                </StackPanel>
-                            </Border>
-                            <Border Grid.Column="3" Padding="14,12" CornerRadius="8" Background="{StaticResource CardSurfaceBrush}"
-                                    BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1">
-                                <StackPanel Spacing="4">
-                                    <TextBlock Text="Anti-cheat" FontSize="12" Foreground="{StaticResource SubtleTextBrush}" />
-                                    <TextBlock Text="{x:Bind ViewModel.Selected.AntiCheatText, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                </StackPanel>
-                            </Border>
-                        </Grid>
+                    <!-- The cover, small and sharp -->
+                    <Border Grid.Row="1" Width="78" Height="104" CornerRadius="6" VerticalAlignment="Bottom" Background="{x:Bind ViewModel.Selected.TileBrush, Mode=OneWay}">
+                        <Border CornerRadius="6" Visibility="{x:Bind ViewModel.Selected.HasArtwork, Mode=OneWay}">
+                            <Border.Background>
+                                <ImageBrush ImageSource="{x:Bind ViewModel.Selected.Artwork, Mode=OneWay}" Stretch="UniformToFill" />
+                            </Border.Background>
+                        </Border>
+                    </Border>
 
-                        <Grid ColumnSpacing="10" Padding="14,10" CornerRadius="8" Background="{StaticResource CardSurfaceBrush}"
-                              BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="2" VerticalAlignment="Center">
-                                <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}">
-                                    <Run Text="Main game file" /><Run Text=" · " /><Run Text="{x:Bind ViewModel.Selected.ExeNote, Mode=OneWay}" />
-                                </TextBlock>
-                                <TextBlock Text="{x:Bind ViewModel.Selected.ExeText, Mode=OneWay}" FontFamily="Consolas" FontSize="13"
-                                           TextTrimming="CharacterEllipsis" IsTextSelectionEnabled="True" />
+                    <StackPanel Grid.Row="1" Grid.Column="1" VerticalAlignment="Bottom" Spacing="4">
+                        <TextBlock x:Name="HeaderTitle" Text="{x:Bind ViewModel.Selected.Name, Mode=OneWay}" FontSize="30" FontWeight="SemiBold" Foreground="White"
+                                   TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Foreground="#E6FFFFFF" FontSize="13" TextWrapping="Wrap">
+                            <Run Text="{x:Bind ViewModel.Selected.SourceText, Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{x:Bind ViewModel.Selected.ApiText, Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{x:Bind ViewModel.Selected.EngineText, Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{x:Bind ViewModel.Selected.BuildText, Mode=OneWay}" /><Run Text="  ·  Anti-cheat: " /><Run Text="{x:Bind ViewModel.Selected.AntiCheatText, Mode=OneWay}" />
+                        </TextBlock>
+                    </StackPanel>
+
+                    <!-- Main actions -->
+                    <StackPanel x:Name="HeaderActions" Grid.Row="1" Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom">
+                        <Button Click="OpenFolder_Click" Padding="10,8" Background="#33FFFFFF" Foreground="White" BorderThickness="0"
+                                AutomationProperties.Name="Open game folder" ToolTipService.ToolTip="Open game folder">
+                            <FontIcon Glyph="&#xE838;" FontSize="16" />
+                        </Button>
+                        <Button Content="Install OptiScaler" Click="Install_Click" Padding="14,8"
+                                Visibility="{x:Bind ViewModel.Selected.IsNotInstalledByUs, Mode=OneWay}"
+                                IsEnabled="{x:Bind ViewModel.Selected.CanInstall, Mode=OneWay}" AutomationProperties.Name="Install OptiScaler" />
+                        <Button Content="{x:Bind ViewModel.Selected.UpdateButtonText, Mode=OneWay}" Click="Update_Click" Padding="14,8"
+                                Visibility="{x:Bind ViewModel.Selected.HasUpdate, Mode=OneWay}" IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}" />
+                        <Button Style="{StaticResource AccentButtonStyle}" Click="Play_Click" Padding="22,8" AutomationProperties.Name="Play"
+                                IsEnabled="{x:Bind ViewModel.CanPlaySelected, Mode=OneWay}"
+                                ToolTipService.ToolTip="{x:Bind ViewModel.Selected.PlayTip, Mode=OneWay}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE768;" FontSize="14" />
+                                <TextBlock Text="Play" FontWeight="SemiBold" />
                             </StackPanel>
-                            <Button Grid.Column="1" Content="Use automatic" Click="UseAutomaticExe_Click" VerticalAlignment="Center"
-                                    Visibility="{x:Bind ViewModel.Selected.ExeChosenByUser, Mode=OneWay}"
-                                    IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}" />
-                            <Button Grid.Column="2" Content="Change…" Click="ChangeExe_Click" VerticalAlignment="Center"
-                                    IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}" />
-                        </Grid>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Grid>
 
-                        <StackPanel Spacing="6" Margin="0,-10,0,0" Padding="14,10" CornerRadius="8" Background="{StaticResource CardSurfaceBrush}"
-                                    BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1">
-                            <TextBlock Text="Launch options" FontSize="12" Foreground="{StaticResource SubtleTextBrush}" />
-                            <TextBox x:Name="LaunchOptionsBox" Text="{x:Bind ViewModel.Selected.LaunchOptions, Mode=OneWay}"
-                                     IsEnabled="{x:Bind ViewModel.Selected.TakesLaunchOptions, Mode=OneWay}"
-                                     PlaceholderText="e.g. -dx12" FontFamily="Consolas" AutomationProperties.Name="Launch options"
-                                     LostFocus="LaunchOptions_LostFocus" KeyDown="LaunchOptions_KeyDown" />
-                            <TextBlock Text="{x:Bind ViewModel.Selected.LaunchOptionsNote, Mode=OneWay}" FontSize="12" TextWrapping="Wrap"
-                                       Foreground="{StaticResource SubtleTextBrush}" />
-                        </StackPanel>
+            <!-- The game didn't start: shown on every tab, since Play is in the header -->
+            <InfoBar Grid.Row="1" Margin="24,8,24,0" IsOpen="{x:Bind ViewModel.Selected.HasLaunchError, Mode=OneWay}" Severity="Error"
+                     Title="The game didn't start" Message="{x:Bind ViewModel.Selected.LaunchError, Mode=OneWay}"
+                     Closed="LaunchError_Closed" />
 
+            <Grid Grid.Row="2" Padding="16,4,24,0" BorderBrush="{StaticResource HairlineBrush}" BorderThickness="0,0,0,1" ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <SelectorBar x:Name="TabBar" SelectionChanged="TabBar_SelectionChanged" AutomationProperties.Name="Game page tabs">
+                    <SelectorBarItem Text="Overview" Tag="overview" IsSelected="True" />
+                    <SelectorBarItem Text="Upscaling" Tag="upscaling" />
+                    <SelectorBarItem Text="Files" Tag="files" />
+                    <SelectorBarItem Text="Performance" Tag="performance" />
+                    <SelectorBarItem Text="History" Tag="history" />
+                </SelectorBar>
+                <!-- The status line for installs and updates, so it's seen on the game page too -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" MaxWidth="520">
+                    <ProgressRing Width="16" Height="16" IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}" Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay}" />
+                    <TextBlock Text="{x:Bind ViewModel.StatusText, Mode=OneWay}" FontSize="12" Foreground="{StaticResource SubtleTextBrush}"
+                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                </StackPanel>
+            </Grid>
+
+            <Grid Grid.Row="3">
+                <!-- ======== Overview ======== -->
+                <ScrollViewer x:Name="OverviewTab" AutomationProperties.Name="Overview page">
+                    <StackPanel Padding="24,16,24,24" Spacing="12">
+                        <!-- Warnings first -->
+                        <InfoBar IsOpen="{x:Bind ViewModel.Selected.HasAntiCheat, Mode=OneWay}" IsClosable="False" Visibility="{x:Bind ViewModel.Selected.HasAntiCheat, Mode=OneWay}"
+                                 Severity="Warning" Title="Installs are blocked for this game"
+                                 Message="{x:Bind ViewModel.Selected.AntiCheatMessage, Mode=OneWay}" />
                         <!-- Upshift's record is missing or damaged, but OptiScaler's files are there -->
                         <InfoBar IsOpen="{x:Bind ViewModel.Selected.RecordDamaged, Mode=OneWay}" IsClosable="False" Severity="Warning"
                                  Title="Upshift's record for this game is missing or damaged"
@@ -384,11 +407,92 @@
                                 <Button Content="Remove what Upshift added" Click="RemoveWithoutRecord_Click" IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}" />
                             </InfoBar.ActionButton>
                         </InfoBar>
+                        <InfoBar IsOpen="{x:Bind ViewModel.Selected.NeedsRepair, Mode=OneWay}" IsClosable="False" Severity="Warning"
+                                 Visibility="{x:Bind ViewModel.Selected.NeedsRepair, Mode=OneWay}"
+                                 Title="Needs repair" Message="{x:Bind ViewModel.Selected.RepairText, Mode=OneWay}">
+                            <InfoBar.ActionButton>
+                                <Button Content="Repair" Click="Repair_Click" IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
+                                        ToolTipService.ToolTip="{x:Bind ViewModel.BusyReason, Mode=OneWay}" />
+                            </InfoBar.ActionButton>
+                            <!-- While another task runs, say why Repair is off -->
+                            <TextBlock Text="{x:Bind ViewModel.BusyReason, Mode=OneWay}" FontSize="12" Margin="0,0,0,8"
+                                       Visibility="{x:Bind ViewModel.HasBusyReason, Mode=OneWay}" />
+                        </InfoBar>
+                        <!-- Capcom RE Engine games without REFramework, and Battle.net games -->
+                        <views:GameNoticesView x:Name="NoticesPanel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
 
-                        <InfoBar IsOpen="{x:Bind ViewModel.Selected.HasAntiCheat, Mode=OneWay}" IsClosable="False"
-                                 Severity="Warning" Title="Installs are blocked for this game"
-                                 Message="{x:Bind ViewModel.Selected.AntiCheatMessage, Mode=OneWay}" />
+                        <helpers:ColumnsPanel Columns="3" MinColumnWidth="330" Spacing="12">
+                            <!-- What's installed and in use -->
+                            <Border helpers:ColumnsPanel.Column="0" Style="{StaticResource GameCardStyle}">
+                                <StackPanel Spacing="10">
+                                    <TextBlock Text="OptiScaler" Style="{StaticResource CardTitleStyle}" />
+                                    <Grid ColumnSpacing="8" Visibility="{x:Bind ViewModel.Selected.IsInstalledByUs, Mode=OneWay}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <FontIcon Glyph="&#xE73E;" FontSize="14" Foreground="{StaticResource UpshiftAccentBrush}" VerticalAlignment="Top" Margin="0,2,0,0" />
+                                        <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.Selected.InstalledText, Mode=OneWay}" TextWrapping="Wrap" FontSize="13" />
+                                    </Grid>
+                                    <views:InUseView x:Name="InUsePanel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
+                                    <TextBlock Text="{x:Bind ViewModel.Selected.Fsr4Text, Mode=OneWay}" FontSize="12" TextWrapping="Wrap"
+                                               Visibility="{x:Bind ViewModel.Selected.HasFsr4Text, Mode=OneWay}" />
+                                </StackPanel>
+                            </Border>
 
+                            <!-- "Is it working?": OptiScaler's own log -->
+                            <Border helpers:ColumnsPanel.Column="1" Style="{StaticResource GameCardStyle}">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="Is it working?" Style="{StaticResource CardTitleStyle}" />
+                                    <TextBlock Visibility="{x:Bind ViewModel.Selected.IsNotInstalledByUs, Mode=OneWay}" FontSize="13" TextWrapping="Wrap"
+                                               Foreground="{StaticResource SubtleTextBrush}" Text="Upshift checks OptiScaler's own log once OptiScaler is installed." />
+                                    <StackPanel Spacing="4" Visibility="{x:Bind ViewModel.Selected.IsInstalledByUs, Mode=OneWay}">
+                                        <!-- "According to OptiScaler's log: …" and when that run was -->
+                                        <TextBlock Text="{x:Bind ViewModel.Selected.LoadStatusText, Mode=OneWay}" TextWrapping="Wrap" IsTextSelectionEnabled="True"
+                                                   Visibility="{x:Bind ViewModel.Selected.HasLoadStatus, Mode=OneWay}" />
+                                        <TextBlock Text="{x:Bind ViewModel.Selected.LoadStatusDetail, Mode=OneWay}" FontSize="12" TextWrapping="Wrap"
+                                                   Foreground="{StaticResource SubtleTextBrush}" Visibility="{x:Bind ViewModel.Selected.HasLoadStatusDetail, Mode=OneWay}" />
+                                        <StackPanel Orientation="Horizontal" Spacing="10">
+                                            <Button Content="Turn on the check" Click="TurnOnLogCheck_Click" Margin="0,4,0,0"
+                                                    Visibility="{x:Bind ViewModel.Selected.CanTurnOnLogCheck, Mode=OneWay}" IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}" />
+                                            <HyperlinkButton Content="Check again" Click="CheckLogAgain_Click" Padding="0" FontSize="12" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Best on this card, and the last measurement -->
+                            <Border helpers:ColumnsPanel.Column="2" Style="{StaticResource GameCardStyle}">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="Best on your graphics card" Style="{StaticResource CardTitleStyle}" />
+                                    <!-- Suggestion only: which upscaler and frame generation suit this card, and what the wiki says to pick in-game -->
+                                    <StackPanel Spacing="2" Visibility="{x:Bind ViewModel.Selected.HasRecommendation, Mode=OneWay}">
+                                        <Grid ColumnSpacing="8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <FontIcon Glyph="&#xE734;" FontSize="14" Foreground="{StaticResource UpshiftAccentBrush}" VerticalAlignment="Top" Margin="0,3,0,0" />
+                                            <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.Selected.Recommendation.Upscaler, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                        </Grid>
+                                        <!-- The notes: the first three lines, then "Show all" (remembered across restarts) -->
+                                        <TextBlock x:Name="RecommendationNotes" Text="{x:Bind ViewModel.Selected.Recommendation.Notes, Mode=OneWay}" FontSize="12"
+                                                   TextWrapping="Wrap" TextTrimming="CharacterEllipsis" Margin="22,0,0,0" IsTextTrimmedChanged="RecommendationNotes_TrimmedChanged" />
+                                        <HyperlinkButton x:Name="RecommendationShowAll" Content="Show all" FontSize="12" Padding="0" Margin="22,2,0,4"
+                                                         Visibility="Collapsed" Click="RecommendationShowAll_Click" />
+                                    </StackPanel>
+                                    <Border Height="1" Background="{StaticResource HairlineBrush}" Margin="0,4" />
+                                    <TextBlock Text="Last measurement" FontSize="12" Foreground="{StaticResource SubtleTextBrush}" />
+                                    <views:LastRunView x:Name="LastRunPanel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
+                                </StackPanel>
+                            </Border>
+                        </helpers:ColumnsPanel>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- ======== Upscaling ======== -->
+                <ScrollViewer x:Name="UpscalingTab" AutomationProperties.Name="Upscaling page" Visibility="Collapsed">
+                    <StackPanel Padding="24,16,24,24" Spacing="12">
                         <!-- A newer DLSS file for this game: "DLSS 4.5 (310.9.1) is ready for this game. It has 3.1.1 (DLSS 3)…" -->
                         <InfoBar IsOpen="{x:Bind ViewModel.Selected.HasDlssBar, Mode=OneWay}" IsClosable="False" Severity="Success"
                                  Title="DLSS update" Message="{x:Bind ViewModel.Selected.DlssBarText, Mode=OneWay}"
@@ -398,221 +502,249 @@
                                         IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}" />
                             </InfoBar.ActionButton>
                         </InfoBar>
-
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="Upscalers in this game" FontWeight="SemiBold" />
-                            <!-- Suggestion only: which upscaler and frame generation suit this card, and what the wiki says to pick in-game -->
-                            <StackPanel Spacing="2" Visibility="{x:Bind ViewModel.Selected.HasRecommendation, Mode=OneWay}">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <FontIcon Glyph="&#xE734;" FontSize="14" Foreground="{StaticResource UpshiftAccentBrush}" VerticalAlignment="Center" />
-                                    <TextBlock Text="{x:Bind ViewModel.Selected.Recommendation.Upscaler, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                </StackPanel>
-                                <!-- The notes: the first three lines, then "Show all" (remembered across restarts) -->
-                                <TextBlock x:Name="RecommendationNotes" Text="{x:Bind ViewModel.Selected.Recommendation.Notes, Mode=OneWay}" FontSize="12"
-                                           TextWrapping="Wrap" TextTrimming="CharacterEllipsis" Margin="22,0,0,0" IsTextTrimmedChanged="RecommendationNotes_TrimmedChanged" />
-                                <HyperlinkButton x:Name="RecommendationShowAll" Content="Show all" FontSize="12" Padding="0" Margin="22,2,0,4"
-                                                 Visibility="Collapsed" Click="RecommendationShowAll_Click" />
+                        <helpers:ColumnsPanel Columns="2" MinColumnWidth="420" Spacing="16">
+                            <StackPanel helpers:ColumnsPanel.Column="0" Spacing="16">
+                                <!-- Every OptiScaler option: upscaler (with HelixSR), frame generation, frame cap, FPS counter, DLSS model, FSR 4 -->
+                                <views:OptiScalerOptionsView x:Name="OptionsPanel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
+                                <TextBlock Visibility="{x:Bind ViewModel.Selected.IsNotInstalledByUs, Mode=OneWay}" TextWrapping="Wrap"
+                                           Foreground="{StaticResource SubtleTextBrush}"
+                                           Text="OptiScaler's options (upscaler, frame generation, frame cap, DLSS model, FSR 4) appear here once Upshift has installed OptiScaler in this game." />
+                                <!-- DLSS 5 (Neural Rendering): this card's options, the switch to the DLSS 5 build and its settings -->
+                                <views:Dlss5View x:Name="Dlss5Panel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
                             </StackPanel>
-                            <Border CornerRadius="8" Background="{StaticResource CardSurfaceBrush}"
-                                    BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1"
-                                    Visibility="{x:Bind ViewModel.Selected.Upscalers.HasRows, Mode=OneWay}">
-                                <ItemsControl ItemsSource="{x:Bind ViewModel.Selected.Upscalers.Rows, Mode=OneWay}"
-                                              ItemTemplate="{StaticResource UpscalerRowTemplate}" />
-                            </Border>
-                            <TextBlock Visibility="{x:Bind ViewModel.Selected.Upscalers.HasNoRows, Mode=OneWay}" TextWrapping="Wrap"
-                                       Foreground="{StaticResource SubtleTextBrush}"
-                                       Text="No DLSS, FSR or XeSS in the game files or on PCGamingWiki. OptiScaler can still add FSR, XeSS and frame generation to many DirectX 11 and 12 games." />
-                            <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap">
-                                <Hyperlink NavigateUri="{x:Bind ViewModel.Selected.Upscalers.PageUri, Mode=OneWay}"
-                                           Foreground="{StaticResource SubtleTextBrush}">Some details from PCGamingWiki</Hyperlink><Run Text="{x:Bind ViewModel.Selected.Upscalers.FooterSuffix, Mode=OneWay}" />
-                            </TextBlock>
-                            <Expander x:Name="FilesExpander" Header="Show files" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
-                                      IsExpanded="False"
-                                      Visibility="{x:Bind ViewModel.Selected.Upscalers.HasFiles, Mode=OneWay}">
-                                <ItemsControl ItemsSource="{x:Bind ViewModel.Selected.Upscalers.Files, Mode=OneWay}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="x:String">
-                                            <TextBlock Text="{x:Bind}" FontFamily="Consolas" FontSize="12" IsTextSelectionEnabled="True"
-                                                       TextWrapping="Wrap" Margin="0,2" />
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </Expander>
-                        </StackPanel>
-
-                        <!-- ================= Upscaler files: newer DLSS / FSR / XeSS files for the ones the game ships ================= -->
-                        <!-- Collapsed by default: the DLSS bar and the Updates page checklist are the main way to update. -->
-                        <Expander x:Name="UpscalerFilesExpander" Visibility="{x:Bind ViewModel.Selected.HasUpscalerFiles, Mode=OneWay}" IsExpanded="False"
-                                  HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
-                                  AutomationProperties.Name="Upscaler files (advanced)">
-                            <Expander.Header>
-                                <StackPanel Spacing="2" Padding="0,8">
-                                    <TextBlock Text="Upscaler files (advanced)" FontWeight="SemiBold" />
-                                    <TextBlock Text="{x:Bind ViewModel.Selected.UpscalerFilesSummary, Mode=OneWay}" FontSize="12"
-                                               Foreground="{StaticResource SubtleTextBrush}" />
+                            <StackPanel helpers:ColumnsPanel.Column="1" Spacing="16">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="Upscalers in this game" FontWeight="SemiBold" />
+                                    <Border CornerRadius="8" Background="{StaticResource CardSurfaceBrush}"
+                                            BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1"
+                                            Visibility="{x:Bind ViewModel.Selected.Upscalers.HasRows, Mode=OneWay}">
+                                        <ItemsControl ItemsSource="{x:Bind ViewModel.Selected.Upscalers.Rows, Mode=OneWay}"
+                                                      ItemTemplate="{StaticResource UpscalerRowTemplate}" />
+                                    </Border>
+                                    <TextBlock Visibility="{x:Bind ViewModel.Selected.Upscalers.HasNoRows, Mode=OneWay}" TextWrapping="Wrap"
+                                               Foreground="{StaticResource SubtleTextBrush}"
+                                               Text="No DLSS, FSR or XeSS in the game files or on PCGamingWiki. OptiScaler can still add FSR, XeSS and frame generation to many DirectX 11 and 12 games." />
+                                    <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap">
+                                        <Hyperlink NavigateUri="{x:Bind ViewModel.Selected.Upscalers.PageUri, Mode=OneWay}"
+                                                   Foreground="{StaticResource SubtleTextBrush}">Some details from PCGamingWiki</Hyperlink><Run Text="{x:Bind ViewModel.Selected.Upscalers.FooterSuffix, Mode=OneWay}" />
+                                    </TextBlock>
+                                    <Expander x:Name="FilesExpander" Header="Show files" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                              IsExpanded="False"
+                                              Visibility="{x:Bind ViewModel.Selected.Upscalers.HasFiles, Mode=OneWay}">
+                                        <ItemsControl ItemsSource="{x:Bind ViewModel.Selected.Upscalers.Files, Mode=OneWay}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="x:String">
+                                                    <TextBlock Text="{x:Bind}" FontFamily="Consolas" FontSize="12" IsTextSelectionEnabled="True"
+                                                               TextWrapping="Wrap" Margin="0,2" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </Expander>
                                 </StackPanel>
-                            </Expander.Header>
-                        <StackPanel Spacing="8">
-                            <InfoBar IsOpen="{x:Bind ViewModel.Selected.HasAntiCheatFilesWarning, Mode=OneWay}" IsClosable="False" Severity="Warning"
-                                     Title="Anti-cheat in this game" Message="{x:Bind ViewModel.Selected.AntiCheatFilesWarning, Mode=OneWay}"
-                                     Visibility="{x:Bind ViewModel.Selected.HasAntiCheatFilesWarning, Mode=OneWay}" />
-                            <InfoBar IsOpen="{x:Bind ViewModel.Selected.HasRestoredByGame, Mode=OneWay}" IsClosable="False" Severity="Warning"
-                                     Title="{x:Bind ViewModel.Selected.RestoredTitle, Mode=OneWay}"
-                                     Message="{x:Bind ViewModel.Selected.RestoredText, Mode=OneWay}"
-                                     Visibility="{x:Bind ViewModel.Selected.HasRestoredByGame, Mode=OneWay}">
-                                <InfoBar.ActionButton>
-                                    <Button Content="Re-apply" Click="Reapply_Click"
-                                            IsEnabled="{x:Bind ViewModel.Selected.CanReapply, Mode=OneWay}" />
-                                </InfoBar.ActionButton>
-                            </InfoBar>
-                            <Border CornerRadius="8" Background="{StaticResource CardSurfaceBrush}"
-                                    BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1"
-                                    Visibility="{x:Bind ViewModel.Selected.HasUpscalerFileRows, Mode=OneWay}">
-                                <ItemsControl ItemsSource="{x:Bind ViewModel.Selected.UpscalerFiles, Mode=OneWay}"
-                                              ItemTemplate="{StaticResource UpscalerFileTemplate}"
-                                              IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}" />
-                            </Border>
-                            <StackPanel Orientation="Horizontal" Spacing="6" Visibility="{x:Bind ViewModel.Selected.IsAlreadyUpToDate, Mode=OneWay}">
-                                <FontIcon Glyph="&#xE73E;" FontSize="12" Foreground="{StaticResource UpshiftAccentBrush}" VerticalAlignment="Center" />
-                                <TextBlock Text="Already up to date" FontSize="12" VerticalAlignment="Center" />
+                                <!-- Suggestions for this game (OptiScaler wiki) and general advice -->
+                                <views:SuggestionsView x:Name="SuggestionsPanel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
                             </StackPanel>
-                            <TextBlock Text="{x:Bind ViewModel.Selected.OptiScalerFilesNote, Mode=OneWay}" FontSize="12" TextWrapping="Wrap"
-                                       Visibility="{x:Bind ViewModel.Selected.HasOptiScalerFilesNote, Mode=OneWay}" />
-                            <TextBlock Text="{x:Bind ViewModel.Selected.BuiltInFsrNote, Mode=OneWay}" FontSize="12" TextWrapping="Wrap"
-                                       Visibility="{x:Bind ViewModel.Selected.HasBuiltInFsrNote, Mode=OneWay}" />
-                            <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
-                                       Visibility="{x:Bind ViewModel.Selected.HasDlssFrameGenFile, Mode=OneWay}"
-                                       Text="nvngx_dlssg.dll (DLSS Frame Generation) isn't updated: it's paired with the game's own Streamline version." />
+                        </helpers:ColumnsPanel>
+                    </StackPanel>
+                </ScrollViewer>
 
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <Button Content="{x:Bind ViewModel.Selected.UpdateAllText, Mode=OneWay}" Style="{StaticResource AccentButtonStyle}"
-                                        Click="UpdateAllFiles_Click" IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
-                                        Visibility="{x:Bind ViewModel.Selected.CanUpdateAnyFile, Mode=OneWay}" AutomationProperties.Name="Update all" />
-                                <Button Content="Restore original files" Click="RestoreFiles_Click" IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
-                                        Visibility="{x:Bind ViewModel.Selected.CanRestoreFiles, Mode=OneWay}" />
-                            </StackPanel>
-                            <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
-                                       Text="Newer files come straight from NVIDIA's, AMD's and Intel's GitHub pages and must carry their digital signature. Only files the game already has are replaced, and each original is backed up in the game's .upshift folder first." />
-                        </StackPanel>
-                        </Expander>
-
-                        <views:SuggestionsView x:Name="SuggestionsPanel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
-
-                        <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.Selected.HasMods, Mode=OneWay}">
-                            <TextBlock Text="Already in the game folder" FontWeight="SemiBold" />
-                            <ItemsControl ItemsSource="{x:Bind ViewModel.Selected.Mods, Mode=OneWay}" />
-                        </StackPanel>
-
-                        <Border CornerRadius="8" Padding="16,14" Background="{StaticResource CardSurfaceBrush}"
-                                BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1"
-                                Visibility="{x:Bind ViewModel.Selected.IsInstalledByUs, Mode=OneWay}">
-                            <StackPanel Spacing="10">
-                                <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <FontIcon Glyph="&#xE73E;" FontSize="16" Foreground="#0D5A44" VerticalAlignment="Center" />
-                                    <TextBlock Text="{x:Bind ViewModel.Selected.InstalledText, Mode=OneWay}" FontWeight="SemiBold"
-                                               VerticalAlignment="Center" TextWrapping="Wrap" />
-                                </StackPanel>
-                                <!-- "According to OptiScaler's log: …" and when that run was -->
-                                <StackPanel Spacing="2" Visibility="{x:Bind ViewModel.Selected.HasLoadStatus, Mode=OneWay}">
-                                    <TextBlock Text="{x:Bind ViewModel.Selected.LoadStatusText, Mode=OneWay}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
-                                    <TextBlock Text="{x:Bind ViewModel.Selected.LoadStatusDetail, Mode=OneWay}" FontSize="12" TextWrapping="Wrap"
-                                               Foreground="{StaticResource SubtleTextBrush}" Visibility="{x:Bind ViewModel.Selected.HasLoadStatusDetail, Mode=OneWay}" />
+                <!-- ======== Files ======== -->
+                <ScrollViewer x:Name="FilesTab" AutomationProperties.Name="Files page" Visibility="Collapsed">
+                    <helpers:ColumnsPanel Columns="2" MinColumnWidth="420" Spacing="16" Margin="24,16,24,24">
+                        <StackPanel helpers:ColumnsPanel.Column="0" Spacing="16">
+                            <!-- What Upshift installed: OptiScaler, with update, undo, the uninstall that explains itself, and the ini -->
+                            <Border Style="{StaticResource GameCardStyle}">
+                                <StackPanel Spacing="10">
+                                    <TextBlock Text="What Upshift installed" Style="{StaticResource CardTitleStyle}" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8" Visibility="{x:Bind ViewModel.Selected.IsInstalledByUs, Mode=OneWay}">
+                                        <FontIcon Glyph="&#xE73E;" FontSize="14" Foreground="{StaticResource UpshiftAccentBrush}" VerticalAlignment="Center" />
+                                        <TextBlock Text="{x:Bind ViewModel.Selected.InstalledText, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <TextBlock Visibility="{x:Bind ViewModel.Selected.IsNotInstalledByUs, Mode=OneWay}" TextWrapping="Wrap" FontSize="13"
+                                               Foreground="{StaticResource SubtleTextBrush}" Text="Nothing yet: OptiScaler isn't installed by Upshift in this game." />
                                     <StackPanel Orientation="Horizontal" Spacing="10">
-                                        <Button Content="Turn on the check" Click="TurnOnLogCheck_Click" Margin="0,4,0,0"
-                                                Visibility="{x:Bind ViewModel.Selected.CanTurnOnLogCheck, Mode=OneWay}" IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}" />
-                                        <HyperlinkButton Content="Check again" Click="CheckLogAgain_Click" Padding="0" FontSize="12" />
+                                        <Button Content="Install OptiScaler" Style="{StaticResource AccentButtonStyle}" Click="Install_Click"
+                                                Visibility="{x:Bind ViewModel.Selected.IsNotInstalledByUs, Mode=OneWay}"
+                                                IsEnabled="{x:Bind ViewModel.Selected.CanInstall, Mode=OneWay}" />
+                                        <Button Content="{x:Bind ViewModel.Selected.UpdateButtonText, Mode=OneWay}" Style="{StaticResource AccentButtonStyle}"
+                                                Click="Update_Click" Visibility="{x:Bind ViewModel.Selected.HasUpdate, Mode=OneWay}"
+                                                IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}" />
+                                        <Button Content="{x:Bind ViewModel.Selected.UndoText, Mode=OneWay}" Click="Undo_Click"
+                                                Visibility="{x:Bind ViewModel.Selected.CanUndo, Mode=OneWay}"
+                                                IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}" />
+                                        <Button Content="Uninstall" Click="Uninstall_Click" IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
+                                                Visibility="{x:Bind ViewModel.Selected.IsInstalledByUs, Mode=OneWay}" />
+                                        <Button Content="Open OptiScaler.ini" Click="OpenIni_Click" Visibility="{x:Bind ViewModel.Selected.IsInstalledByUs, Mode=OneWay}" />
                                     </StackPanel>
                                 </StackPanel>
-                                <TextBlock Text="{x:Bind ViewModel.Selected.Fsr4Text, Mode=OneWay}" FontSize="12" TextWrapping="Wrap"
-                                           Visibility="{x:Bind ViewModel.Selected.HasFsr4Text, Mode=OneWay}" />
-                                <TextBlock Text="In game: press Insert to open the OptiScaler menu" FontSize="12"
-                                           Foreground="{StaticResource SubtleTextBrush}" />
-                                <InfoBar IsOpen="{x:Bind ViewModel.Selected.NeedsRepair, Mode=OneWay}" IsClosable="False" Severity="Warning"
-                                         Title="Needs repair" Message="{x:Bind ViewModel.Selected.RepairText, Mode=OneWay}">
-                                    <InfoBar.ActionButton>
-                                        <Button Content="Repair" Click="Repair_Click" IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
-                                                ToolTipService.ToolTip="{x:Bind ViewModel.BusyReason, Mode=OneWay}" />
-                                    </InfoBar.ActionButton>
-                                    <!-- While another task runs, say why Repair is off -->
-                                    <TextBlock Text="{x:Bind ViewModel.BusyReason, Mode=OneWay}" FontSize="12" Margin="0,0,0,8"
-                                               Visibility="{x:Bind ViewModel.HasBusyReason, Mode=OneWay}" />
-                                </InfoBar>
-                                <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <Button Content="{x:Bind ViewModel.Selected.UpdateButtonText, Mode=OneWay}" Style="{StaticResource AccentButtonStyle}"
-                                            Click="Update_Click" Visibility="{x:Bind ViewModel.Selected.HasUpdate, Mode=OneWay}"
-                                            IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}" />
-                                    <Button Content="{x:Bind ViewModel.Selected.UndoText, Mode=OneWay}" Click="Undo_Click"
-                                            Visibility="{x:Bind ViewModel.Selected.CanUndo, Mode=OneWay}"
-                                            IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}" />
-                                    <Button Content="Uninstall" Click="Uninstall_Click" IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}" />
-                                    <Button Content="Open OptiScaler.ini" Click="OpenIni_Click" />
-                                </StackPanel>
-                            </StackPanel>
-                        </Border>
-
-                        <views:OptiScalerOptionsView x:Name="OptionsPanel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
-
-                        <!-- DLSS 5 (Neural Rendering): this card's options, the switch to the DLSS 5 build and its settings -->
-                        <views:Dlss5View x:Name="Dlss5Panel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
-
-                        <!-- Measure performance: PresentMon for 60 seconds, results and "What to try" (closed by default) -->
-                        <views:MeasureView x:Name="MeasurePanel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
-
-                        <!-- Everything Upshift has changed in this game folder right now, with dates -->
-                        <!-- Closed by default; the header gives the count and the latest date -->
-                        <Expander x:Name="ChangesExpander" Visibility="{x:Bind ViewModel.Selected.HasChanges, Mode=OneWay}" IsExpanded="False"
-                                  HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
-                                  AutomationProperties.Name="Changes Upshift made to this game">
-                            <Expander.Header>
-                                <StackPanel Spacing="2" Padding="0,8">
-                                    <TextBlock Text="Changes Upshift made to this game" FontWeight="SemiBold" />
-                                    <TextBlock Text="{x:Bind ViewModel.Selected.ChangesSummary, Mode=OneWay}" FontSize="12"
-                                               Foreground="{StaticResource SubtleTextBrush}" />
-                                </StackPanel>
-                            </Expander.Header>
-                            <Border CornerRadius="8" Background="{StaticResource CardSurfaceBrush}"
-                                    BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1">
-                                <ItemsControl ItemsSource="{x:Bind ViewModel.Selected.Changes, Mode=OneWay}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:ChangeViewModel">
-                                            <Grid ColumnSpacing="14" Padding="14,10" BorderBrush="{StaticResource HairlineBrush}" BorderThickness="0,0,0,1">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="150" />
-                                                    <ColumnDefinition Width="*" />
-                                                </Grid.ColumnDefinitions>
-                                                <TextBlock Text="{x:Bind Date}" FontSize="12" Foreground="{StaticResource SubtleTextBrush}" />
-                                                <StackPanel Grid.Column="1" Spacing="2">
-                                                    <TextBlock Text="{x:Bind Text}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
-                                                    <TextBlock Text="{x:Bind Detail}" FontSize="12" TextWrapping="Wrap" IsTextSelectionEnabled="True"
-                                                               Foreground="{StaticResource SubtleTextBrush}" Visibility="{x:Bind HasDetail}" />
-                                                </StackPanel>
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
                             </Border>
-                        </Expander>
 
-                        <StackPanel Orientation="Horizontal" Spacing="10">
-                            <Button Content="Install OptiScaler" Style="{StaticResource AccentButtonStyle}" Click="Install_Click"
-                                    Visibility="{x:Bind ViewModel.Selected.IsNotInstalledByUs, Mode=OneWay}"
-                                    IsEnabled="{x:Bind ViewModel.Selected.CanInstall, Mode=OneWay}" />
-                            <Button Click="OpenFolder_Click">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <FontIcon Glyph="&#xE838;" FontSize="14" />
-                                    <TextBlock Text="Open game folder" />
+                            <!-- The game's folder and main file -->
+                            <Border Style="{StaticResource GameCardStyle}">
+                                <StackPanel Spacing="10">
+                                    <TextBlock Text="Game folder" Style="{StaticResource CardTitleStyle}" />
+                                    <TextBlock Text="{x:Bind ViewModel.Selected.TargetText, Mode=OneWay}" FontFamily="Consolas" FontSize="12"
+                                               TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                                    <Grid ColumnSpacing="10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Spacing="2" VerticalAlignment="Center">
+                                            <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}">
+                                                <Run Text="Main game file" /><Run Text=" · " /><Run Text="{x:Bind ViewModel.Selected.ExeNote, Mode=OneWay}" />
+                                            </TextBlock>
+                                            <TextBlock Text="{x:Bind ViewModel.Selected.ExeText, Mode=OneWay}" FontFamily="Consolas" FontSize="13"
+                                                       TextTrimming="CharacterEllipsis" IsTextSelectionEnabled="True" />
+                                        </StackPanel>
+                                        <Button Grid.Column="1" Content="Use automatic" Click="UseAutomaticExe_Click" VerticalAlignment="Center"
+                                                Visibility="{x:Bind ViewModel.Selected.ExeChosenByUser, Mode=OneWay}"
+                                                IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}" />
+                                        <Button Grid.Column="2" Content="Change…" Click="ChangeExe_Click" VerticalAlignment="Center"
+                                                IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}" />
+                                    </Grid>
+                                    <StackPanel Spacing="6">
+                                        <TextBlock Text="Launch options" FontSize="12" Foreground="{StaticResource SubtleTextBrush}" />
+                                        <TextBox x:Name="LaunchOptionsBox" Text="{x:Bind ViewModel.Selected.LaunchOptions, Mode=OneWay}"
+                                                 IsEnabled="{x:Bind ViewModel.Selected.TakesLaunchOptions, Mode=OneWay}"
+                                                 PlaceholderText="e.g. -dx12" FontFamily="Consolas" AutomationProperties.Name="Launch options"
+                                                 LostFocus="LaunchOptions_LostFocus" KeyDown="LaunchOptions_KeyDown" />
+                                        <TextBlock Text="{x:Bind ViewModel.Selected.LaunchOptionsNote, Mode=OneWay}" FontSize="12" TextWrapping="Wrap"
+                                                   Foreground="{StaticResource SubtleTextBrush}" />
+                                    </StackPanel>
+                                    <Button Click="OpenFolder_Click">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <FontIcon Glyph="&#xE838;" FontSize="14" />
+                                            <TextBlock Text="Open game folder" />
+                                        </StackPanel>
+                                    </Button>
                                 </StackPanel>
-                            </Button>
-                            <Button Click="ReportGameProblem_Click" AutomationProperties.Name="Report a problem with this game">
+                            </Border>
+
+                            <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.Selected.HasMods, Mode=OneWay}">
+                                <TextBlock Text="Already in the game folder" FontWeight="SemiBold" />
+                                <ItemsControl ItemsSource="{x:Bind ViewModel.Selected.Mods, Mode=OneWay}" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <StackPanel helpers:ColumnsPanel.Column="1" Spacing="16">
+                            <!-- Files you supply yourself (kept in Settings, used by the options) -->
+                            <views:UserFilesSummaryView x:Name="UserFilesPanel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
+
+                            <!-- ================= Upscaler files: newer DLSS / FSR / XeSS files for the ones the game ships ================= -->
+                            <!-- Collapsed by default: the DLSS bar and the Updates page checklist are the main way to update. -->
+                            <Expander x:Name="UpscalerFilesExpander" Visibility="{x:Bind ViewModel.Selected.HasUpscalerFiles, Mode=OneWay}" IsExpanded="False"
+                                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                      AutomationProperties.Name="Upscaler files (advanced)">
+                                <Expander.Header>
+                                    <StackPanel Spacing="2" Padding="0,8">
+                                        <TextBlock Text="Upscaler files (advanced)" FontWeight="SemiBold" />
+                                        <TextBlock Text="{x:Bind ViewModel.Selected.UpscalerFilesSummary, Mode=OneWay}" FontSize="12"
+                                                   Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Expander.Header>
+                                <StackPanel Spacing="8">
+                                    <InfoBar IsOpen="{x:Bind ViewModel.Selected.HasAntiCheatFilesWarning, Mode=OneWay}" IsClosable="False" Severity="Warning"
+                                             Title="Anti-cheat in this game" Message="{x:Bind ViewModel.Selected.AntiCheatFilesWarning, Mode=OneWay}"
+                                             Visibility="{x:Bind ViewModel.Selected.HasAntiCheatFilesWarning, Mode=OneWay}" />
+                                    <InfoBar IsOpen="{x:Bind ViewModel.Selected.HasRestoredByGame, Mode=OneWay}" IsClosable="False" Severity="Warning"
+                                             Title="{x:Bind ViewModel.Selected.RestoredTitle, Mode=OneWay}"
+                                             Message="{x:Bind ViewModel.Selected.RestoredText, Mode=OneWay}"
+                                             Visibility="{x:Bind ViewModel.Selected.HasRestoredByGame, Mode=OneWay}">
+                                        <InfoBar.ActionButton>
+                                            <Button Content="Re-apply" Click="Reapply_Click"
+                                                    IsEnabled="{x:Bind ViewModel.Selected.CanReapply, Mode=OneWay}" />
+                                        </InfoBar.ActionButton>
+                                    </InfoBar>
+                                    <Border CornerRadius="8" Background="{StaticResource CardSurfaceBrush}"
+                                            BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1"
+                                            Visibility="{x:Bind ViewModel.Selected.HasUpscalerFileRows, Mode=OneWay}">
+                                        <ItemsControl ItemsSource="{x:Bind ViewModel.Selected.UpscalerFiles, Mode=OneWay}"
+                                                      ItemTemplate="{StaticResource UpscalerFileTemplate}"
+                                                      IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}" />
+                                    </Border>
+                                    <StackPanel Orientation="Horizontal" Spacing="6" Visibility="{x:Bind ViewModel.Selected.IsAlreadyUpToDate, Mode=OneWay}">
+                                        <FontIcon Glyph="&#xE73E;" FontSize="12" Foreground="{StaticResource UpshiftAccentBrush}" VerticalAlignment="Center" />
+                                        <TextBlock Text="Already up to date" FontSize="12" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <TextBlock Text="{x:Bind ViewModel.Selected.OptiScalerFilesNote, Mode=OneWay}" FontSize="12" TextWrapping="Wrap"
+                                               Visibility="{x:Bind ViewModel.Selected.HasOptiScalerFilesNote, Mode=OneWay}" />
+                                    <TextBlock Text="{x:Bind ViewModel.Selected.BuiltInFsrNote, Mode=OneWay}" FontSize="12" TextWrapping="Wrap"
+                                               Visibility="{x:Bind ViewModel.Selected.HasBuiltInFsrNote, Mode=OneWay}" />
+                                    <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
+                                               Visibility="{x:Bind ViewModel.Selected.HasDlssFrameGenFile, Mode=OneWay}"
+                                               Text="nvngx_dlssg.dll (DLSS Frame Generation) isn't updated: it's paired with the game's own Streamline version." />
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <Button Content="{x:Bind ViewModel.Selected.UpdateAllText, Mode=OneWay}" Style="{StaticResource AccentButtonStyle}"
+                                                Click="UpdateAllFiles_Click" IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
+                                                Visibility="{x:Bind ViewModel.Selected.CanUpdateAnyFile, Mode=OneWay}" AutomationProperties.Name="Update all" />
+                                        <Button Content="Restore original files" Click="RestoreFiles_Click" IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
+                                                Visibility="{x:Bind ViewModel.Selected.CanRestoreFiles, Mode=OneWay}" />
+                                    </StackPanel>
+                                    <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
+                                               Text="Newer files come straight from NVIDIA's, AMD's and Intel's GitHub pages and must carry their digital signature. Only files the game already has are replaced, and each original is backed up in the game's .upshift folder first." />
+                                </StackPanel>
+                            </Expander>
+                        </StackPanel>
+                    </helpers:ColumnsPanel>
+                </ScrollViewer>
+
+                <!-- ======== Performance ======== -->
+                <ScrollViewer x:Name="PerformanceTab" AutomationProperties.Name="Performance page" Visibility="Collapsed">
+                    <helpers:ColumnsPanel x:Name="PerformanceColumns" Columns="1" MinColumnWidth="460" Spacing="16" Margin="24,16,24,24">
+                        <!-- Measure performance: PresentMon, results, bottleneck details, comparison, sharing -->
+                        <views:MeasureView x:Name="MeasurePanel" helpers:ColumnsPanel.Column="0" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
+                    </helpers:ColumnsPanel>
+                </ScrollViewer>
+
+                <!-- ======== History ======== -->
+                <ScrollViewer x:Name="HistoryTab" AutomationProperties.Name="History page" Visibility="Collapsed">
+                    <StackPanel Padding="24,16,24,24" Spacing="12" MaxWidth="1100" HorizontalAlignment="Left">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="Changes Upshift made to this game" FontWeight="SemiBold" FontSize="16" />
+                                <TextBlock Text="{x:Bind ViewModel.Selected.ChangesSummary, Mode=OneWay}" FontSize="12"
+                                           Foreground="{StaticResource SubtleTextBrush}" />
+                            </StackPanel>
+                            <Button Grid.Column="1" Click="ReportGameProblem_Click" AutomationProperties.Name="Report a problem with this game" VerticalAlignment="Center">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <FontIcon Glyph="&#xEBE8;" FontSize="14" />
                                     <TextBlock Text="Report a problem with this game" />
                                 </StackPanel>
                             </Button>
-                        </StackPanel>
+                        </Grid>
+                        <TextBlock Visibility="{x:Bind ViewModel.Selected.HasNoChanges, Mode=OneWay}" Foreground="{StaticResource SubtleTextBrush}"
+                                   Text="Upshift hasn't changed anything in this game's folder." />
+                        <!-- Everything Upshift has changed in this game folder right now, with dates -->
+                        <Border CornerRadius="8" Background="{StaticResource CardSurfaceBrush}" Visibility="{x:Bind ViewModel.Selected.HasChanges, Mode=OneWay}"
+                                BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1" AutomationProperties.Name="Changes Upshift made to this game">
+                            <ItemsControl ItemsSource="{x:Bind ViewModel.Selected.Changes, Mode=OneWay}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:ChangeViewModel">
+                                        <Grid ColumnSpacing="14" Padding="14,10" BorderBrush="{StaticResource HairlineBrush}" BorderThickness="0,0,0,1">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="150" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{x:Bind Date}" FontSize="12" Foreground="{StaticResource SubtleTextBrush}" />
+                                            <StackPanel Grid.Column="1" Spacing="2">
+                                                <TextBlock Text="{x:Bind Text}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                                                <TextBlock Text="{x:Bind Detail}" FontSize="12" TextWrapping="Wrap" IsTextSelectionEnabled="True"
+                                                           Foreground="{StaticResource SubtleTextBrush}" Visibility="{x:Bind HasDetail}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Border>
                     </StackPanel>
                 </ScrollViewer>
             </Grid>
-        </Border>
+        </Grid>
     </Grid>
 </Page>

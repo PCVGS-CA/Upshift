@@ -60,32 +60,53 @@ public sealed partial class LibraryPage : Page
         // Collapsible sections open as they were last left, for every game and across restarts.
         Helpers.Sections.Bind(FilesExpander, "game.files");
         Helpers.Sections.Bind(UpscalerFilesExpander, "game.upscalerFiles");
-        Helpers.Sections.Bind(ChangesExpander, "game.changes");
         ApplyNotesState();
         RecommendationNotes.SizeChanged += (_, _) => UpdateShowAll();
+
+        // The game page's code-built parts act through the page.
+        NoticesPanel.RemoveOptiScaler = UninstallAsync;
+        LastRunPanel.OpenPerformance = () => ShowTab("performance");
 
         // Back from playing: read OptiScaler's log again for the selected game.
         AppServices.WindowActivated += () => DispatcherQueue.TryEnqueue(() => ViewModel.Selected?.RefreshLoadStatus());
 
-        // Middle-click auto-scroll in the game grid and the game panel.
+        // Middle-click auto-scroll in the game grid and on every tab of the game page.
         Helpers.AutoScroll.Attach(GamesGrid);
-        Helpers.AutoScroll.Attach(DetailsScroller);
+        foreach (var tab in Tabs) Helpers.AutoScroll.Attach(tab);
 
-        // Keep the grid's highlight in step when the view model changes the selection (after a rescan, say).
         ViewModel.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(LibraryViewModel.Selected) && !ReferenceEquals(GamesGrid.SelectedItem, ViewModel.Selected))
-                GamesGrid.SelectedItem = ViewModel.Selected;
+            if (e.PropertyName != nameof(LibraryViewModel.Selected)) return;
+            // Keep the grid's highlight in step when the view model changes the selection (after a rescan, say).
+            if (!ReferenceEquals(GamesGrid.SelectedItem, ViewModel.Selected)) GamesGrid.SelectedItem = ViewModel.Selected;
+            // On the game page: follow the game (a refreshed card is a new object), or go back when it's gone.
+            if (IsGamePageOpen)
+            {
+                if (ViewModel.Selected is { } card) LoadHeaderArt(card);
+                else CloseGamePage();
+            }
         };
 
         // After a full rescan rebuilt the list, bring the selected game back into view.
         ViewModel.ScrollToSelectedRequested += () =>
         {
-            if (ViewModel.Selected is { } selected)
+            if (ViewModel.Selected is { } selected && !IsGamePageOpen)
             {
                 GamesGrid.SelectedItem = selected;
                 GamesGrid.ScrollIntoView(selected, ScrollIntoViewAlignment.Default);
             }
+        };
+
+        // Esc and the mouse's back button return to the Library from a game page.
+        var escape = new Microsoft.UI.Xaml.Input.KeyboardAccelerator { Key = Windows.System.VirtualKey.Escape };
+        escape.Invoked += (_, args) =>
+        {
+            if (IsGamePageOpen && !_dialogOpen) { CloseGamePage(); args.Handled = true; }
+        };
+        KeyboardAccelerators.Add(escape);
+        PointerPressed += (_, args) =>
+        {
+            if (IsGamePageOpen && args.GetCurrentPoint(this).Properties.IsXButton1Pressed) { CloseGamePage(); args.Handled = true; }
         };
 
         Loaded += async (_, _) => await ViewModel.InitializeAsync();
@@ -94,6 +115,118 @@ public sealed partial class LibraryPage : Page
     private void GamesGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (GamesGrid.SelectedItem is GameCardViewModel game) ViewModel.Selected = game;
+    }
+
+    // ---------------- The game page ----------------
+
+    private ScrollViewer[] Tabs => new[] { OverviewTab, UpscalingTab, FilesTab, PerformanceTab, HistoryTab };
+
+    private bool IsGamePageOpen => GameView.Visibility == Visibility.Visible;
+
+    /// <summary>Where the Library's grid was scrolled to when a game page opened, to come back to the same place.</summary>
+    private double _libraryOffset;
+
+    private void GamesGrid_ItemClick(object sender, ItemClickEventArgs e)
+    {
+        if (e.ClickedItem is GameCardViewModel game) OpenGamePage(game);
+    }
+
+    /// <summary>Opens a game's page in place of the Library, on the Overview tab.</summary>
+    private void OpenGamePage(GameCardViewModel game)
+    {
+        _libraryOffset = GridScroller()?.VerticalOffset ?? 0;
+        ViewModel.Selected = game;
+        GamesGrid.SelectedItem = game;
+        LibraryView.Visibility = Visibility.Collapsed;
+        GameView.Visibility = Visibility.Visible;
+        ShowTab("overview");
+        LoadHeaderArt(game);
+        BackButton.Focus(FocusState.Programmatic);
+    }
+
+    /// <summary>Back to the Library: the same scroll position, the same card selected and focused.</summary>
+    private void CloseGamePage()
+    {
+        GameView.Visibility = Visibility.Collapsed;
+        LibraryView.Visibility = Visibility.Visible;
+        var selected = ViewModel.Selected;
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            GridScroller()?.ChangeView(null, _libraryOffset, null, disableAnimation: true);
+            if (selected is not null && GamesGrid.ContainerFromItem(selected) is GridViewItem item) item.Focus(FocusState.Programmatic);
+        });
+    }
+
+    private void Back_Click(object sender, RoutedEventArgs e) => CloseGamePage();
+
+    /// <summary>A narrow window: the actions go under the name, and the name gets smaller, so neither is squeezed.</summary>
+    private void Header_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        var narrow = e.NewSize.Width < 1000;
+        Grid.SetRow(HeaderActions, narrow ? 2 : 1);
+        Grid.SetColumn(HeaderActions, narrow ? 1 : 2);
+        HeaderActions.HorizontalAlignment = narrow ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+        HeaderTitle.FontSize = narrow ? 22 : 30;
+        Header.Height = narrow ? 232 : 188;
+    }
+
+    private ScrollViewer? GridScroller() => FindChild<ScrollViewer>(GamesGrid);
+
+    private static T? FindChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (var i = 0; i < Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(parent, i);
+            if (child is T found) return found;
+            if (FindChild<T>(child) is { } deeper) return deeper;
+        }
+        return null;
+    }
+
+    private void TabBar_SelectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
+    {
+        if (sender.SelectedItem is SelectorBarItem { Tag: string tag }) ShowTab(tag, fromBar: true);
+    }
+
+    /// <summary>Shows one tab ("overview", "upscaling", "files", "performance", "history").</summary>
+    private void ShowTab(string tag, bool fromBar = false)
+    {
+        var tabs = new[] { ("overview", OverviewTab), ("upscaling", UpscalingTab), ("files", FilesTab), ("performance", PerformanceTab), ("history", HistoryTab) };
+        foreach (var (name, view) in tabs) view.Visibility = name == tag ? Visibility.Visible : Visibility.Collapsed;
+        if (!fromBar && TabBar.Items.FirstOrDefault(i => (string)i.Tag == tag) is { } item) TabBar.SelectedItem = item;
+        if (tag == "overview") { InUsePanel.Rebuild(); LastRunPanel.Rebuild(); }
+    }
+
+    private CancellationTokenSource? _artCts;
+
+    /// <summary>
+    /// The header's background: the game's wide art when there is some (Steam's), otherwise its cover decoded at a few
+    /// pixels wide and spread out, which blurs it without stretching it. Downloading the wide art never holds the page up.
+    /// </summary>
+    private void LoadHeaderArt(GameCardViewModel card)
+    {
+        _artCts?.Cancel();
+        var cts = _artCts = new CancellationTokenSource();
+        var local = Core.Artwork.HeroArt.FindLocal(card.Info, AppServices.Library.ArtworkDir);
+        if (local is not null) { ShowArt(local, wide: true); return; }
+        ShowArt(card.Info.DisplayArtworkPath, wide: false);
+        _ = Task.Run(async () =>
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+            http.DefaultRequestHeaders.UserAgent.ParseAdd(AppInfo.UserAgent);
+            var path = await Core.Artwork.HeroArt.DownloadAsync(card.Info, AppServices.Library.ArtworkDir, http, cts.Token);
+            if (path is not null && !cts.IsCancellationRequested)
+                DispatcherQueue.TryEnqueue(() => { if (!cts.IsCancellationRequested && ReferenceEquals(ViewModel.Selected?.Info, card.Info)) ShowArt(path, wide: true); });
+        });
+    }
+
+    private void ShowArt(string? path, bool wide)
+    {
+        if (path is null || !File.Exists(path)) { HeaderArt.Source = null; return; }
+        var image = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage { DecodePixelWidth = wide ? 1920 : 12 };
+        image.UriSource = new Uri(path);
+        HeaderArt.Source = image;
+        HeaderArt.Opacity = wide ? 1 : 0.75;
     }
 
     private void FilterBar_SelectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
@@ -418,7 +551,9 @@ public sealed partial class LibraryPage : Page
     /// files changed since the install ("Leave them" or "Remove anyway and restore the originals"), missing backups, and
     /// whether Windows will ask for permission. Then the uninstall, and a check that the folder is back as it was.
     /// </summary>
-    private async void Uninstall_Click(object sender, RoutedEventArgs e)
+    private async void Uninstall_Click(object sender, RoutedEventArgs e) => await UninstallAsync();
+
+    private async Task UninstallAsync()
     {
         if (_dialogOpen || ViewModel.Selected is not { IsInstalledByUs: true } card || card.Info.TargetDir is not { } target) return;
 

@@ -68,15 +68,223 @@ public sealed class MeasureView : UserControl
         if (runs.Count > 2) body.Children.Add(Older(card, runs.Skip(2).ToList()));
         if (runs.Count > 0) body.Children.Add(WhatToTry(card, runs[0]));
         body.Children.Add(Subtle("Results depend on the scene you played. Treat them as a starting point."));
+        var export = new Button { Content = "Export all results…" };
+        ToolTipService.SetToolTip(export, "Every game's results on this PC as a CSV file, to combine with other PCs' results");
+        export.Click += async (_, _) => await ExportAllAsync();
+        body.Children.Add(export);
 
-        var expander = new Expander
+        // The Performance tab's main card: always open.
+        var card2 = new StackPanel { Spacing = 8 };
+        header.Padding = new Thickness(0);
+        ((TextBlock)header.Children[0]).FontSize = 15;
+        card2.Children.Add(header);
+        card2.Children.Add(body);
+        var border = new Border
         {
-            Header = header, Content = body, HorizontalAlignment = HorizontalAlignment.Stretch,
-            HorizontalContentAlignment = HorizontalAlignment.Stretch
+            Padding = new Thickness(16, 14, 16, 16), CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(1),
+            Background = Res("CardSurfaceBrush"), BorderBrush = Res("HairlineBrush"), Child = card2
         };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(expander, "Measure performance");
-        Helpers.Sections.Bind(expander, SectionKey);
-        Content = expander;
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(border, "Measure performance");
+        Content = border;
+    }
+
+    // ---------------- Sharing a result ----------------
+
+    /// <summary>The PC, for shared results (no user name, PC name or folder path).</summary>
+    private static Core.Services.PcInfo Pc()
+    {
+        var gpu = AppServices.Gpu;
+        // NVIDIA's own driver number (617.42) rather than Windows' (32.0.16.1742).
+        var driver = gpu?.Vendor == Core.Models.GpuVendor.Nvidia ? Core.Install.Dlss5.NvidiaDriver(gpu.DriverVersion) ?? gpu.DriverVersion : gpu?.DriverVersion;
+        return Core.Services.PcInfo.Read(gpu?.Name, driver);
+    }
+
+    /// <summary>
+    /// "Note and share" for one run: a preview of the result as it's shared, the note box (resolution and in-game
+    /// settings, which Upshift can't read), "Copy as text" and "Save as image".
+    /// </summary>
+    private Microsoft.UI.Xaml.Controls.Primitives.ButtonBase ShareButton(GameCardViewModel card, MeasurementRun run, bool compact)
+    {
+        Microsoft.UI.Xaml.Controls.Primitives.ButtonBase button = compact
+            ? new Button { Content = "Note and share", Padding = new Thickness(10, 3, 10, 4) }
+            : new HyperlinkButton { Content = "Note and share", Padding = new Thickness(0), FontSize = 12 };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, $"Note and share the run from {run.Utc.ToLocalTime():d MMM yyyy HH:mm}");
+        var flyout = new Flyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.Bottom };
+        button.Click += (_, _) =>
+        {
+            flyout.Content = SharePanel(card, run, flyout);
+            flyout.ShowAt(button);
+        };
+        flyout.Closed += (_, _) => Build();   // shows the saved note
+        return button;
+    }
+
+    private FrameworkElement SharePanel(GameCardViewModel card, MeasurementRun run, Flyout flyout)
+    {
+        var pc = Pc();
+        var panel = new StackPanel { Spacing = 10, Width = 420 };
+        var preview = new Border { Child = ResultCard(card.Name, run, pc) };
+        var note = new TextBox
+        {
+            Header = "Your note: resolution and in-game settings", Text = run.Note ?? "", PlaceholderText = "e.g. 2560×1440, High preset, ray tracing off",
+            AcceptsReturn = false, MaxLength = 200
+        };
+        void SaveNote()
+        {
+            if ((run.Note ?? "") == note.Text.Trim()) return;
+            run.Note = string.IsNullOrWhiteSpace(note.Text) ? null : note.Text.Trim();
+            AppServices.Measurements.SetNote(card.Info.Id, run.Id, run.Note);
+            preview.Child = ResultCard(card.Name, run, pc);
+        }
+        note.LostFocus += (_, _) => SaveNote();
+        note.KeyDown += (_, e) => { if (e.Key == Windows.System.VirtualKey.Enter) { SaveNote(); e.Handled = true; } };
+
+        var status = Subtle("");
+        var copy = new Button { Content = "Copy as text" };
+        copy.Click += (_, _) =>
+        {
+            SaveNote();
+            var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
+            package.SetText(ResultSharing.Text(card.Name, run, pc));
+            Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+            status.Text = "Copied.";
+        };
+        var image = new Button { Content = "Save as image…" };
+        image.Click += async (_, _) =>
+        {
+            SaveNote();
+            var result = await SaveImageAsync(preview.Child, card.Name, run);
+            status.Text = result ?? "";
+            // The flyout has usually closed by now (the save dialog takes the focus), so the outcome gets its own message.
+            if (result is not null && ShowDialog is not null && !flyout.IsOpen)
+                await ShowDialog(new ContentDialog
+                {
+                    Title = "Save as image", Content = new TextBlock { Text = result, TextWrapping = TextWrapping.Wrap }, CloseButtonText = "OK", XamlRoot = XamlRoot
+                });
+        };
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        buttons.Children.Add(copy);
+        buttons.Children.Add(image);
+        panel.Children.Add(preview);
+        panel.Children.Add(note);
+        panel.Children.Add(buttons);
+        panel.Children.Add(status);
+        panel.Children.Add(Subtle("Shared results never include your Windows user name, the PC's name or any folder path."));
+        return panel;
+    }
+
+    /// <summary>The result as a picture-ready card: the same lines as "Copy as text".</summary>
+    private static FrameworkElement ResultCard(string gameName, MeasurementRun run, Core.Services.PcInfo pc)
+    {
+        var lines = ResultSharing.Lines(gameName, run, pc);
+        var grid = new Grid { ColumnSpacing = 14, RowSpacing = 4 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        var row = 0;
+        foreach (var (label, value) in lines.Skip(1))
+        {
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            var l = new TextBlock { Text = label, FontSize = 12, Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 0x9A, 0xA4, 0xAE)) };
+            var strong = label is "Average" or "Low (1%)" or "Max (best second)" or "Limited by";
+            var v = new TextBlock { Text = value, FontSize = strong ? 14 : 12, FontWeight = strong ? FontWeights.SemiBold : FontWeights.Normal, TextWrapping = TextWrapping.Wrap, Foreground = White };
+            Grid.SetRow(l, row);
+            Grid.SetRow(v, row);
+            Grid.SetColumn(v, 1);
+            grid.Children.Add(l);
+            grid.Children.Add(v);
+            row++;
+        }
+        var stack = new StackPanel { Spacing = 10 };
+        stack.Children.Add(new TextBlock { Text = gameName, FontSize = 18, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Foreground = White });
+        stack.Children.Add(grid);
+        stack.Children.Add(new TextBlock { Text = "Measured with Upshift", FontSize = 11, Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 0x6F, 0xC9, 0xAE)) });
+        return new Border
+        {
+            Padding = new Thickness(18, 16, 18, 14), CornerRadius = new CornerRadius(10), Child = stack,
+            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 0x16, 0x1B, 0x22))
+        };
+    }
+
+    private static Microsoft.UI.Xaml.Media.SolidColorBrush White => new(Microsoft.UI.Colors.White);
+
+    /// <summary>
+    /// Renders the result card to a PNG first (while it's on screen: the save dialog closes the flyout), then asks where
+    /// to save it. Returns a status line, or null when cancelled.
+    /// </summary>
+    private static async Task<string?> SaveImageAsync(UIElement card, string gameName, MeasurementRun run)
+    {
+        byte[] pixels;
+        int width, height;
+        try
+        {
+            var target = new Microsoft.UI.Xaml.Media.Imaging.RenderTargetBitmap();
+            await target.RenderAsync(card, (int)(card.ActualSize.X * 2), (int)(card.ActualSize.Y * 2));
+            pixels = System.Runtime.InteropServices.WindowsRuntime.WindowsRuntimeBufferExtensions.ToArray(await target.GetPixelsAsync());
+            (width, height) = (target.PixelWidth, target.PixelHeight);
+            if (width == 0 || height == 0) return "The image couldn't be made: the result card wasn't on screen.";
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return $"The image couldn't be made: {ex.Message}"; }
+
+        Windows.Storage.StorageFile? file = null;
+        try
+        {
+            var picker = new Windows.Storage.Pickers.FileSavePicker { SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.PicturesLibrary };
+            picker.FileTypeChoices.Add("PNG image", new List<string> { ".png" });
+            picker.SuggestedFileName = SafeName($"{gameName} {run.Utc.ToLocalTime():yyyy-MM-dd HHmm}");
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(App.MainAppWindow));
+            file = await picker.PickSaveFileAsync();
+            if (file is null) return null;
+            using (var stream = await file.OpenAsync(Windows.Storage.FileAccessMode.ReadWrite))
+            {
+                stream.Size = 0;
+                var encoder = await Windows.Graphics.Imaging.BitmapEncoder.CreateAsync(Windows.Graphics.Imaging.BitmapEncoder.PngEncoderId, stream);
+                encoder.SetPixelData(Windows.Graphics.Imaging.BitmapPixelFormat.Bgra8, Windows.Graphics.Imaging.BitmapAlphaMode.Premultiplied,
+                    (uint)width, (uint)height, 192, 192, pixels);
+                await encoder.FlushAsync();
+            }
+            return $"Saved as {file.Name}.";
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The save dialog makes an empty file; don't leave it behind.
+            try { if (file is not null && new FileInfo(file.Path).Length == 0) File.Delete(file.Path); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+            return $"The image wasn't saved: {ex.Message}";
+        }
+    }
+
+    private static string SafeName(string name) => string.Concat(name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '-' : c));
+
+    /// <summary>"Export all results": every game's runs on this PC as one CSV file.</summary>
+    private async Task ExportAllAsync()
+    {
+        var names = AppServices.Library.Current.ToDictionary(g => g.Id, g => g.Name);
+        var rows = AppServices.Measurements.All()
+            .SelectMany(g => g.Runs.Select(r => (names.TryGetValue(g.GameId, out var n) ? n : "Unknown game", r)))
+            .OrderBy(r => r.Item1).ThenByDescending(r => r.r.Utc)
+            .ToList();
+        string message;
+        if (rows.Count == 0) message = "There are no results to export yet.";
+        else
+        {
+            try
+            {
+                var picker = new Windows.Storage.Pickers.FileSavePicker { SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary };
+                picker.FileTypeChoices.Add("CSV file", new List<string> { ".csv" });
+                picker.SuggestedFileName = $"Upshift results {DateTime.Now:yyyy-MM-dd}";
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(App.MainAppWindow));
+                var file = await picker.PickSaveFileAsync();
+                if (file is null) return;
+                await File.WriteAllTextAsync(file.Path, ResultSharing.Csv(rows, Pc()), new System.Text.UTF8Encoding(true));
+                message = $"{rows.Count} result{(rows.Count == 1 ? "" : "s")} exported to {file.Name}.";
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { message = $"The results weren't exported: {ex.Message}"; }
+        }
+        if (ShowDialog is not null)
+            await ShowDialog(new ContentDialog
+            {
+                Title = "Export all results", Content = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap },
+                CloseButtonText = "OK", XamlRoot = XamlRoot
+            });
     }
 
     // ---------------- Measure this game ----------------
@@ -200,7 +408,7 @@ public sealed class MeasureView : UserControl
     }
 
     /// <summary>The settings the game has right now, as the measurement records them.</summary>
-    private static MeasuredSettings Snapshot(GameCardViewModel card)
+    internal static MeasuredSettings Snapshot(GameCardViewModel card)
     {
         var dir = card.Info.TargetDir;
         var manifest = dir is null ? null : OptiScalerInstaller.ReadManifest(dir);
@@ -287,6 +495,7 @@ public sealed class MeasureView : UserControl
         Add("Max (best second)", Fps(latest.MaxFps), previous is null ? null : Fps(previous.MaxFps),
             previous is null ? null : latest.MaxFps is { } lm && previous.MaxFps is { } pm ? Diff(lm, pm) : "–", strong: true);
         Add("Length", RunLength(latest), previous is null ? null : RunLength(previous));
+        Add("Your note", latest.Note ?? "–", previous is null ? null : previous.Note ?? "–");
         Add("Limited by", VerdictText(latest), previous is null ? null : VerdictText(previous), strong: true);
         Add("GPU busy / wait", BusyWait(latest.GpuBusyMs, latest.GpuWaitMs), previous is null ? null : BusyWait(previous.GpuBusyMs, previous.GpuWaitMs));
         Add("CPU busy / wait", BusyWait(latest.CpuBusyMs, latest.CpuWaitMs), previous is null ? null : BusyWait(previous.CpuBusyMs, previous.CpuWaitMs));
@@ -308,9 +517,12 @@ public sealed class MeasureView : UserControl
             var delete = new HyperlinkButton { Content = "Delete", Padding = new Thickness(0), FontSize = 12 };
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(delete, $"Delete the run from {run.Utc.ToLocalTime():d MMM yyyy HH:mm}");
             delete.Click += (_, _) => Delete(card, run);
-            Grid.SetRow(delete, row);
-            Grid.SetColumn(delete, column);
-            grid.Children.Add(delete);
+            var links = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+            links.Children.Add(ShareButton(card, run, compact: false));
+            links.Children.Add(delete);
+            Grid.SetRow(links, row);
+            Grid.SetColumn(links, column);
+            grid.Children.Add(links);
         }
 
         var panel = new StackPanel { Spacing = 8 };
@@ -346,13 +558,16 @@ public sealed class MeasureView : UserControl
                 Text = $"{run.Utc.ToLocalTime():d MMM yyyy, HH:mm} · {Math.Round(run.AverageFps)} fps average · low points {Math.Round(run.LowFps)} fps" +
                        $" · max {Fps(run.MaxFps)} · {RunLength(run)} · {VerdictText(run)}" +
                        $" · GPU {Percent(run.GpuPercent)}, CPU {CpuText(run)}" +
-                       (run.FrameGenOn ? " · frame generation on" : "") + $" · {run.Settings.Upscaler}"
+                       (run.FrameGenOn ? " · frame generation on" : "") + $" · {run.Settings.Upscaler}" + (run.Note is { Length: > 0 } n ? $" · {n}" : "")
             });
             var delete = new Button { Content = "Delete", Padding = new Thickness(10, 3, 10, 4) };
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(delete, $"Delete the run from {run.Utc.ToLocalTime():d MMM yyyy HH:mm}");
             delete.Click += (_, _) => Delete(card, run);
-            Grid.SetColumn(delete, 1);
-            line.Children.Add(delete);
+            var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
+            actions.Children.Add(ShareButton(card, run, compact: true));
+            actions.Children.Add(delete);
+            Grid.SetColumn(actions, 1);
+            line.Children.Add(actions);
             panel.Children.Add(line);
         }
         return panel;

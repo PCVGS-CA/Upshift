@@ -287,6 +287,7 @@ public sealed partial class GameCardViewModel : ObservableObject
 
     public List<ChangeViewModel> Changes { get; }
     public bool HasChanges => Changes.Count > 0;
+    public bool HasNoChanges => Changes.Count == 0;
     public string ChangesSummary { get; } = "";
 
     // ---------------- Upscaler files ----------------

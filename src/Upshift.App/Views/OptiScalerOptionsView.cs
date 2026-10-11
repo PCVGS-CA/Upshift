@@ -120,12 +120,7 @@ public sealed class OptiScalerOptionsView : UserControl
         body.Children.Add(WithGuide(upscalerBox, catalog.Guides.Upscaler, upscalers.Select(u => (u.Id, u.Label)), gpu));
 
         // Which upscaler to choose in the game's own menu (OptiScaler replaces that one), leaving out OptiScaler's own files.
-        var addedByOpti = manifest.Added
-            .Select(f => Path.GetRelativePath(card.Info.InstallDir, Path.GetFullPath(Path.Combine(dir!, f.Path))))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var wikiInput = card.Suggestions?.InGameInput;
-        var inGamePick = InGameChoice.Pick(card.Upscalers.CoreRows, wikiInput, addedByOpti);
-        var inGameLine = InGameChoice.Line(inGamePick, wikiInput is not null, currentUpscaler == HelixSr.ChoiceId);
+        var (inGamePick, inGameLine) = InGamePick(card, manifest, currentUpscaler == HelixSr.ChoiceId);
         if (currentUpscaler == HelixSr.ChoiceId)
             body.Children.Add(Subtle("HelixSR is experimental and still in testing. It and FSR 4 both use OptiScaler's FSR slot, so FSR 4 is off while HelixSR is the upscaler. " +
                                      "OptiScaler.ini points at HelixSR's files in Upshift's shared folder; nothing of HelixSR's is put in the game folder." +
@@ -540,6 +535,21 @@ public sealed class OptiScalerOptionsView : UserControl
         return Group(toggle,
             Subtle("OptiScaler's frame-rate counter in a corner of the game. It helps you see what the game runs at before choosing a cap. " +
                    "Page Up shows or hides it while playing. Takes effect after restarting the game."));
+    }
+
+    /// <summary>
+    /// Which upscaler to choose in the game's own menu and the sentence saying so (the Overview shows it too), leaving out
+    /// the files OptiScaler's own install added.
+    /// </summary>
+    internal static (string? Pick, string? Line) InGamePick(GameCardViewModel card, InstallManifest manifest, bool helixSr)
+    {
+        var dir = card.Info.TargetDir!;
+        var addedByOpti = manifest.Added
+            .Select(f => Path.GetRelativePath(card.Info.InstallDir, Path.GetFullPath(Path.Combine(dir, f.Path))))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var wikiInput = card.Suggestions?.InGameInput;
+        var pick = InGameChoice.Pick(card.Upscalers.CoreRows, wikiInput, addedByOpti);
+        return (pick, InGameChoice.Line(pick, wikiInput is not null, helixSr));
     }
 
     /// <summary>The upscaler choice whose settings match what the ini has now.</summary>
