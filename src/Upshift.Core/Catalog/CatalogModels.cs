@@ -27,6 +27,30 @@ public sealed class UpscalerCatalog
 
     /// <summary>HelixSR (experimental): the one reviewed release Upshift may download and set up, with its hashes.</summary>
     public HelixSrRelease? HelixSr { get; set; }
+
+    /// <summary>Capcom RE Engine games and REFramework: the engine's fingerprint and the OptiScaler wiki's lists.</summary>
+    public ReEngineCatalog? ReEngine { get; set; }
+}
+
+/// <summary>
+/// RE Engine games need REFramework before OptiScaler works (OptiScaler wiki). Games are recognised by the engine's
+/// files, not by name; the two lists only decide how firm the warning is.
+/// </summary>
+public sealed class ReEngineCatalog
+{
+    public string? Notes { get; set; }
+
+    /// <summary>Files next to the exe that mark an RE Engine game (any one of them).</summary>
+    public List<string> EngineFiles { get; set; } = new();
+
+    /// <summary>Files or folders next to the exe that mean REFramework is installed (any one of them).</summary>
+    public List<string> ReFrameworkFiles { get; set; } = new();
+
+    /// <summary>Wiki titles of games the OptiScaler wiki says crash or don't work without REFramework: the firm warning.</summary>
+    public List<string> RequiresReFramework { get; set; } = new();
+
+    /// <summary>Wiki titles of RE Engine games the OptiScaler wiki says don't need REFramework: no warning.</summary>
+    public List<string> NoWarning { get; set; } = new();
 }
 
 public sealed class UpscalerFileCatalog

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-10-10",
+  "updated": "2026-10-10T18:00Z",
   "notes": "Upshift's built-in catalog. Upshift will later download a newer version of this file from its GitHub repo, so new forks and GPU support can be added without releasing a new version. The userAgent values below are fallbacks; the app sends Upshift/<its version>.",
 
   "components": [
@@ -420,5 +420,25 @@
     "toolsMb": 100,
     "generations": [ "RDNA 1", "RDNA 2", "RDNA 2 integrated" ],
     "untestedGenerations": [ "RDNA 1" ]
+  },
+  "reEngine": {
+    "notes": "Capcom RE Engine games need REFramework before OptiScaler works (OptiScaler wiki, 'Capcom RE engine games': 'Capcom RE games in general require REFramework for Optiscaler to work'). Upshift recognises them by engineFiles next to the exe, not by name, and never downloads or installs REFramework. requiresReFramework (firm warning) and noWarning hold the OptiScaler wiki's titles; checked 2026-10-10: the RE 2/3/4/7/8 and Devil May Cry 5 pages need REFramework's pd-upscaler branch, the others say 'Requires REFramework'; Monster Hunter Rise's page says REFramework isn't required. Any other RE Engine game gets the softer warning. A store name may leave out the title's number ('Resident Evil Requiem'); that still matches. Capcom's REX engine (RE Engine's successor) has no game yet: re-check engineFiles when the first REX game ships.",
+    "engineFiles": [ "re_chunk_000.pak" ],
+    "reFrameworkFiles": [ "dinput8.dll", "ReShade64.dll", "reframework" ],
+    "requiresReFramework": [
+      "Resident Evil 9 Requiem",
+      "Resident Evil 8 Village",
+      "Resident Evil 7 Biohazard",
+      "Resident Evil 4 (2023)",
+      "Resident Evil 3 (2020)",
+      "Resident Evil 2 (2019)",
+      "Devil May Cry 5",
+      "Monster Hunter Wilds",
+      "Monster Hunter Stories 3: Twisted Reflection",
+      "Dragon's Dogma 2",
+      "Onimusha: Way of the Sword",
+      "PRAGMATA"
+    ],
+    "noWarning": [ "Monster Hunter Rise" ]
   }
 }

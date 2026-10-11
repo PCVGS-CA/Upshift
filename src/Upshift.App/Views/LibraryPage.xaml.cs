@@ -193,14 +193,14 @@ public sealed partial class LibraryPage : Page
     {
         if (_dialogOpen || ViewModel.Selected is not { CanInstall: true } card || card.Info.TargetDir is not { } target) return;
 
-        // Capcom RE Engine games crash with OptiScaler without REFramework (OptiScaler's wiki). Upshift never installs it.
-        if (ReEngineGames.NeedsWarning(card.Info))
+        // Capcom RE Engine games need REFramework before OptiScaler works (OptiScaler's wiki). Upshift never installs it.
+        if (ReEngineGames.Text(ReEngineGames.For(card.Info, AppServices.Catalog.ReEngine)) is { } reText)
         {
             var warning = new ContentDialog
             {
                 XamlRoot = XamlRoot,
                 Title = "REFramework isn't installed",
-                Content = new TextBlock { Text = ReEngineGames.Warning, TextWrapping = TextWrapping.Wrap },
+                Content = new TextBlock { Text = reText, TextWrapping = TextWrapping.Wrap },
                 PrimaryButtonText = "Install anyway",
                 CloseButtonText = "Cancel",
                 DefaultButton = ContentDialogButton.Close

@@ -1,58 +1,79 @@
+using Upshift.Core.Catalog;
 using Upshift.Core.Models;
 using Upshift.Core.Wiki;
 
 namespace Upshift.Core.Detection;
 
+/// <summary>How firmly to warn before installing OptiScaler into an RE Engine game without REFramework.</summary>
+public enum ReFrameworkWarning
+{
+    /// <summary>Not an RE Engine game, REFramework is there, the wiki says it isn't needed, or the game is blocked anyway.</summary>
+    None,
+    /// <summary>The OptiScaler wiki says this game needs REFramework.</summary>
+    Confirmed,
+    /// <summary>Another RE Engine game: REFramework is usually needed.</summary>
+    Likely
+}
+
 /// <summary>
-/// Capcom RE Engine games that crash with OptiScaler unless REFramework is installed first. Upshift never downloads,
-/// bundles or installs REFramework; it only warns before installing OptiScaler into one of these games without it.
+/// Capcom RE Engine games need REFramework before OptiScaler works. Games are recognised by the engine's own files
+/// (catalog <c>reEngine.engineFiles</c>), not by name; the catalog's two lists from the OptiScaler wiki only decide
+/// how firm the warning is. Upshift never downloads, bundles or installs REFramework.
+/// <para>
+/// Capcom's REX engine is RE Engine's successor and no REX game has shipped yet. When the first one does, check
+/// whether it still has <c>re_chunk_000.pak</c> next to the exe (or what replaces it) and update engineFiles.
+/// </para>
 /// </summary>
 public static class ReEngineGames
 {
-    public const string Warning = "This game crashes with OptiScaler unless REFramework is installed first.";
+    public const string ConfirmedText = "This game crashes with OptiScaler unless REFramework is installed first.";
+    public const string LikelyText = "Capcom RE Engine games usually need REFramework before OptiScaler will work. " +
+                                     "Check that REFramework supports this game.";
 
-    /// <summary>
-    /// Taken from the OptiScaler wiki on 2026-10-10: its "Capcom RE engine games" page says "Capcom RE games in general
-    /// require REFramework for Optiscaler to work", and each of these games' pages (or Compatibility List rows) says
-    /// REFramework is required. Left out on purpose: Monster Hunter Rise (its page says REFramework "isn't required"),
-    /// and Dead Rising Deluxe Remaster and Kunitsu-Gami (no REFramework note). The wiki's titles, as it writes them.
-    /// </summary>
-    public static readonly IReadOnlyList<string> Games = new[]
+    /// <summary>The engine's files when the catalog has no reEngine section (an older online catalog).</summary>
+    private static readonly string[] DefaultEngineFiles = { "re_chunk_000.pak" };
+    private static readonly string[] DefaultReFrameworkFiles = { "dinput8.dll", "ReShade64.dll", "reframework" };
+
+    public static string? Text(ReFrameworkWarning warning) => warning switch
     {
-        "Resident Evil 9 Requiem",
-        "Resident Evil 8 Village",
-        "Resident Evil 7 Biohazard",
-        "Resident Evil 4 (2023)",
-        "Resident Evil 3 (2020)",
-        "Resident Evil 2 (2019)",
-        "Devil May Cry 5",
-        "Monster Hunter Wilds",
-        "Monster Hunter Stories 3: Twisted Reflection",
-        "Dragon's Dogma 2",
-        "Onimusha: Way of the Sword",
-        "PRAGMATA",
+        ReFrameworkWarning.Confirmed => ConfirmedText,
+        ReFrameworkWarning.Likely => LikelyText,
+        _ => null
     };
 
     /// <summary>
-    /// The RE Engine's data file, next to the exe in every RE Engine game (checked in Requiem's and Resident Evil 2's
-    /// folders). It tells "Resident Evil 4" (2023) from the 2005 game, whose store name is the same once "(2005)" goes.
+    /// The warning to show before installing OptiScaler. Anti-cheat comes first: a game Upshift won't install into
+    /// never gets this warning.
     /// </summary>
-    public const string EngineFile = "re_chunk_000.pak";
+    public static ReFrameworkWarning For(GameInfo game, ReEngineCatalog? catalog)
+    {
+        if (game.HasAntiCheat || game.TargetDir is not { } dir) return ReFrameworkWarning.None;
+        if (!IsReEngine(dir, catalog) || HasReFramework(dir, catalog)) return ReFrameworkWarning.None;
+        if (catalog is not null && Matches(game.Name, catalog.NoWarning)) return ReFrameworkWarning.None;
+        if (catalog is not null && Matches(game.Name, catalog.RequiresReFramework)) return ReFrameworkWarning.Confirmed;
+        return ReFrameworkWarning.Likely;
+    }
+
+    /// <summary>One of the engine's files is next to the exe.</summary>
+    public static bool IsReEngine(string exeDir, ReEngineCatalog? catalog) =>
+        AnyExists(exeDir, catalog is { EngineFiles.Count: > 0 } ? catalog.EngineFiles : DefaultEngineFiles);
 
     /// <summary>
-    /// The wiki's title for this game when it's on the list and its exe folder has the RE Engine's file. The store name
-    /// may leave out the wiki's number ("Resident Evil Requiem" for "Resident Evil 9 Requiem"), so the title without its
-    /// number words also counts when three or more words are left; the engine file check keeps that from matching
-    /// another game.
+    /// REFramework next to the exe, as the OptiScaler wiki installs it: its own <c>dinput8.dll</c> (the default), renamed
+    /// to <c>ReShade64.dll</c>, or the <c>reframework</c> folder it creates on its first run.
     /// </summary>
-    public static string? Match(string gameName, string? exeDir)
+    public static bool HasReFramework(string exeDir, ReEngineCatalog? catalog) =>
+        AnyExists(exeDir, catalog is { ReFrameworkFiles.Count: > 0 } ? catalog.ReFrameworkFiles : DefaultReFrameworkFiles);
+
+    /// <summary>
+    /// The game's name matches one of the wiki's titles. A store name may leave out the title's number ("Resident Evil
+    /// Requiem" for "Resident Evil 9 Requiem"), so the title without its number words also counts when three or more
+    /// words are left. Only used on games already recognised by the engine's files.
+    /// </summary>
+    public static bool Matches(string gameName, IEnumerable<string> titles)
     {
         var key = WikiMatcher.Key(gameName);
-        if (key.Length == 0) return null;
-        var title = Games.FirstOrDefault(t => Keys(t).Contains(key));
-        if (title is null) return null;
-        try { return exeDir is not null && File.Exists(Path.Combine(exeDir, EngineFile)) ? title : null; }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
+        return key.Length > 0 && titles.Any(t => Keys(t).Contains(key));
     }
 
     private static IEnumerable<string> Keys(string title)
@@ -63,22 +84,12 @@ public static class ReEngineGames
         if (words.Length >= 3 && words.Length < key.Split(' ').Length) yield return string.Join(' ', words);
     }
 
-    /// <summary>
-    /// REFramework in the exe folder, as the OptiScaler wiki installs it: its own <c>dinput8.dll</c> (the default), renamed
-    /// to <c>ReShade64.dll</c>, or the <c>reframework</c> folder it creates on its first run.
-    /// </summary>
-    public static bool HasReFramework(string exeDir)
+    private static bool AnyExists(string dir, IEnumerable<string> names)
     {
         try
         {
-            return File.Exists(Path.Combine(exeDir, "dinput8.dll"))
-                || File.Exists(Path.Combine(exeDir, "ReShade64.dll"))
-                || Directory.Exists(Path.Combine(exeDir, "reframework"));
+            return names.Any(n => File.Exists(Path.Combine(dir, n)) || Directory.Exists(Path.Combine(dir, n)));
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException) { return false; }
     }
-
-    /// <summary>True when installing OptiScaler into this game should show <see cref="Warning"/> first.</summary>
-    public static bool NeedsWarning(GameInfo game) =>
-        game.TargetDir is { } dir && Match(game.Name, dir) is not null && !HasReFramework(dir);
 }

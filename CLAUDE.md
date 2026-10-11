@@ -577,11 +577,13 @@ errors and no warnings.
     - `Services/RunMarker.cs` (`data\running\<pid>.txt`) + `HelixSrGames.PauseAfterBadExitAsync`/`ResumeAsync`
       (`helixsr-paused.json`): after a bad exit, games set to HelixSR go back to their previous upscaler; the Library's
       InfoBar offers "Turn HelixSR back on". `ui2.ps1 close` kills the app, so it counts as a bad exit; `quit` doesn't.
-  - **RE Engine:** `Core/Detection/ReEngineGames.cs`. List from the OptiScaler wiki (2026-10-10): the "Capcom RE engine
-    games" page ("require REFramework") plus each game page saying REFramework is required; Monster Hunter Rise is left
-    out (its page says not required). Match = wiki title (or the title without its number, ≥3 words left) and
-    `re_chunk_000.pak` next to the exe. REFramework present = `dinput8.dll`, `ReShade64.dll` or a `reframework` folder.
-    The install dialog's first step asks "Install anyway"/"Cancel". Resident Evil Requiem (Steam) has no REFramework now.
+  - **RE Engine (by engine, 2026-10-10):** `Core/Detection/ReEngineGames.cs` + catalog `reEngine` (`engineFiles`
+    = `re_chunk_000.pak` next to the exe, `reFrameworkFiles`, `requiresReFramework` = the wiki's confirmed titles,
+    `noWarning` = Monster Hunter Rise). Any RE Engine game without REFramework gets a warning: the firm text for the
+    confirmed list, a softer one otherwise, none for noWarning or anti-cheat games. A catalog without the section gives
+    the softer text. Title match also accepts the title without its number words (3+ words left). REX (RE Engine's
+    successor) has no game yet: re-check engineFiles when the first ships (note in the code). The install dialog's
+    first step asks Install anyway/Cancel. Catalog `updated` is now a timestamp (`2026-10-10T18:00Z`).
   - **In-game choice:** `Core/Detection/InGameChoice.cs`; wiki advice → DLSS → FSR 3.1+ → XeSS → FSR, leaving out
     OptiScaler's own added files. Shown in the OptiScaler options panel (and with HelixSR).
   - **Measure:** length 10–1800 s (`AppSettings.MeasureSeconds`), hotkey again stops early (`stop.txt`), Max FPS =
