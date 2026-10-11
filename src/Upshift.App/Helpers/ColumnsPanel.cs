@@ -32,7 +32,9 @@ public sealed class ColumnsPanel : Panel
 
     private int Effective(double width)
     {
-        var n = Math.Max(1, Columns);
+        // No more columns than the visible children ask for (a hidden card doesn't leave an empty half).
+        var asked = Children.Where(c => c.Visibility == Visibility.Visible).Select(c => GetColumn(c)).DefaultIfEmpty(0).Max() + 1;
+        var n = Math.Max(1, Math.Min(Columns, asked));
         if (double.IsInfinity(width)) return n;
         while (n > 1 && (width - Spacing * (n - 1)) / n < MinColumnWidth) n--;
         return n;

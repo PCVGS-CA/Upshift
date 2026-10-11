@@ -42,6 +42,9 @@ public sealed class AppSettings
     /// <summary>How long a measurement runs, in seconds (the last value typed; 10 to 1800).</summary>
     public int MeasureSeconds { get; set; } = Measure.MeasureThresholds.MeasureSeconds;
 
+    /// <summary>"Shader pre-build (Experimental)" in Settings. Off: nothing of it shows, and nothing is added to any game.</summary>
+    public bool ShaderPrebuild { get; set; }
+
     /// <summary>Collapsible sections the user left open (true) or closed (false), by a fixed key such as "game.changes".</summary>
     public Dictionary<string, bool> OpenSections { get; set; } = new();
 

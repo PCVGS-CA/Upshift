@@ -692,9 +692,11 @@
 
                 <!-- ======== Performance ======== -->
                 <ScrollViewer x:Name="PerformanceTab" AutomationProperties.Name="Performance page" Visibility="Collapsed">
-                    <helpers:ColumnsPanel x:Name="PerformanceColumns" Columns="1" MinColumnWidth="460" Spacing="16" Margin="24,16,24,24">
+                    <helpers:ColumnsPanel x:Name="PerformanceColumns" Columns="2" MinColumnWidth="460" Spacing="16" Margin="24,16,24,24">
                         <!-- Measure performance: PresentMon, results, bottleneck details, comparison, sharing -->
                         <views:MeasureView x:Name="MeasurePanel" helpers:ColumnsPanel.Column="0" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
+                        <!-- Pre-build shaders (Experimental): shows only while its switch in Settings is on, never for games with anti-cheat -->
+                        <views:ShaderPrebuildView x:Name="ShaderPanel" helpers:ColumnsPanel.Column="1" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
                     </helpers:ColumnsPanel>
                 </ScrollViewer>
 

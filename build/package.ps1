@@ -108,6 +108,16 @@ try {
     $notes = Join-Path $OutDir 'release-notes.md'
     [IO.File]::WriteAllText($notes, $match.Groups[1].Value.Trim() + "`n", $utf8)
 
+    # ---- "Pre-build shaders" (experimental): the native recorder and pre-build program, with Visual Studio's MSBuild ----
+    # (the dotnet CLI can't build C++; Upshift.App.csproj copies the results into the publish folder)
+    $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+    if (-not (Test-Path $vswhere)) { throw "vswhere.exe wasn't found: Visual Studio with the C++ workload is needed to build Upshift.ShaderPrebuild." }
+    $msbuild = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
+    if (-not $msbuild) { throw "Visual Studio's MSBuild with the C++ tools wasn't found (needed for Upshift.ShaderPrebuild)." }
+    foreach ($native in 'Upshift.ShaderPrebuild', 'Upshift.ShaderRecorder') {
+        Invoke-Checked "MSBuild $native" { & $msbuild "src/Upshift.ShaderPrebuild/$native.vcxproj" -nologo -v:m -p:Configuration=Release -p:Platform=x64 }
+    }
+
     # ---- Publish Release x64, self-contained ----
     if (Test-Path $PublishDir) { Remove-Item -Recurse -Force $PublishDir }
     Invoke-Checked 'dotnet publish' {
@@ -116,6 +126,9 @@ try {
     # The exe carries the icon (Explorer, the taskbar fallback); the window loads Assets\Upshift.ico next to it.
     Assert-ExeIcon (Join-Path $PublishDir 'Upshift.exe') 'published Upshift.exe'
     Assert-File (Join-Path $PublishDir 'Assets\Upshift.ico') 'published Assets\Upshift.ico'
+    foreach ($f in 'upshift_prebuild.exe', 'upshift_rec.asi') {
+        if (-not (Test-Path (Join-Path $PublishDir "ShaderPrebuild\$f"))) { throw "The published app is missing ShaderPrebuild\$f." }
+    }
 
     # ---- Pack with Velopack ----
     Invoke-Checked 'dotnet tool restore' { dotnet tool restore }

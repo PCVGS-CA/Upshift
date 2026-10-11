@@ -56,6 +56,8 @@ public sealed partial class LibraryPage : Page
         Dlss5Panel.ShowDialog = ShowDialogAsync;
         MeasurePanel.Library = ViewModel;
         MeasurePanel.ShowDialog = ShowDialogAsync;
+        ShaderPanel.ShowDialog = ShowDialogAsync;
+
 
         // Collapsible sections open as they were last left, for every game and across restarts.
         Helpers.Sections.Bind(FilesExpander, "game.files");
