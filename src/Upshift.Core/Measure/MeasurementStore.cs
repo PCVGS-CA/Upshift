@@ -37,6 +37,32 @@ public sealed class MeasurementRun
     public int? RefreshHz { get; set; }
     public MeasuredSettings Settings { get; set; } = new();
 
+    // Bottleneck details (Upshift 1.3.0). Each is null for older runs, or when its source wasn't available on the PC.
+
+    /// <summary>Per rendered frame, from PresentMon: the game's CPU work, then waiting (FrameTiming).</summary>
+    public double? CpuBusyMs { get; set; }
+    public double? CpuWaitMs { get; set; }
+    /// <summary>Per rendered frame, from PresentMon: the graphics card working on the frame, then idle.</summary>
+    public double? GpuBusyMs { get; set; }
+    public double? GpuWaitMs { get; set; }
+    /// <summary>The average time between the game's own frames, which the busy shares are worked out against.</summary>
+    public double? FrameMs { get; set; }
+    /// <summary>From Windows' counters (SystemLoad).</summary>
+    public double? GpuPercent { get; set; }
+    public double? CpuPercent { get; set; }
+    public double? BusiestCorePercent { get; set; }
+    public long? PeakVramBytes { get; set; }
+    public long? TotalVramBytes { get; set; }
+    /// <summary>The verdict (BottleneckRules), null when there was nothing to judge by.</summary>
+    [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<BottleneckVerdict>))]
+    public BottleneckVerdict? Verdict { get; set; }
+    public bool VerdictLessCertain { get; set; }
+    public bool VerdictByVSync { get; set; }
+
+    /// <summary>The saved verdict with its texts, or null.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public Bottleneck? Bottleneck => Verdict is { } v ? new Bottleneck(v, VerdictLessCertain, VerdictByVSync) : null;
+
     /// <summary>Frame generation was on: PresentMon saw generated frames, or OptiScaler's frame generation was set.</summary>
     public bool FrameGenOn => GeneratedFrames > 0 || Settings.OptiScalerFrameGenOn;
 }

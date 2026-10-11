@@ -10,7 +10,20 @@ namespace Upshift.Core.Measure;
 /// <param name="GeneratedFrames">Frames PresentMon marked as generated (frame generation), when it can tell.</param>
 /// <param name="MaxFps">The highest one-second average: the frames in the best whole second of the run. Null when the run
 /// was shorter than one whole second. A single very fast frame (a loading screen) can't set it on its own.</param>
-public sealed record FrameStats(int Frames, double Seconds, double AverageFps, double LowFps, int GeneratedFrames, bool FrameTypeKnown, double? MaxFps = null);
+/// <param name="Timing">Where each frame's time went (CPU and GPU busy and waiting), when PresentMon recorded it.</param>
+public sealed record FrameStats(int Frames, double Seconds, double AverageFps, double LowFps, int GeneratedFrames, bool FrameTypeKnown, double? MaxFps = null,
+    FrameTiming? Timing = null);
+
+/// <summary>
+/// Averages per rendered frame from PresentMon 2.6.0's default CSV (column names checked against its source,
+/// CsvOutput.cpp, and a real recording): MsCPUBusy / MsCPUWait (the game's CPU work on a frame, then waiting, e.g. in
+/// Present), MsGPUBusy / MsGPUWait (the GPU working on the frame, then idle until the next one). The "--v2_metrics"
+/// names (CPUBusy…) are accepted too. Each average is null when its column is missing or held no numbers. Generated
+/// frames are left out when PresentMon marks them: the game's CPU and GPU work belongs to the frames it rendered.
+/// </summary>
+/// <param name="FrameMs">The average time between the game's own frames: CPU busy + CPU wait when both exist.</param>
+/// <param name="VSyncShare">The share of frames presented with SyncInterval 1 or more (VSync on); null when unknown.</param>
+public sealed record FrameTiming(double? CpuBusyMs, double? CpuWaitMs, double? GpuBusyMs, double? GpuWaitMs, double FrameMs, double? VSyncShare);
 
 /// <summary>Reads PresentMon's CSV (console app 2.x).</summary>
 public static class PresentMonCsv
@@ -31,19 +44,25 @@ public static class PresentMonCsv
         var swapCol = Col("SwapChainAddress");
         var timeCol = Col("MsBetweenPresents", "FrameTime");
         var typeCol = Col("FrameType");
+        var cpuBusyCol = Col("MsCPUBusy", "CPUBusy");
+        var cpuWaitCol = Col("MsCPUWait", "CPUWait");
+        var gpuBusyCol = Col("MsGPUBusy", "GPUBusy");
+        var gpuWaitCol = Col("MsGPUWait", "GPUWait");
+        var syncCol = Col("SyncInterval");
         if (timeCol < 0) return null;
 
-        var bySwapChain = new Dictionary<string, List<(double Ms, string? Type)>>();
+        var bySwapChain = new Dictionary<string, List<Frame>>();
         string? line;
         while ((line = reader.ReadLine()) is not null)
         {
             var cells = line.Split(',');
             if (cells.Length <= timeCol) continue;
             if (pidCol >= 0 && (!int.TryParse(cells[pidCol], out var pid) || pid != processId)) continue;
-            if (!double.TryParse(cells[timeCol], NumberStyles.Float, CultureInfo.InvariantCulture, out var ms) || ms <= 0 || ms > 5000) continue;
+            if (Number(cells, timeCol) is not { } ms || ms <= 0 || ms > 5000) continue;
             var key = swapCol >= 0 && swapCol < cells.Length ? cells[swapCol] : "";
             if (!bySwapChain.TryGetValue(key, out var list)) bySwapChain[key] = list = new();
-            list.Add((ms, typeCol >= 0 && typeCol < cells.Length ? cells[typeCol].Trim() : null));
+            list.Add(new Frame(ms, typeCol >= 0 && typeCol < cells.Length ? cells[typeCol].Trim() : null,
+                Number(cells, cpuBusyCol), Number(cells, cpuWaitCol), Number(cells, gpuBusyCol), Number(cells, gpuWaitCol), Number(cells, syncCol)));
         }
 
         var frames = bySwapChain.Values.OrderByDescending(l => l.Count).FirstOrDefault();
@@ -53,8 +72,36 @@ public static class PresentMonCsv
         // The slowest 1% of frames (at least one), averaged: the frame rate the game drops to in its worst moments.
         var slowest = times.OrderByDescending(t => t).Take(Math.Max(1, times.Count / 100)).Average();
         var generated = frames.Count(f => IsGenerated(f.Type));
-        return new FrameStats(frames.Count, seconds, frames.Count / seconds, 1000.0 / slowest, generated, typeCol >= 0, MaxOneSecondFps(times));
+        return new FrameStats(frames.Count, seconds, frames.Count / seconds, 1000.0 / slowest, generated, typeCol >= 0, MaxOneSecondFps(times),
+            Timing(frames));
     }
+
+    private sealed record Frame(double Ms, string? Type, double? CpuBusy, double? CpuWait, double? GpuBusy, double? GpuWait, double? Sync);
+
+    /// <summary>The averages over the frames the game rendered itself; null when PresentMon recorded no busy/wait columns.</summary>
+    private static FrameTiming? Timing(List<Frame> all)
+    {
+        var rendered = all.Where(f => !IsGenerated(f.Type)).ToList();
+        if (rendered.Count == 0) rendered = all;
+        double? Avg(Func<Frame, double?> pick)
+        {
+            var values = rendered.Select(pick).Where(v => v is >= 0 and < 5000).Select(v => v!.Value).ToList();
+            return values.Count == 0 ? null : values.Average();
+        }
+        var cpuBusy = Avg(f => f.CpuBusy);
+        var cpuWait = Avg(f => f.CpuWait);
+        var gpuBusy = Avg(f => f.GpuBusy);
+        var gpuWait = Avg(f => f.GpuWait);
+        if (cpuBusy is null && gpuBusy is null) return null;
+        var frameMs = Avg(f => f.CpuBusy is { } b && f.CpuWait is { } w ? b + w : null) ?? rendered.Average(f => f.Ms);
+        var syncs = all.Where(f => f.Sync is not null).ToList();
+        double? vsync = syncs.Count == 0 ? null : syncs.Count(f => f.Sync >= 1) / (double)syncs.Count;
+        return new FrameTiming(cpuBusy, cpuWait, gpuBusy, gpuWait, frameMs, vsync);
+    }
+
+    /// <summary>A number from a cell; null for a missing column, "NA" or anything else that isn't a number.</summary>
+    private static double? Number(string[] cells, int column) =>
+        column >= 0 && column < cells.Length && double.TryParse(cells[column], NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : null;
 
     /// <summary>
     /// The highest one-second average: the run is cut into whole seconds by when each frame ended, and the second with

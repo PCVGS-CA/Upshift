@@ -589,6 +589,15 @@ errors and no warnings.
   - **Measure:** length 10–1800 s (`AppSettings.MeasureSeconds`), hotkey again stops early (`stop.txt`), Max FPS =
     best whole one-second average (`PresentMonCsv.MaxOneSecondFps`). PresentMon "No download" was the pinned stand-in
     release (v2.6.0 not in the cached list); `ComponentStore.IsDownloadable` accepts it.
+  - **Bottleneck details (2026-10-11):** `Core/Measure/FrameStats.cs` (`FrameTiming`: MsCPUBusy/MsCPUWait/MsGPUBusy/
+    MsGPUWait/SyncInterval, the default PresentMon 2.6.0 columns from its CsvOutput.cpp; v2 names accepted; generated
+    frames left out), `SystemSampler.cs` (PDH, 1 s: GPU Engine utilization, busiest engine type per luid; Processor
+    Information total + busiest core; GPU Adapter Memory dedicated peak; `VideoMemory` = display class registry
+    `HardwareInformation.qwMemorySize` by ven/dev), `Bottleneck.cs` (`BottleneckRules`: cap/VSync reached ≥95% →
+    frame cap; GPU busy ≥90% of the frame → card, ≤75% → processor; fallback counters GPU ≥95% / <80% + core ≥85%;
+    frame gen → less certain). Saved on `MeasurementRun` (verdict by name), shown in MeasureView. Live on this PC: all
+    counters work unelevated (RTX 4070: 12,282 MB). A WinUI window never calls Present, so PresentMon on Upshift's own
+    window records nothing (exit 0, no CSV).
   - **Test builds:** `build\package.ps1 -TestBuild N` builds `x.y.z-test.N` (notes from `## [x.y.z]`); Velopack sorts
     test.N below x.y.z. `AppUpdates.IsNewer` also treats a release as newer than its test builds.
   - **How the app was tested here:** a stand-in catalog in Claude's data copy (`catalog\remote-catalog.json` with

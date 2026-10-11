@@ -23,6 +23,8 @@ HelixSR support (experimental, still in testing), a warning for Capcom RE Engine
   - Press the hotkey again during a measurement to stop early and keep the result.
   - Each result shows how long it really ran.
   - New: **Max FPS**, the best one-second average (not the single fastest frame), in results, history and the comparison. Older results show a dash.
+  - New: **what held the frame rate back.** Each result says "Limited by your graphics card", "Limited by your processor", "Balanced" or "Limited by your frame cap" (when Upshift's frame cap or VSync sets the pace), with one line of advice: a lower upscaler quality when it's the card, frame generation when it's the processor. With frame generation on, the verdict is marked less certain.
+  - The details behind it: how long the graphics card and the processor were busy and waiting per frame (from PresentMon's recording), GPU usage, processor usage and its busiest core, and peak video memory against what the card has (from Windows' own counters, no extra download). They're saved with each result and shown in the comparison and history; older results, or a counter a PC doesn't have, show a dash.
   - While waiting, Upshift says "Waiting for you to press F10 in the game" instead of just spinning.
 - **"Which upscaler should I pick?"** on RX 6000 cards compares HelixSR with FSR 4.1.1b and suggests trying both with Measure performance.
 - **"Is it working?"** also reads HelixSR's own log and says whether its DLSS network actually ran. "Report a problem" includes that log, never HelixSR's network files.

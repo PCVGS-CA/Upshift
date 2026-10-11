@@ -220,6 +220,9 @@ public static class Measurement
         _hotkey = GlobalHotkey.TryRegister(AppServices.Settings.Current.MeasureHotkey);
         if (_hotkey is not null) _hotkey.Pressed += () => _ui?.TryEnqueue(StopEarly);
 
+        // Windows' own counters (GPU and CPU usage, video memory) for the same stretch. A missing counter only means a dash.
+        using var sampler = SystemSampler.Start();
+
         MeasureRunResult? result;
         var seconds = _seconds;
         if (_directWorkDir is not null)
@@ -236,6 +239,8 @@ public static class Measurement
         _hotkey?.Dispose();
         _hotkey = null;
         MeasuringSinceUtc = null;
+        var gpu = AppServices.Gpu;
+        var load = sampler.Stop(gpu is null ? null : VideoMemory.TotalBytes(gpu.VendorId, gpu.DeviceId));
         _ = Task.Run(() => { Beep(1320, 120); Beep(880, 120); Beep(660, 220); });
 
         var gameClosed = process.HasExited;
@@ -248,17 +253,30 @@ public static class Measurement
             return;
         }
         var stoppedEarly = result?.StoppedEarly == true;
+        var timing = stats.Timing;
+        var frameGenOn = stats.GeneratedFrames > 0 || settings.OptiScalerFrameGenOn;
+        var verdict = BottleneckRules.Judge(stats.AverageFps, timing, load, CapOf(settings), refresh, frameGenOn);
         AppServices.Measurements.Add(game.Id, new MeasurementRun
         {
             Utc = DateTime.UtcNow, AverageFps = stats.AverageFps, LowFps = stats.LowFps, MaxFps = stats.MaxFps, Frames = stats.Frames,
             Seconds = stats.Seconds, PlannedSeconds = seconds, StoppedEarly = stoppedEarly,
-            GeneratedFrames = stats.GeneratedFrames, RefreshHz = refresh, Settings = settings
+            GeneratedFrames = stats.GeneratedFrames, RefreshHz = refresh, Settings = settings,
+            CpuBusyMs = timing?.CpuBusyMs, CpuWaitMs = timing?.CpuWaitMs, GpuBusyMs = timing?.GpuBusyMs, GpuWaitMs = timing?.GpuWaitMs,
+            FrameMs = timing?.FrameMs, GpuPercent = load.GpuPercent, CpuPercent = load.CpuPercent, BusiestCorePercent = load.BusiestCorePercent,
+            PeakVramBytes = load.PeakVramBytes, TotalVramBytes = load.TotalVramBytes,
+            Verdict = verdict?.Verdict, VerdictLessCertain = verdict?.LessCertain == true, VerdictByVSync = verdict?.ByVSync == true
         });
         Finish($"Measured {game.Name} for {Length(stats.Seconds)}: {Math.Round(stats.AverageFps)} fps average, low points {Math.Round(stats.LowFps)} fps" +
                (stats.MaxFps is { } max ? $", max {Math.Round(max)} fps." : ".") +
+               (verdict is { } b ? $" {b.Title}{(b.LessCertain ? " (less certain)" : "")}." : "") +
                (stoppedEarly ? $" You stopped it early (of {Length(seconds)})." : "") +
                (gameClosed && !stoppedEarly ? $" The game closed before the end, so this covers less than {Length(seconds)}." : ""), problem: false);
     }
+
+    /// <summary>Upshift's frame cap from the recorded settings ("60 fps"), or null for "No cap".</summary>
+    private static double? CapOf(MeasuredSettings settings) =>
+        double.TryParse(settings.FrameCap.Replace("fps", "").Trim(), System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var cap) && cap > 0 ? cap : null;
 
     /// <summary>A plain reason for an empty measurement.</summary>
     private static string Why(MeasureRunResult? result, bool gameClosed)

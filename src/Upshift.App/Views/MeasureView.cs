@@ -63,6 +63,7 @@ public sealed class MeasureView : UserControl
         body.Children.Add(Subtle("Records the game's frame rate for as long as you choose, with PresentMon, Intel's free frame-timing tool " +
                                  "(downloaded from its GitHub page the first time). Nothing measured leaves this PC."));
         body.Children.Add(Controls(card));
+        if (runs.Count > 0 && VerdictBlock(runs[0]) is { } verdict) body.Children.Add(verdict);
         if (runs.Count > 0) body.Children.Add(Comparison(card, runs));
         if (runs.Count > 2) body.Children.Add(Older(card, runs.Skip(2).ToList()));
         if (runs.Count > 0) body.Children.Add(WhatToTry(card, runs[0]));
@@ -286,6 +287,12 @@ public sealed class MeasureView : UserControl
         Add("Max (best second)", Fps(latest.MaxFps), previous is null ? null : Fps(previous.MaxFps),
             previous is null ? null : latest.MaxFps is { } lm && previous.MaxFps is { } pm ? Diff(lm, pm) : "–", strong: true);
         Add("Length", RunLength(latest), previous is null ? null : RunLength(previous));
+        Add("Limited by", VerdictText(latest), previous is null ? null : VerdictText(previous), strong: true);
+        Add("GPU busy / wait", BusyWait(latest.GpuBusyMs, latest.GpuWaitMs), previous is null ? null : BusyWait(previous.GpuBusyMs, previous.GpuWaitMs));
+        Add("CPU busy / wait", BusyWait(latest.CpuBusyMs, latest.CpuWaitMs), previous is null ? null : BusyWait(previous.CpuBusyMs, previous.CpuWaitMs));
+        Add("GPU usage", Percent(latest.GpuPercent), previous is null ? null : Percent(previous.GpuPercent));
+        Add("CPU usage", CpuText(latest), previous is null ? null : CpuText(previous));
+        Add("Video memory", Vram(latest), previous is null ? null : Vram(previous));
         Add("Frame generation", Fg(latest), previous is null ? null : Fg(previous));
         Add("Upscaler", latest.Settings.Upscaler, previous?.Settings.Upscaler);
         Add("Frame gen. mode", latest.Settings.FrameGeneration, previous?.Settings.FrameGeneration);
@@ -337,7 +344,8 @@ public sealed class MeasureView : UserControl
             {
                 FontSize = 13, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center,
                 Text = $"{run.Utc.ToLocalTime():d MMM yyyy, HH:mm} · {Math.Round(run.AverageFps)} fps average · low points {Math.Round(run.LowFps)} fps" +
-                       $" · max {Fps(run.MaxFps)} · {RunLength(run)}" +
+                       $" · max {Fps(run.MaxFps)} · {RunLength(run)} · {VerdictText(run)}" +
+                       $" · GPU {Percent(run.GpuPercent)}, CPU {CpuText(run)}" +
                        (run.FrameGenOn ? " · frame generation on" : "") + $" · {run.Settings.Upscaler}"
             });
             var delete = new Button { Content = "Delete", Padding = new Thickness(10, 3, 10, 4) };
@@ -347,6 +355,43 @@ public sealed class MeasureView : UserControl
             line.Children.Add(delete);
             panel.Children.Add(line);
         }
+        return panel;
+    }
+
+    /// <summary>"Your graphics card", "Balanced (less certain)", or a dash when there was nothing to judge by.</summary>
+    private static string VerdictText(MeasurementRun run) => run.Bottleneck is { } b
+        ? b.Title.Replace("Limited by your ", "Your ") + (b.LessCertain ? " (less certain)" : "")
+        : "–";
+
+    /// <summary>"14.2 / 0.6 ms per frame"; a dash for any part PresentMon didn't record.</summary>
+    private static string BusyWait(double? busy, double? wait) =>
+        busy is null && wait is null ? "–" : $"{Ms(busy)} / {Ms(wait)} ms per frame";
+
+    private static string Ms(double? ms) => ms is { } m ? m.ToString(m < 10 ? "0.0" : "0", System.Globalization.CultureInfo.CurrentCulture) : "–";
+
+    private static string Percent(double? p) => p is { } v ? $"{Math.Round(v)}%" : "–";
+
+    /// <summary>"34% (busiest core 88%)".</summary>
+    private static string CpuText(MeasurementRun run) =>
+        run.CpuPercent is null && run.BusiestCorePercent is null ? "–"
+            : $"{Percent(run.CpuPercent)} (busiest core {Percent(run.BusiestCorePercent)})";
+
+    /// <summary>"9.8 GB peak of 12 GB".</summary>
+    private static string Vram(MeasurementRun run)
+    {
+        static string Gb(long bytes) => $"{bytes / 1024.0 / 1024 / 1024:0.0} GB";
+        return run.PeakVramBytes is null && run.TotalVramBytes is null ? "–"
+            : $"{(run.PeakVramBytes is { } p ? Gb(p) : "–")} peak of {(run.TotalVramBytes is { } t ? Gb(t) : "–")}";
+    }
+
+    /// <summary>The latest run's verdict, its advice and how sure it is.</summary>
+    private static FrameworkElement? VerdictBlock(MeasurementRun latest)
+    {
+        if (latest.Bottleneck is not { } b) return null;
+        var panel = new StackPanel { Spacing = 4 };
+        panel.Children.Add(new TextBlock { Text = b.Title + (b.LessCertain ? " (less certain)" : ""), FontWeight = FontWeights.SemiBold, FontSize = 14 });
+        panel.Children.Add(new TextBlock { Text = b.Advice, TextWrapping = TextWrapping.Wrap, FontSize = 13 });
+        if (b.Caution is { } caution) panel.Children.Add(Subtle(caution));
         return panel;
     }
 
