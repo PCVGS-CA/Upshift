@@ -1161,6 +1161,14 @@ public static partial class OptiScalerInstaller
                 c.Section.Equals(setting.Section, StringComparison.OrdinalIgnoreCase) && c.Key.Equals(setting.Key, StringComparison.OrdinalIgnoreCase));
             var before = ini.Get(setting.Section, setting.Key);
 
+            if (setting.Unrecorded)
+            {
+                if (setting.Value is null || change is not null || string.Equals(before, setting.Value, StringComparison.Ordinal)) continue;
+                ini.Set(setting.Section, setting.Key, setting.Value);
+                log.Write($"  ini [{setting.Section}] {setting.Key}: {before} -> {setting.Value} (a change made outside Upshift, undone)");
+                continue;
+            }
+
             if (setting.Value is null)
             {
                 if (change is null) continue;

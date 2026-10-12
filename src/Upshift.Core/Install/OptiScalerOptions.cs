@@ -6,7 +6,9 @@ using Upshift.Core.Models;
 namespace Upshift.Core.Install;
 
 /// <summary>One OptiScaler.ini value to write. A null Value means "put back what the file had before this app changed it".</summary>
-public sealed record IniSetting(string Section, string Key, string? Value);
+/// <param name="Unrecorded">Undoes a change made outside Upshift (e.g. by an earlier test kit): the value is written, but not recorded as
+/// one of Upshift's changes, because the file goes back to how it was before that outside change.</param>
+public sealed record IniSetting(string Section, string Key, string? Value, bool Unrecorded = false);
 
 public sealed record UpscalerChoice(string Id, string Label, IReadOnlyList<IniSetting> Settings);
 

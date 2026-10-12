@@ -79,7 +79,7 @@ public sealed class ShaderPrebuildView : CardPart
         // ---- What's learned ----
         var status = Text("Counting what's learned…", 13);
         panel.Children.Add(status);
-        _ = CountAsync(gameDir, running, status);
+        _ = CountAsync(gameDir, running, learning, status);
 
         // ---- Pre-build now ----
         var isThisGame = PrebuildSession.GameId == game.Id;
@@ -126,7 +126,7 @@ public sealed class ShaderPrebuildView : CardPart
         Content = Wrap(panel);
     }
 
-    private async Task CountAsync(string gameDir, bool running, TextBlock status)
+    private async Task CountAsync(string gameDir, bool running, bool learning, TextBlock status)
     {
         var gpu = AppServices.Gpu;
         var (libraries, waiting, bytes) = await Task.Run(() =>
@@ -141,7 +141,7 @@ public sealed class ShaderPrebuildView : CardPart
             ? $"{count:N0} shaders learned for {gpu?.Name ?? "this graphics card"} · {Size(bytes)}"
             : libraries.Count > 0
                 ? $"Nothing learned for {gpu?.Name ?? "this graphics card"} yet; learned on {string.Join(", ", libraries.Select(l => l.Model.Name).Distinct())}."
-                : "Nothing learned yet. Turn learning on, then play the game normally.";
+                : learning ? "Nothing learned yet: play the game normally, and what it builds is learned." : "Nothing learned yet. Turn learning on, then play the game normally.";
         if (waiting > 0) text += $" {waiting} recording{(waiting == 1 ? "" : "s")} will be added once the game is closed.";
         status.Text = text;
     }
@@ -162,6 +162,10 @@ public sealed class ShaderPrebuildView : CardPart
 
     private FrameworkElement TestTools(GameCardViewModel card, string gameDir, string program, bool running)
     {
+        // Intel: Upshift doesn't know where Intel's driver keeps its shader cache, so it can't clear or restore it fairly.
+        if (AppServices.EffectiveGpu?.Vendor == Core.Models.GpuVendor.Intel)
+            return Text("Test tools aren't available on Intel graphics: Upshift doesn't know where Intel's driver keeps its shader cache, so it can't " +
+                        "clear it or put it back, and a before-and-after comparison wouldn't be fair.", 12, subtle: true);
         var caches = new ShaderCaches(AppServices.DataDir);
         var body = new StackPanel { Spacing = 8 };
         body.Children.Add(Text("For comparing a cold start with a pre-built one, on this PC or several. Windows and the graphics driver keep one shader cache " +
@@ -187,24 +191,37 @@ public sealed class ShaderPrebuildView : CardPart
         return expander;
     }
 
+    /// <summary>
+    /// Clear, after showing exactly what moves and where its backup goes. Refused while the game runs (checked again just
+    /// before clearing, in case it was started while the question was open).
+    /// </summary>
     private async Task ClearAsync(ShaderCaches caches, string gameName, string program)
     {
-        if (IsRunning(program)) { await ShowLinesAsync("Clear driver shader cache", new() { "Close the game first." }); return; }
+        if (IsRunning(program)) { await ShowLinesAsync("Clear driver shader cache", new() { $"{gameName} is running. Close it first: its shaders can't be cleared while it uses them." }); return; }
         if (ShowDialog is null) return;
+        var preview = await Task.Run(caches.Preview);
+        var panel = new StackPanel { Spacing = 8 };
+        panel.Children.Add(Text("These caches are shared by every game on this PC: each game builds its shaders once again the next time it starts. " +
+                                "Nothing is deleted. Each cache's files move to a backup folder beside it:", 13));
+        if (preview.Count == 0) panel.Children.Add(Text("No shader caches were found on this PC, so there's nothing to clear.", 13));
+        foreach (var item in preview)
+        {
+            var block = new StackPanel { Spacing = 1 };
+            block.Children.Add(Text($"{item.Name}: {item.Files:N0} files, {Size(item.Bytes)}", 13, bold: true));
+            block.Children.Add(Text($"From  {item.Path}", 12, subtle: true));
+            block.Children.Add(Text($"To    {item.BackupPath}", 12, subtle: true));
+            panel.Children.Add(block);
+        }
+        panel.Children.Add(Text(caches.HasBackup
+            ? "A backup from an earlier clear is already waiting: Restore puts that one back, and this clear's folders stay beside it (listed after the restore, to delete by hand)."
+            : "Restore backup puts these files back. Files a running program has open stay where they are.", 12, subtle: true));
         var answer = await ShowDialog(new ContentDialog
         {
-            XamlRoot = XamlRoot, Title = "Clear the driver shader cache?",
-            Content = new TextBlock
-            {
-                TextWrapping = TextWrapping.Wrap,
-                Text = "The graphics driver's and Windows' shader caches are moved aside, for every game on this PC: each game builds its shaders once again " +
-                       "the next time it starts. " + (caches.HasBackup
-                           ? "A backup from an earlier clear is already waiting: Restore puts that one back, and this clear's files are kept beside it."
-                           : "The files are the backup: Restore puts them back.")
-            },
-            PrimaryButtonText = "Clear", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close
+            XamlRoot = XamlRoot, Title = "Clear the driver shader cache?", Content = new ScrollViewer { Content = panel, MaxHeight = 440 },
+            PrimaryButtonText = "Clear", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close, IsPrimaryButtonEnabled = preview.Count > 0
         });
         if (answer != ContentDialogResult.Primary) return;
+        if (IsRunning(program)) { await ShowLinesAsync("Clear driver shader cache", new() { $"{gameName} was started meanwhile, so nothing was cleared." }); return; }
         await ShowLinesAsync("Driver shader cache cleared", caches.Clear(gameName));
     }
 

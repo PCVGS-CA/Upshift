@@ -343,6 +343,18 @@ public sealed partial class LibraryPage : Page
             if (await ShowDialogAsync(warning) != ContentDialogResult.Primary) return;
         }
 
+        // Battle.net games: mostly online, where changed files can get players banned.
+        if (card.Info.Source == Core.Models.GameSourceKind.BattleNet)
+        {
+            var warning = new ContentDialog
+            {
+                XamlRoot = XamlRoot, Title = "Battle.net game",
+                Content = new TextBlock { Text = GameNoticesView.BattleNetText, TextWrapping = TextWrapping.Wrap },
+                PrimaryButtonText = "Install anyway", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close
+            };
+            if (await ShowDialogAsync(warning) != ContentDialogResult.Primary) return;
+        }
+
         var component = await ViewModel.PrepareOptiScalerAsync();
         if (component is null) return;
 

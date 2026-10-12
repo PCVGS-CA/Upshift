@@ -48,6 +48,26 @@ public sealed class ShaderCaches
     /// <summary>When the backup was made, or null.</summary>
     public DateTime? BackupTime => HasBackup ? ShaderLibrary.ParseStamp(SafeRead(Marker).Trim()) : null;
 
+    /// <summary>What a clear would move: each cache found, how many files and how much, and the folder its backup goes to.</summary>
+    public sealed record PreviewItem(string Name, string Path, int Files, long Bytes, string BackupPath);
+
+    public List<PreviewItem> Preview()
+    {
+        var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+        var items = new List<PreviewItem>();
+        foreach (var cache in Caches)
+        {
+            try
+            {
+                if (!Directory.Exists(cache.Path)) continue;
+                var files = new DirectoryInfo(cache.Path).EnumerateFiles("*", new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true }).ToList();
+                items.Add(new PreviewItem(cache.Name, cache.Path, files.Count, files.Sum(f => f.Length), $"{cache.Path}.moved-{stamp}"));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
+        return items;
+    }
+
     /// <summary>Moves every cache's files aside. Returns one line per cache, for the user.</summary>
     public List<string> Clear(string forGame)
     {

@@ -598,6 +598,28 @@ errors and no warnings.
     frame gen → less certain). Saved on `MeasurementRun` (verdict by name), shown in MeasureView. Live on this PC: all
     counters work unelevated (RTX 4070: 12,282 MB). A WinUI window never calls Present, so PresentMon on Upshift's own
     window records nothing (exit 0, no CSV).
+  - **Game page (2026-10-11, fae1288):** `LibraryPage.xaml` is now the Library grid (full width) or a game page (header
+    with art, tabs Overview / Upscaling / Files / Performance / History); `ItemClick` opens it, Back/Esc/XButton1 return
+    (scroll offset restored). `Helpers/ColumnsPanel` lays cards in columns (no more than visible children ask for; one
+    column stacks in document order). `Views/OverviewParts.cs`: `GameNoticesView` (REFramework notice, Battle.net),
+    `InUseView`, `LastRunView`, `UserFilesSummaryView`. `Core/Artwork/HeroArt` (Steam `appcache\librarycache\<appid>\…
+    \library_hero.jpg`, else CDN, saved to `artwork\hero`); others get the cover decoded at 12 px wide (blur). Sharing:
+    `Core/Measure/ResultSharing` (text, CSV), `Core/Services/PcInfo` (no user/PC name, no paths), run `Note`.
+  - **Shader pre-build (2026-10-11, 2f2a786), Settings switch `ShaderPrebuild`, off by default:**
+    - Native: `src/Upshift.ShaderPrebuild` (two .vcxproj, `$(DefaultPlatformToolset)`, static CRT, Release x64):
+      `upshift_rec.asi` (recorder, writer thread; never waits at exit) and `upshift_prebuild.exe` (`--prebuild <exe>
+      --dir <gameDir>`, copies itself under the game's name, reads `library\<model>.bin`, prints `card` / `progress` /
+      `result built failed seconds threads different` / `error`). `Upshift.App.csproj` builds them with VS MSBuild and
+      copies them to `ShaderPrebuild\`; `package.ps1` builds them via vswhere and checks the publish folder.
+    - Core `ShaderPrebuild/`: `ShaderLibrary` (merge into one library per card model, `KitUndo`), `ShaderCaches` (test
+      tools, the kit's scripts ported; no Intel cache), `PrebuildReport`, `PrebuildRunner`. Data: `%LocalAppData%\Upshift
+      \shaderwarm` (same as the kit). App: `Services/ShaderPrebuildGames` (+ `PrebuildSession`), `Views/ShaderPrebuildView`.
+    - The old kit's four values (`[Plugins] Path/LoadAsiPlugins`, `[Log] LogToFile/LogLevel`) are undone by learning off
+      (`IniSetting.Unrecorded`): on a copy of The Witcher 3's ini this gives exactly `a590e925…`. W3's record hash
+      (`0b9ffc8f…`) still won't match: it didn't before the kit either.
+    - Tested: recorder → merge → real pre-build of 500 pipelines on the RTX 4070 (0 failed, 0 different), learning on/off
+      byte for byte, the card in the app on a throwaway game. Not tested: the recorder inside a real game, Clear on real
+      caches, the GitHub build of the native projects.
   - **Test builds:** `build\package.ps1 -TestBuild N` builds `x.y.z-test.N` (notes from `## [x.y.z]`); Velopack sorts
     test.N below x.y.z. `AppUpdates.IsNewer` also treats a release as newer than its test builds.
   - **How the app was tested here:** a stand-in catalog in Claude's data copy (`catalog\remote-catalog.json` with

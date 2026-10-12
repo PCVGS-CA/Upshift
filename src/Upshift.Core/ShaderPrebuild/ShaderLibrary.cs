@@ -53,12 +53,28 @@ public static class ShaderLibrary
         new IniSetting("Plugins", "LoadAsiPlugins", null),
     };
 
-    /// <summary>OptiScaler's own defaults, for a value that was already the recorder's before Upshift recorded it.</summary>
-    public static List<IniSetting> DefaultSettings() => new()
+    /// <summary>
+    /// The earlier shader test kit (before this feature was in Upshift) set four OptiScaler.ini values by hand: [Plugins]
+    /// Path and LoadAsiPlugins (the recorder), and [Log] LogToFile and LogLevel. In every game it touched they were all
+    /// "auto" before (its own record of the changes says so). When the recorder's path is in the ini without Upshift having
+    /// recorded setting it, the kit set it: each of the four that still has the kit's value, and that Upshift didn't
+    /// record changing, goes back to "auto", not recorded as Upshift's change, since the file returns to how it was before
+    /// the kit. Empty when the kit's values aren't there.
+    /// </summary>
+    public static List<IniSetting> KitUndo(IniFile ini, IEnumerable<IniChange> recorded, string dataDir)
     {
-        new IniSetting("Plugins", "Path", OptiScalerOptions.Auto),
-        new IniSetting("Plugins", "LoadAsiPlugins", OptiScalerOptions.Auto),
-    };
+        var changes = recorded.ToList();
+        bool Recorded(string section, string key) => changes.Any(c => c.Section.Equals(section, StringComparison.OrdinalIgnoreCase) && c.Key.Equals(key, StringComparison.OrdinalIgnoreCase));
+        if (!IsLearning(ini, dataDir) || Recorded("Plugins", "Path")) return new();
+        var kit = new (string Section, string Key, string Value)[]
+        {
+            ("Plugins", "Path", PluginsDir(dataDir)), ("Plugins", "LoadAsiPlugins", "true"), ("Log", "LogToFile", "true"), ("Log", "LogLevel", "2")
+        };
+        return kit.Where(k => !Recorded(k.Section, k.Key)
+                              && string.Equals(ini.Get(k.Section, k.Key)?.Trim().TrimEnd('\\'), k.Value.TrimEnd('\\'),StringComparison.OrdinalIgnoreCase))
+                  .Select(k => new IniSetting(k.Section, k.Key, OptiScalerOptions.Auto, Unrecorded: true))
+                  .ToList();
+    }
 
     /// <summary>The game's OptiScaler.ini loads the recorder.</summary>
     public static bool IsLearning(IniFile ini, string dataDir) =>

@@ -50,6 +50,10 @@ public abstract class CardPart : UserControl
 /// </summary>
 public sealed class GameNoticesView : CardPart
 {
+    /// <summary>The Battle.net warning (Overview, and before installing OptiScaler).</summary>
+    public const string BattleNetText = "Most Battle.net games are played online. Online games can ban players for changed game files, so check that this game " +
+                                        "allows mods before installing OptiScaler. Upshift's anti-cheat check can't see every online game's protection.";
+
     /// <summary>"Remove OptiScaler" in the REFramework notice: the page's own uninstall, which explains itself.</summary>
     public Func<Task>? RemoveOptiScaler { get; set; }
 
@@ -65,8 +69,7 @@ public sealed class GameNoticesView : CardPart
                 panel.Children.Add(new InfoBar
                 {
                     IsOpen = true, IsClosable = false, Severity = InfoBarSeverity.Warning, Title = "Battle.net game",
-                    Message = "Most Battle.net games are played online. Online games can ban players for changed game files, so check that this game " +
-                              "allows mods before installing OptiScaler. Upshift's anti-cheat check can't see every online game's protection."
+                    Message = BattleNetText
                 });
         }
         Content = panel;

@@ -75,16 +75,13 @@ public static class ShaderPrebuildGames
                 var result = await Configure(game, ShaderLibrary.LearnSettings(AppServices.DataDir));
                 return result.Success ? null : result.Message;
             }
-            var back = await Configure(game, ShaderLibrary.PutBackSettings());
-            if (!back.Success) return back.Message;
-            // Values that were already the recorder's before Upshift recorded them (an earlier test kit set them by hand)
-            // go back to OptiScaler's defaults instead.
-            if (IsLearning(game))
-            {
-                var defaults = await Configure(game, ShaderLibrary.DefaultSettings());
-                if (!defaults.Success) return defaults.Message;
-            }
-            return null;
+            // The earlier test kit's values (set by hand, never recorded by Upshift) go back to what they were before it;
+            // otherwise Upshift's own two changes are put back.
+            var kit = Ini(game) is { } ini && OptiScalerInstaller.ReadManifest(game.TargetDir!) is { } manifest
+                ? ShaderLibrary.KitUndo(ini, manifest.IniChanges, AppServices.DataDir)
+                : new List<IniSetting>();
+            var back = await Configure(game, kit.Count > 0 ? kit : ShaderLibrary.PutBackSettings());
+            return back.Success ? null : back.Message;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { return ex.Message; }
     }
