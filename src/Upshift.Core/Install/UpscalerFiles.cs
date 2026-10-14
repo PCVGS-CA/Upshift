@@ -254,10 +254,10 @@ public static class UpscalerFiles
         if (OptiScalerInstaller.ReadManifest(dir) is { Removed: false } manifest)
         {
             var replaced = manifest.Replaced.FirstOrDefault(f => SamePath(dir, f.Path, fullPath));
-            if (replaced is not null || manifest.Added.Any(f => SamePath(dir, f.Path, fullPath)))
+            if ((replaced ?? manifest.Added.FirstOrDefault(f => SamePath(dir, f.Path, fullPath))) is { } entry)
             {
                 var backup = replaced?.Backup is { } b ? Path.Combine(dir, b) : null;
-                return new OptiScalerFile(manifest.Version, replaced is not null,
+                return new OptiScalerFile(OptiScalerInstaller.VersionOfFile(dir, manifest, entry), replaced is not null,
                     backup is not null && File.Exists(backup) ? FileVersions.Read(backup) : null);
             }
         }

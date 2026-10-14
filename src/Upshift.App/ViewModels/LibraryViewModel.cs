@@ -238,6 +238,10 @@ public sealed partial class LibraryViewModel : ObservableObject
         RunGameUpdateAsync(card, p => GameUpdates.SwitchToDlss5Async(card.Info, backend, runtime, p));
 
     /// <summary>Back to the regular OptiScaler the game had before the switch.</summary>
+    /// <summary>Moves the game from a replaced DLSS 5 build to its replacement (see GameUpdates.MoveDlss5BuildAsync).</summary>
+    public Task<InstallResult?> MoveDlss5BuildAsync(GameCardViewModel card, Core.Catalog.NeuralBackend backend) =>
+        RunGameUpdateAsync(card, p => GameUpdates.MoveDlss5BuildAsync(card.Info, backend, p));
+
     public Task<InstallResult?> SwitchBackAsync(GameCardViewModel card) =>
         RunGameUpdateAsync(card, p => GameUpdates.SwitchBackAsync(card.Info, p));
 

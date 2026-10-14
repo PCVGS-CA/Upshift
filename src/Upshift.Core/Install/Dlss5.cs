@@ -33,6 +33,9 @@ public sealed class Dlss5Status
 public static class Dlss5
 {
     public const string Section = "DlssNr";
+
+    /// <summary>DLSS 5 settings carried when a game moves from a replaced DLSS 5 build to its replacement.</summary>
+    public static readonly string[] CarriedKeys = { "Enabled", "ToggleKey", "TransferStrength", "ColourStrength", "WorkingScale", "WhitePointSource" };
     public const string NvidiaFileName = "nvngx_dlssnr.dll";
     private static readonly string[] NvidiaSigner = { "NVIDIA Corporation" };
 

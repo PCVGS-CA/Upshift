@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-10-10T18:00Z",
+  "updated": "2026-10-14T12:00Z",
   "notes": "Upshift's built-in catalog. Upshift will later download a newer version of this file from its GitHub repo, so new forks and GPU support can be added without releasing a new version. The userAgent values below are fallbacks; the app sends Upshift/<its version>.",
 
   "components": [
@@ -24,7 +24,21 @@
       "assetPattern": "(?i)^OptiScaler-DLSSNR-.*\\.zip$",
       "pinnedVersion": "v0.2.0-dlssnr",
       "installable": true,
-      "notes": "Checked v0.2.0-dlssnr (2026-09-28): OptiScaler.dll, OptiScaler.ini, the forwarder nvngx.dll_dlssnr.dll, and the FSR/XeSS DLLs under OptiScaler\\. No nvngx_dlssnr.dll (the author won't ship it). Settings in [DlssNr]: Enabled (default off), ToggleKey (unbound), TransferStrength, ColourStrength, WorkingScale (model resolution, up to 2.0). Needs driver 616.56+."
+      "replacedBy": "optiscaler-dlss5",
+      "notes": "Replaced by optiscaler-dlss5 (2026-10-14): games on it are offered a move. Checked v0.2.0-dlssnr (2026-09-28): OptiScaler.dll, OptiScaler.ini, the forwarder nvngx.dll_dlssnr.dll, and the FSR/XeSS DLLs under OptiScaler\\. No nvngx_dlssnr.dll (the author won't ship it). Settings in [DlssNr]: Enabled (default off), ToggleKey (unbound), TransferStrength, ColourStrength, WorkingScale (model resolution, up to 2.0). Needs driver 616.56+."
+    },
+    {
+      "id": "optiscaler-dlss5",
+      "name": "OptiScaler DLSS 5 (Skynizz)",
+      "kind": "injector",
+      "description": "OptiScaler fork that adds NVIDIA DLSS 5 Neural Rendering, cheaper and steadier (the model before the upscaler, an edit cache). Needs the user's own nvngx_dlssnr.dll.",
+      "repo": "Skynizz/optiscaler-dlss5",
+      "assetPattern": "(?i)^OptiScaler-DLSS5-[\\d.]+-win-x64\\.zip$",
+      "pinnedVersion": "v1.2.1",
+      "installable": true,
+      "packageFiles": [ "OptiScaler.dll", "OptiScaler.ini", "nvngx.dll_dlssnr.dll" ],
+      "overlay": true,
+      "notes": "Checked v1.2.1 (2026-10-14, GPL-3.0, zip SHA-256 0d5b2488...ec6, also GitHub's digest): DLSS5-Optimised\\ with OptiScaler.dll (the fork's own OptiScaler build), OptiScaler.ini and the forwarder nvngx.dll_dlssnr.dll, plus its own installer (INSTALL.bat, install.py), README and tools\\, which Upshift never copies (packageFiles). No FSR/XeSS/fakenvapi files, so it goes on top of the installed OptiScaler (overlay). No nvngx_dlssnr.dll. [DlssNr] has the keys Upshift writes (Enabled, ToggleKey, TransferStrength, ColourStrength, WorkingScale) plus PreSr, CacheEnabled, CacheInterval, Passes, Style and more; its installer sets PreSr=true, CacheEnabled=true, CacheInterval=1 (its Quality preset). Official OptiScaler has no Neural Rendering yet (v0.9.4; PR #1116 open on 2026-10-14)."
     },
     {
       "id": "amd-nr",
@@ -149,8 +163,8 @@
     },
     {
       "id": "dlssnr",
-      "name": "OptiScaler DLSSNR",
-      "componentId": "optiscaler-dlssnr",
+      "name": "OptiScaler DLSS 5 (Skynizz)",
+      "componentId": "optiscaler-dlss5",
       "vendor": "Nvidia",
       "generations": [ "Blackwell" ],
       "needsNvidiaDll": true,
@@ -160,8 +174,8 @@
     },
     {
       "id": "dlssnr-older-rtx",
-      "name": "OptiScaler DLSSNR",
-      "componentId": "optiscaler-dlssnr",
+      "name": "OptiScaler DLSS 5 (Skynizz)",
+      "componentId": "optiscaler-dlss5",
       "vendor": "Nvidia",
       "generations": [ "Ada Lovelace", "Ampere", "Turing" ],
       "needsNvidiaDll": true,

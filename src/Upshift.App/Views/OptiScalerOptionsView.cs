@@ -418,8 +418,8 @@ public sealed class OptiScalerOptionsView : UserControl
     }
 
     /// <summary>
-    /// "Frame cap": one whole-number box; empty means no cap. Saved when Enter is pressed or the box loses focus (and
-    /// by its clear button), as [Framerate] FramerateLimit, which OptiScaler applies through Reflex. The hint's numbers
+    /// "Frame cap": one whole-number box; empty (or 0) means no cap, and the lowest cap is 10. Saved when Enter is pressed
+    /// or the box loses focus (and by its clear button), as [Framerate] FramerateLimit, which OptiScaler applies through Reflex. The hint's numbers
     /// come from the monitor (the main one, or the one picked when there are several), at the rate set in Windows.
     /// </summary>
     private FrameworkElement FrameCapSection(GameCardViewModel card, IniFile ini, GpuInfo? gpu)
@@ -431,11 +431,15 @@ public sealed class OptiScalerOptionsView : UserControl
 
         var number = new NumberBox
         {
-            PlaceholderText = "No cap", Minimum = 1, Maximum = 1000, Width = 140,
+            // No Minimum/Maximum: the NumberBox clamps to them itself (an empty box or 0 came back as 1). The range is
+            // applied in ValueChanged instead.
+            PlaceholderText = "No cap", Width = 140,
             SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Hidden, AcceptsExpression = false,
             ValidationMode = NumberBoxValidationMode.InvalidInputOverwritten,
             Value = saved ?? double.NaN
         };
+        var hint = Subtle("");
+        var tooHigh = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap, Text = "This is higher than your screen can show, so it won't have much effect." };
         var clear = new Button
         {
             Content = new FontIcon { Glyph = "\uE711", FontSize = 11 }, Padding = new Thickness(8, 7, 8, 7),
@@ -443,10 +447,18 @@ public sealed class OptiScalerOptionsView : UserControl
         };
         ToolTipService.SetToolTip(clear, "Clear (no cap)");
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(clear, "Clear the frame cap");
-        clear.Click += (_, _) => number.Value = double.NaN;   // ValueChanged saves it
+        clear.Click += async (_, _) =>
+        {
+            _building = true;
+            number.Value = double.NaN;
+            number.Text = "";
+            _building = false;
+            Refresh();
+            if (saved is null) return;
+            saved = null;
+            await Save(card, OptiScalerOptions.FrameCapSettings(null));
+        };
 
-        var hint = Subtle("");
-        var tooHigh = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap, Text = "This is higher than your screen can show, so it won't have much effect." };
 
         void Refresh()
         {
@@ -463,9 +475,15 @@ public sealed class OptiScalerOptionsView : UserControl
         number.ValueChanged += async (_, e) =>
         {
             if (_building) return;
-            double? value = double.IsNaN(e.NewValue) ? null : Math.Round(e.NewValue);
-            // Whole numbers only: 72.6 becomes 73 (shown and saved as 73).
-            if (value is { } v && v != e.NewValue) number.Value = v;
+            var value = OptiScalerOptions.FrameCapFromBox(e.NewValue);
+            // Whole numbers from 10 to 1000: 72.6 becomes 73, 5 becomes 10; empty or 0 is no cap (the box is emptied).
+            if (value is { } v ? v != e.NewValue : !double.IsNaN(e.NewValue))
+            {
+                _building = true;
+                number.Value = value ?? double.NaN;
+                if (value is null) number.Text = "";
+                _building = false;
+            }
             Refresh();
             if (value == saved) return;
             saved = value;

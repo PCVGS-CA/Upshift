@@ -110,7 +110,8 @@ public static class GameUpdates
     /// downloads it (and AMD-NR's runtime), keeps the user's OptiScaler.ini settings like an update, copies in the
     /// user's DLSS 5 file for NVIDIA, sets the runtime for AMD, and saves an exact return point for "Switch back".
     /// </summary>
-    public static Task<InstallResult> SwitchToDlss5Async(GameInfo game, NeuralBackend backend, NeuralRuntime? runtime, IProgress<string>? progress) =>
+    public static Task<InstallResult> SwitchToDlss5Async(GameInfo game, NeuralBackend backend, NeuralRuntime? runtime, IProgress<string>? progress,
+        IReadOnlyList<IniSetting>? carried = null) =>
         RunAsync(game, progress, async manifest =>
         {
             if (game.HasAntiCheat) return Fail("Installs are blocked for games with anti-cheat.");
@@ -150,10 +151,26 @@ public static class GameUpdates
                 Version = version,
                 AddFileFrom = userFile,
                 AddFileAs = userFile is null ? null : Dlss5.NvidiaFileName,
-                // AMD-NR asks for its runtime on first launch unless it's set; preselected for the card.
-                IniSettings = runtime?.IniValue is { } value ? new List<IniSetting> { new(Dlss5.Section, "NrBackend", value) } : new()
+                KeepOldFiles = fork.Overlay,
+                IniSettings = SwitchSettings(target.Folder, runtime, carried)
             });
         });
+
+    /// <summary>
+    /// The settings a switch writes: AMD-NR's runtime (asked on first launch unless set; preselected for the card), and
+    /// DLSS 5 settings carried from a replaced build, each only when the new build's ini has that key.
+    /// </summary>
+    private static List<IniSetting> SwitchSettings(string sourceFolder, NeuralRuntime? runtime, IReadOnlyList<IniSetting>? carried)
+    {
+        var settings = new List<IniSetting>();
+        if (runtime?.IniValue is { } value) settings.Add(new(Dlss5.Section, "NrBackend", value));
+        if (carried is { Count: > 0 } && File.Exists(Path.Combine(sourceFolder, "OptiScaler.ini")))
+        {
+            var shipped = IniFile.Load(Path.Combine(sourceFolder, "OptiScaler.ini"));
+            settings.AddRange(carried.Where(c => shipped.Get(c.Section, c.Key) is not null));
+        }
+        return settings;
+    }
 
     /// <summary>Returns the game to the regular OptiScaler it had before the switch, keeping settings changed since.</summary>
     public static Task<InstallResult> SwitchBackAsync(GameInfo game, IProgress<string>? progress) =>
@@ -169,6 +186,38 @@ public static class GameUpdates
                 TargetDir = game.TargetDir!
             });
         });
+
+    /// <summary>Games where Upshift installed this component (e.g. a DLSS 5 build that was replaced).</summary>
+    public static List<GameInfo> GamesOnComponent(string componentId) =>
+        AppServices.Library.Current
+            .Where(g => g.TargetDir is not null && OptiScalerInstaller.ReadManifest(g.TargetDir) is { Removed: false } m && m.ComponentId == componentId)
+            .ToList();
+
+    /// <summary>
+    /// Moves a game from a DLSS 5 build Upshift replaced (Dagherbou's) to the one that replaced it: switch back to the
+    /// regular OptiScaler (restored exactly), then switch to the new build, carrying the DLSS 5 settings the game had
+    /// (the regular build has no [DlssNr] section, so switching back alone would drop them).
+    /// </summary>
+    public static async Task<InstallResult> MoveDlss5BuildAsync(GameInfo game, NeuralBackend backend, IProgress<string>? progress)
+    {
+        if (game.TargetDir is not { } dir) return Fail("OptiScaler isn't installed in this game by this app.");
+        var carried = new List<IniSetting>();
+        try
+        {
+            var iniPath = Path.Combine(dir, "OptiScaler.ini");
+            if (File.Exists(iniPath))
+            {
+                var ini = IniFile.Load(iniPath);
+                foreach (var key in Dlss5.CarriedKeys)
+                    if (ini.Get(Dlss5.Section, key) is { } value && !string.Equals(value.Trim(), "auto", StringComparison.OrdinalIgnoreCase))
+                        carried.Add(new IniSetting(Dlss5.Section, key, value.Trim()));
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        var back = await SwitchBackAsync(game, progress);
+        if (!back.Success) return back;
+        return await SwitchToDlss5Async(game, backend, null, progress, carried);
+    }
 
     /// <summary>Games whose folder has the user's DLSS 5 file from Upshift (a DLSS 5 build switched in).</summary>
     public static List<GameInfo> GamesUsingDlss5File() =>
@@ -197,7 +246,12 @@ public static class GameUpdates
         {
             if (game.HasAntiCheat) return Fail("Installs are blocked for games with anti-cheat.");
             if (manifest.Version is not { } version) return Fail("The install record doesn't say which version is installed.");
-            var source = await AppServices.Components.EnsureAsync(ComponentFor(manifest.ComponentId), version, progress, CancellationToken.None);
+            var component = ComponentFor(manifest.ComponentId);
+            var source = await AppServices.Components.EnsureAsync(component, version, progress, CancellationToken.None);
+            // An overlay build (the DLSS 5 build) sits on the regular release it was switched from, which has the other files.
+            CachedComponent? under = null;
+            if (component.Overlay && manifest.Switch is { FromVersion: { } fromVersion } from)
+                under = await AppServices.Components.EnsureAsync(ComponentFor(from.FromComponentId), fromVersion, progress, CancellationToken.None);
             progress?.Report($"Repairing OptiScaler in {game.Name}…");
             return await InstallRunner.RunAsync(new InstallPlan
             {
@@ -206,6 +260,7 @@ public static class GameUpdates
                 GameName = game.Name,
                 TargetDir = game.TargetDir!,
                 SourceDir = source.Folder,
+                ExtraSourceDir = under?.Folder,
                 ComponentId = manifest.ComponentId,
                 Version = version
             });

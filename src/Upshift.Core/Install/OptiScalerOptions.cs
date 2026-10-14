@@ -289,6 +289,13 @@ public static class OptiScalerOptions
         new("Framerate", "FramerateLimit", fps is > 0 ? fps.Value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) : null)
     };
 
+    /// <summary>The lowest and highest frame cap Upshift writes.</summary>
+    public const double MinFrameCap = 10, MaxFrameCap = 1000;
+
+    /// <summary>What the frame cap box's number means: empty, 0 or below is no cap; otherwise a whole number from 10 to 1000.</summary>
+    public static double? FrameCapFromBox(double value) =>
+        double.IsNaN(value) || value < 0.5 ? null : Math.Clamp(Math.Round(value), MinFrameCap, MaxFrameCap);
+
     /// <summary>OptiScaler's FPS counter ([Menu] ShowFps). Page Up also shows or hides it in game. Off puts the original back.</summary>
     public static List<IniSetting> FpsCounterSettings(bool on) => new() { new("Menu", "ShowFps", on ? "true" : null) };
 

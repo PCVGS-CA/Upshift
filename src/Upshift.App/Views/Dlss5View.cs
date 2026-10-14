@@ -205,9 +205,30 @@ public sealed class Dlss5View : UserControl
         body.Children.Add(SliderRow("Model resolution", "WorkingScale", scale, 0.5, Math.Max(1, scale), 0.05, 1.0,
             v => $"{v * 100:0}%", canEdit, card, "Lower is faster; below 75% can cause artifacts around hair and fine detail."));
 
-        // The fork's advice when a game hands it no exposure (its menu then says "paper white is in use").
-        if (manifest.ComponentId == "optiscaler-dlssnr" && !string.Equals(ini?.Get(Dlss5.Section, "WhitePointSource"), "2", StringComparison.Ordinal))
+        // Dagherbou's build's advice when a game hands it no exposure (its menu then says "paper white is in use").
+        var installedFork = GameUpdates.ComponentFor(manifest.ComponentId);
+        if (installedFork.ReplacedBy is not null && !string.Equals(ini?.Get(Dlss5.Section, "WhitePointSource"), "2", StringComparison.Ordinal))
             body.Children.Add(Line("", WhitePointTip(card.Info.TargetDir!), null));
+
+        // A build Upshift no longer installs: offer the move to its replacement, keeping the DLSS 5 settings above.
+        if (installedFork.ReplacedBy is { } newId && status.Option.Backend is { } nextBackend && nextBackend.ComponentId == newId)
+        {
+            var newFork = GameUpdates.ComponentFor(newId);
+            body.Children.Add(Line("", $"Upshift now uses {newFork.Name} for DLSS 5 instead of {installedFork.Name}, which it no longer updates.", "UpshiftAccentBrush", strong: true));
+            var move = ActionButton(new Button { Content = "Move to the new DLSS 5 build", Style = (Style)Application.Current.Resources["AccentButtonStyle"] },
+                !pretend && status.CanSwitch);
+            AutomationProperties.SetName(move, "Move to the new DLSS 5 build");
+            move.Click += async (_, _) =>
+            {
+                if (Library is null) return;
+                var result = await Library.MoveDlss5BuildAsync(card, nextBackend);
+                if (result is { Success: false }) await Message("The game wasn't moved to the new DLSS 5 build", result.Message);
+            };
+            body.Children.Add(move);
+            body.Children.Add(Subtle("Switches back to regular OptiScaler exactly, then to the new build with your DLSS 5 file. " +
+                                     "Neural Rendering on or off, the hotkey and the sliders are kept."));
+            foreach (var blocker in status.Blockers) body.Children.Add(Subtle(blocker));
+        }
 
         // AMD-NR: which runtime (the game asks on first launch when it isn't set)
         if (status.IsAmd && status.Option.Runtimes.Count > 0)

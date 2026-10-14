@@ -180,6 +180,8 @@ public sealed partial class UpdatesPage : Page
         var sourceIds = AppServices.Catalog.UpscalerFiles.Sources.Select(s => s.ComponentId).ToHashSet();
         foreach (var (primary, members) in rows)
         {
+            // A build Upshift replaced (Dagherbou's DLSS 5 build) shows only while a game still uses it.
+            if (primary.ReplacedBy is not null && GameUpdates.GamesOnComponent(primary.Id).Count == 0) continue;
             // NVIDIA DLSS, AMD FidelityFX and Intel XeSS: their single DLLs are what games use, not the whole release.
             if (!primary.Installable && sourceIds.Contains(primary.Id))
             {

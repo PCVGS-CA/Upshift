@@ -106,6 +106,8 @@ public sealed partial class LibraryPage : Page
             if (IsGamePageOpen && !_dialogOpen) { CloseGamePage(); args.Handled = true; }
         };
         KeyboardAccelerators.Add(escape);
+        // No "Esc" tooltip: WinUI otherwise shows the accelerator's key over the page when it gets the pointer or focus.
+        KeyboardAcceleratorPlacementMode = Microsoft.UI.Xaml.Input.KeyboardAcceleratorPlacementMode.Hidden;
         PointerPressed += (_, args) =>
         {
             if (IsGamePageOpen && args.GetCurrentPoint(this).Properties.IsXButton1Pressed) { CloseGamePage(); args.Handled = true; }

@@ -305,6 +305,13 @@ public sealed class MeasureView : UserControl
                 case MeasureState.Preparing:
                     status.Text = "Getting ready…";
                     break;
+                case MeasureState.Armed when Measurement.CountdownUntilUtc is not null:
+                    status.Text = Countdown();
+                    var count = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+                    count.Tick += (_, _) => status.Text = Countdown();
+                    status.Loaded += (_, _) => count.Start();
+                    status.Unloaded += (_, _) => count.Stop();
+                    break;
                 case MeasureState.Armed:
                     status.Text = $"Waiting for you to press {Measurement.HotkeyName} in the game";
                     break;
@@ -318,6 +325,15 @@ public sealed class MeasureView : UserControl
                     break;
             }
             buttons.Children.Add(status);
+            if (Measurement.State == MeasureState.Armed && Measurement.CountdownUntilUtc is null)
+            {
+                // For games that keep keys to themselves (the hotkey never reaches Upshift).
+                var later = new Button { Content = $"Start in {Measurement.CountdownSeconds} seconds" };
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(later, $"Start in {Measurement.CountdownSeconds} seconds");
+                ToolTipService.SetToolTip(later, $"Starts measuring by itself after {Measurement.CountdownSeconds} seconds, without a key. Switch to the game meanwhile.");
+                later.Click += async (_, _) => await Measurement.StartInAsync();
+                buttons.Children.Add(later);
+            }
             if (Measurement.State == MeasureState.Measuring)
             {
                 var stop = new Button { Content = "Stop and keep result" };
@@ -351,6 +367,13 @@ public sealed class MeasureView : UserControl
             panel.Children.Add(Subtle($"Press Measure this game, then start the game, get to a normal gameplay area and press {Measurement.HotkeyName} " +
                                       "(change the key in Settings). A beep marks the start and two beeps the end."));
         return panel;
+    }
+
+    /// <summary>"Measuring starts in 7 s: switch to the game".</summary>
+    private static string Countdown()
+    {
+        var left = Measurement.CountdownUntilUtc is { } until ? Math.Max(0, (int)Math.Ceiling((until - DateTime.UtcNow).TotalSeconds)) : 0;
+        return $"Measuring starts in {left} s: switch to the game";
     }
 
     /// <summary>"Measuring… 0:23 of 1:00 (F10 stops early)".</summary>

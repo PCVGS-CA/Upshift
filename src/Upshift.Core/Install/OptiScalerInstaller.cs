@@ -24,6 +24,8 @@ public sealed class InstallPlan
 
     /// <summary>A second unpacked download copied in with SourceDir (AMD-NR's danielblnc runtime).</summary>
     public string? ExtraSourceDir { get; set; }
+    /// <summary>The new build only brings its own files (an overlay): the installed release's other files stay.</summary>
+    public bool KeepOldFiles { get; set; }
     public string ComponentId { get; set; } = "optiscaler";
     /// <summary>The component's display name, e.g. "OptiScaler DLSSNR" (for messages).</summary>
     public string? ComponentName { get; set; }
@@ -1318,6 +1320,18 @@ public static partial class OptiScalerInstaller
             TryRemoveEmptyFolder(folder);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+    }
+
+    /// <summary>
+    /// The OptiScaler version a recorded file came with: during a switch, a file still exactly as the release from before
+    /// the switch had it is that release's (an overlay build such as the DLSS 5 one keeps them); otherwise the installed one.
+    /// </summary>
+    public static string? VersionOfFile(string target, InstallManifest manifest, ManifestFile file)
+    {
+        if (manifest.Switch is { } sw && ReadSwitchOriginal(target, sw) is { } before
+            && before.Added.Concat(before.Replaced).Any(f => f.Path.Equals(file.Path, StringComparison.OrdinalIgnoreCase) && f.Sha256 == file.Sha256))
+            return sw.FromVersion ?? manifest.Version;
+        return manifest.Version;
     }
 
     /// <summary>The manifest from before a switch to a DLSS 5 build (kept in its return folder), or null.</summary>

@@ -160,6 +160,22 @@ public sealed class CatalogComponent
     /// <summary>Finds the bundled version in the host's release notes; group 1 is the version (e.g. "Fakenvapi 1.4.1").</summary>
     public string? BundledVersionPattern { get; set; }
 
+    /// <summary>
+    /// Only these files are kept from the release, wherever the archive has them, flattened into the download folder
+    /// (a release that also carries its own installer, scripts and tools: none of those may reach a game). Every one must
+    /// be in the archive. Null: everything is kept as the archive lays it out.
+    /// </summary>
+    public List<string>? PackageFiles { get; set; }
+
+    /// <summary>
+    /// A build that brings only its own files (OptiScaler.dll and the like) on top of an installed OptiScaler: switching
+    /// to it keeps the installed release's other files (FSR, XeSS, fakenvapi) instead of removing them.
+    /// </summary>
+    public bool Overlay { get; set; }
+
+    /// <summary>A component Upshift no longer installs: games on it are offered a move to this component id instead.</summary>
+    public string? ReplacedBy { get; set; }
+
     [JsonIgnore] public Uri RepoUrl => new($"https://github.com/{Repo}");
     [JsonIgnore] public string PinnedText => PinnedVersion is null ? "No version pinned" : $"Tested version: {PinnedVersion}";
 }

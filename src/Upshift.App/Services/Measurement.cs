@@ -15,7 +15,7 @@ public enum MeasureState { Idle, Preparing, Armed, Measuring }
 /// 1. Arm: PresentMon is downloaded the first time (from its GitHub releases), then, unless this account can already
 ///    read frame timings, Windows is asked once for permission to start the measuring helper (Upshift.exe --measure,
 ///    elevated); the main window stays a normal app. The hotkey is registered.
-/// 2. The hotkey (F10 by default) starts PresentMon for the game's process only, for the length the user chose (10 to
+/// 2. The hotkey (F10 by default), or "Start in 10 seconds" in Upshift's window for games that swallow the key, starts PresentMon for the game's process only, for the length the user chose (10 to
 ///    1800 seconds, 60 by default), with a beep at the start and at the end. The same key stops it early, keeping what
 ///    was recorded.
 /// 3. The CSV is read, its folder deleted, and the run saved with the settings the game had. Nothing leaves the PC.
@@ -38,6 +38,12 @@ public static class Measurement
 
     /// <summary>The length the next measurement will have: the last value typed (10 to 1800 seconds).</summary>
     public static int ChosenSeconds => MeasureThresholds.ClampSeconds(AppServices.Settings.Current.MeasureSeconds);
+
+    /// <summary>When "Start in 10 seconds" will start the measurement, or null when no countdown runs.</summary>
+    public static DateTime? CountdownUntilUtc { get; private set; }
+
+    /// <summary>The countdown "Start in 10 seconds" gives, to switch to the game.</summary>
+    public const int CountdownSeconds = 10;
 
     /// <summary>When the current run started (for the elapsed time), or null.</summary>
     public static DateTime? MeasuringSinceUtc { get; private set; }
@@ -143,18 +149,31 @@ public static class Measurement
             }
         }
 
+        // Without the key (nothing could watch it), "Start in 10 seconds" still works.
         _hotkey = GlobalHotkey.TryRegister(key);
-        if (_hotkey is null)
-        {
-            Cancel(silent: true);
-            Finish($"{HotkeyName} is already used by another program, so it can't start a measurement. Choose another measuring key in Settings.", problem: true);
-            return;
-        }
-        _hotkey.Pressed += () => _ui?.TryEnqueue(async () => await StartAsync());
+        if (_hotkey is not null) _hotkey.Pressed += () => _ui?.TryEnqueue(async () => await StartAsync());
         Set(MeasureState.Armed,
-            $"Waiting for you to press {HotkeyName} in the game. Start {game.Name}, get to a normal gameplay area, then press {HotkeyName}. " +
-            $"You'll hear a beep when measuring starts and two when it ends ({Length(_seconds)}; press {HotkeyName} again to stop early). " +
-            "Waits up to 30 minutes.", false);
+            (_hotkey is null
+                ? $"{HotkeyName} can't be watched right now, so use Start in {CountdownSeconds} seconds here instead. "
+                : $"Waiting for you to press {HotkeyName} in the game. Start {game.Name}, get to a normal gameplay area, then press {HotkeyName}. ") +
+            $"If the game doesn't react to {HotkeyName}, press Start in {CountdownSeconds} seconds here and switch to the game. " +
+            $"You'll hear a beep when measuring starts and two when it ends ({Length(_seconds)}). Waits up to 30 minutes.", false);
+    }
+
+    /// <summary>
+    /// The way in that needs no key, for games that keep keys to themselves: the measurement starts on its own after
+    /// <see cref="CountdownSeconds"/> seconds, which is time to switch back to the game. The hotkey still works meanwhile.
+    /// </summary>
+    public static async Task StartInAsync()
+    {
+        if (State != MeasureState.Armed || CountdownUntilUtc is not null || _armCts is not { } cts) return;
+        CountdownUntilUtc = DateTime.UtcNow.AddSeconds(CountdownSeconds);
+        Set(MeasureState.Armed, $"Measuring starts in {CountdownSeconds} seconds. Switch to {_game?.Name ?? "the game"} now and keep playing; " +
+                                "you'll hear a beep when it starts.", false);
+        try { await Task.Delay(TimeSpan.FromSeconds(CountdownSeconds), cts.Token); }
+        catch (OperationCanceledException) { return; }
+        if (CountdownUntilUtc is null || State != MeasureState.Armed) return;   // cancelled, or the hotkey started it
+        await StartAsync();
     }
 
     /// <summary>"60 seconds", "5 minutes", "2 minutes 30 seconds".</summary>
@@ -185,6 +204,7 @@ public static class Measurement
     public static void Cancel(bool silent = false)
     {
         _armCts?.Cancel();
+        CountdownUntilUtc = null;
         _hotkey?.Dispose();
         _hotkey = null;
         if (_job is not null)
@@ -199,11 +219,14 @@ public static class Measurement
     private static async Task StartAsync()
     {
         if (State != MeasureState.Armed || _game is not { } game || _job is not { } job) return;
+        var counted = CountdownUntilUtc is not null;
+        CountdownUntilUtc = null;
         var process = FindGame(game);
         if (process is null)
         {
             _ = Task.Run(() => Beep(330, 300));
-            Set(MeasureState.Armed, $"{game.Name} wasn't running when you pressed {HotkeyName}. Start it, get to a normal gameplay area, then press {HotkeyName} again.", true);
+            Set(MeasureState.Armed, $"{game.Name} wasn't running when {(counted ? "the countdown ended" : $"you pressed {HotkeyName}")}. Start it, get to a normal " +
+                                    $"gameplay area, then press {HotkeyName} or Start in {CountdownSeconds} seconds again.", true);
             return;
         }
 
@@ -213,7 +236,7 @@ public static class Measurement
         var settings = _snapshot?.Invoke() ?? new MeasuredSettings();
         var refresh = Helpers.Display.Pick(Helpers.Display.All(), AppServices.Settings.Current.FrameCapDisplay)?.RefreshHz;
         MeasuringSinceUtc = DateTime.UtcNow;
-        Set(MeasureState.Measuring, $"Measuring {game.Name} for {Length(_seconds)}… keep playing. Press {HotkeyName} again to stop early and keep the result.", false);
+        Set(MeasureState.Measuring, $"Measuring {game.Name} for {Length(_seconds)}… keep playing. Press {HotkeyName} again (or Stop and keep result here) to stop early.", false);
         _ = Task.Run(() => { Beep(880, 120); Beep(1320, 160); });
 
         // The same key now stops the run early.
@@ -363,6 +386,7 @@ public static class Measurement
         _hotkey?.Dispose();
         _hotkey = null;
         MeasuringSinceUtc = null;
+        CountdownUntilUtc = null;
         Set(MeasureState.Idle, message, problem);
         _game = null;
     }

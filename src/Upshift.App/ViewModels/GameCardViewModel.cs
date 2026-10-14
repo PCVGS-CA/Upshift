@@ -255,7 +255,7 @@ public sealed partial class GameCardViewModel : ObservableObject
                  $"Likely causes: the game ran from a different .exe than the one OptiScaler sits next to; {manifest.ProxyName} isn't a file this game loads " +
                  "(Suggestions for this game may name a better loading name); or a game update, file check or antivirus removed or blocked it. " +
                  $"Try: Repair below, then start the game with Play. If it still doesn't load, uninstall and install again with another loading name, such as winmm.dll or version.dll."),
-            LoadState.NotRunYet => (Prefix + "Run the game once to check.", ""),
+            LoadState.NotRunYet => ("Run the game once, then press Check again.", ""),
             LoadState.LoggingOff => ("OptiScaler's log is off for this game, so Upshift can't check whether it's working.",
                 "Turning the check on sets OptiScaler's log to its lightest level (LogToFile=true, LogLevel=2): it records only events such as an upscaler starting, not every frame, so it doesn't slow the game down."),
             _ => ("This check isn't available for the AMD-NR build: its log hasn't been checked by Upshift, so the status is only shown for standard OptiScaler and its DLSS 5 build.", "")
@@ -269,7 +269,7 @@ public sealed partial class GameCardViewModel : ObservableObject
         var chosen = manifest.IniChanges.FirstOrDefault(c => c.Section == "Libraries" && c.Key == "FfxDx12Path")?.ChangedUtc;
         var log = HelixSr.ReadLog(AppServices.DataDir, chosen);
         const string Shared = "helixsr.log is shared by every game that uses HelixSR, so it describes the game that ran with it last.";
-        if (!log.Exists) return "HelixSR (experimental): helixsr.log has no run since HelixSR was chosen. Run the game once to check.";
+        if (!log.Exists) return "HelixSR (experimental): helixsr.log has no run since HelixSR was chosen. Run the game once, then press Check again.";
         var when = log.WrittenLocal is { } t ? $" (last written {t:d MMM, HH:mm})" : "";
         return log.NetworkRan switch
         {

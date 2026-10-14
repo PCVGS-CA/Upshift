@@ -162,7 +162,7 @@ public sealed partial class ComponentStore : IDisposable
                     return Task.CompletedTask;
                 }, ct);
             progress?.Report($"Unpacking {asset.Name}…");
-            return await StoreAsync(component, version, asset.Name, actual, staging => Task.Run(() => Extract(download, staging), ct), ct);
+            return await StoreAsync(component, version, asset.Name, actual, staging => Task.Run(() => Extract(download, staging, component.PackageFiles), ct), ct);
         }
         finally
         {
@@ -273,10 +273,25 @@ public sealed partial class ComponentStore : IDisposable
         }
     }
 
-    private static void Extract(string archivePath, string destination)
+    private static void Extract(string archivePath, string destination, IReadOnlyCollection<string>? only = null)
     {
         var root = Path.GetFullPath(destination) + Path.DirectorySeparatorChar;
         using var archive = ArchiveFactory.Open(archivePath);
+        if (only is { Count: > 0 })
+        {
+            // Only the named files, from wherever the archive keeps them, flattened (one copy of each).
+            foreach (var name in only)
+            {
+                var matches = archive.Entries.Where(e => !e.IsDirectory && e.Key is not null
+                    && Path.GetFileName(e.Key.Replace('/', Path.DirectorySeparatorChar)).Equals(name, StringComparison.OrdinalIgnoreCase)).ToList();
+                if (matches.Count != 1)
+                    throw new ComponentDownloadException(matches.Count == 0
+                        ? $"The download doesn't contain {name}, so nothing was kept."
+                        : $"The download contains {name} more than once, so nothing was kept.");
+                matches[0].WriteToFile(Path.Combine(destination, Path.GetFileName(name)), new ExtractionOptions { Overwrite = true });
+            }
+            return;
+        }
         foreach (var entry in archive.Entries.Where(e => !e.IsDirectory && e.Key is not null))
         {
             // Refuse entries that would land outside the destination ("zip slip").

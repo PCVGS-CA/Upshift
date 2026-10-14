@@ -274,7 +274,8 @@ errors and no warnings.
         original, 3.7.0 set aside) → Restore exact to 3.1.1 → Update.
 - **DLSS 5 (2026-09-28):**
   - **Forks:**
-    - DLSSNR (`Dagherbou/OptiScaler_DLSSNR` v0.2.0-dlssnr, NVIDIA): `OptiScaler.dll/.ini`, the forwarder
+    - DLSSNR (`Dagherbou/OptiScaler_DLSSNR` v0.2.0-dlssnr, NVIDIA; replaced by Skynizz's build on 2026-10-14, see
+      test.5 below): `OptiScaler.dll/.ini`, the forwarder
       `nvngx.dll_dlssnr.dll`, and DLLs under `OptiScaler\`. It ships no `nvngx_dlssnr.dll`, and needs driver 616.56+.
     - AMD-NR (`3zwr1/AMD-NR---OptiScaler` Alpha0.3.2): the same layout plus `LmxxfNrRuntime.dll/.pak`. Its danielblnc
       runtime comes from the separate `amd-nr-runtime` zip. It ships no `amdxcffx64.dll`.
@@ -627,6 +628,25 @@ errors and no warnings.
     games added with "Add a game folder…" from the scratchpad (`uitest\games`, a `D3D12` folder makes them DirectX 12).
     Scripts: scratchpad `uitest\make_fake.py`, `addfolder.ps1`, `setlength.ps1`. Settings and catalog were restored
     afterwards, and the throwaway games, fake HelixSR files and sample measurement were deleted.
+  - **test.5 (2026-10-14):**
+    - **DLSS 5 build:** official OptiScaler has no Neural Rendering (v0.9.4; PR #1116 open), so the NVIDIA backends now
+      use `optiscaler-dlss5` = Skynizz/optiscaler-dlss5 v1.2.1 (GPL-3.0). Catalog component fields: `packageFiles` (only
+      OptiScaler.dll, OptiScaler.ini, nvngx.dll_dlssnr.dll are extracted, flattened; INSTALL.bat/install.py/tools never),
+      `overlay` (the switch keeps the regular release's other files: `InstallPlan.KeepOldFiles`; Repair takes them from
+      the from-release via `ExtraSourceDir`), `replacedBy` (`optiscaler-dlssnr` → `optiscaler-dlss5`; its Updates row
+      only shows while a game uses it). `GameUpdates.MoveDlss5BuildAsync` = SwitchBack + SwitchToDlss5 carrying
+      `Dlss5.CarriedKeys` that the new ini has (WhitePointSource isn't in it). Dlss5View's "Move to the new DLSS 5 build".
+      `OptiScalerInstaller.VersionOfFile` labels files kept from the base release with its version. The fork's own
+      installer also sets PreSr/CacheEnabled/CacheInterval (its Quality preset); Upshift leaves the shipped ini's values.
+    - **Measure:** `GlobalHotkey` = RegisterHotKey + a WH_KEYBOARD_LL hook (watch only, passed on; a press seen by both
+      counts once within 400 ms), so games with raw input/NOHOTKEYS still reach it. "Start in 10 seconds"
+      (`Measurement.StartInAsync`, `CountdownUntilUtc`). A failed RegisterHotKey no longer cancels arming.
+    - Frame cap: no NumberBox Minimum/Maximum (it clamped empty/0 to 1); `OptiScalerOptions.FrameCapFromBox`
+      (empty/≤0 → no cap, 10–1000). The X saves directly. Esc hint: `KeyboardAcceleratorPlacementMode.Hidden` on LibraryPage.
+    - Tested: harness 161 checks (real Skynizz zip extraction, Dagherbou → move → overlay → repair → back exact →
+      uninstall), hook test (`hooktest`, F13 via SendInput, 7 checks), UI on a throwaway game (frame cap values, move
+      button and move with a stand-in user file, switch back, Esc). Not tested: the hook in a real game (RE Requiem), the
+      countdown with a real measurement (needs the UAC prompt), the new build in a game.
 
 ## Next
 

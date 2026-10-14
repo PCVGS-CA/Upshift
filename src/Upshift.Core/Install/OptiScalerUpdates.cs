@@ -129,7 +129,11 @@ public static partial class OptiScalerInstaller
         var newSet = newFiles.Select(f => f.Relative).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var oldSource = plan.OldSourceDir is { } old && File.Exists(Path.Combine(old, "OptiScaler.dll")) ? old : null;
         // The files the old release brought. Without its download, everything but user-supplied files counts.
-        var oldRelease = oldSource is not null
+        var oldRelease = plan.KeepOldFiles
+            // An overlay build (Skynizz's DLSS 5 build is only OptiScaler.dll, its ini and the forwarder): nothing of the
+            // installed release is removed; it brings its own files on top.
+            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            : oldSource is not null
             ? FilesToCopy(oldSource, proxy).Select(f => f.Relative).ToHashSet(StringComparer.OrdinalIgnoreCase)
             : AllEntries(manifest).Select(f => f.Path).Where(p => !IsUserFile(p)).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -596,6 +600,9 @@ public static partial class OptiScalerInstaller
         if (!File.Exists(Path.Combine(source, "OptiScaler.dll"))) return Refuse(log, "The downloaded OptiScaler is missing OptiScaler.dll.");
 
         var release = FilesToCopy(source, manifest.ProxyName).ToDictionary(f => f.Relative, f => f.From, StringComparer.OrdinalIgnoreCase);
+        // A build laid over the regular release (the DLSS 5 build) keeps that release's other files: they come from it.
+        if (plan.ExtraSourceDir is { } extra && Directory.Exists(extra))
+            foreach (var (from, relative) in FilesToCopy(extra, manifest.ProxyName)) release.TryAdd(relative, from);
         var manifestBefore = JsonSerializer.Serialize(manifest, Json);
         var safetyRelative = Path.Combine(StateFolder, "repair" + DateTime.Now.ToString("yyyyMMdd-HHmmss"));
         var record = new RepairRecord { RepairedUtc = DateTime.UtcNow };
