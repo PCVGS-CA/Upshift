@@ -29,7 +29,7 @@ public static class InstallRunner
     {
         var log = new InstallLog(AppServices.DataDir);
         if (FoldersToWrite(plan).All(OptiScalerInstaller.CanWrite))
-            return await Task.Run(() => Apply(plan, log));
+            return await Task.Run(() => Apply(plan, log, AppServices.DataDir));
 
         log.Write($"{plan.Operation.ToString().ToUpperInvariant()} {plan.GameName}: folder needs admin rights, asking via UAC");
         var pending = Path.Combine(AppServices.DataDir, "pending");
@@ -93,7 +93,7 @@ public static class InstallRunner
             else if (Validate(plan, dataDir) is { } problem)
                 result = new InstallResult { Message = problem };
             else
-                result = Apply(plan, log);
+                result = Apply(plan, log, dataDir);
         }
         catch (Exception ex)
         {
@@ -105,7 +105,7 @@ public static class InstallRunner
         return result.Success ? 0 : 1;
     }
 
-    private static InstallResult Apply(InstallPlan plan, InstallLog log) => plan.Operation switch
+    private static InstallResult Apply(InstallPlan plan, InstallLog log, string dataDir) => plan.Operation switch
     {
         InstallOperation.Install => OptiScalerInstaller.Install(plan, log),
         InstallOperation.Configure => OptiScalerInstaller.Configure(plan, log),
@@ -119,6 +119,8 @@ public static class InstallRunner
         InstallOperation.SwitchBack => OptiScalerInstaller.SwitchBack(plan, log),
         // Only names a fresh scan of the folder offers are removed (checked inside).
         InstallOperation.RemoveWithoutRecord => OptiScalerInstaller.RemoveWithoutRecord(plan, log),
+        // Everything Upshift changed in one game, by the game's own records ("Remove Upshift from all games").
+        InstallOperation.RemoveFromGame => GameCleanup.Remove(plan, dataDir, log),
         _ => OptiScalerInstaller.Uninstall(plan, log)
     };
 
@@ -128,6 +130,11 @@ public static class InstallRunner
     /// </summary>
     private static IEnumerable<string> FoldersToWrite(InstallPlan plan)
     {
+        if (plan.Operation == InstallOperation.RemoveFromGame)
+        {
+            foreach (var dir in GameCleanup.FoldersToWrite(plan.TargetDir, plan.InstallRoot)) yield return dir;
+            yield break;
+        }
         yield return plan.TargetDir;
         if (plan.Operation is not (InstallOperation.UpdateUpscalerFiles or InstallOperation.RestoreUpscalerFiles)) yield break;
         var paths = plan.UpscalerFiles.Count > 0
@@ -161,6 +168,9 @@ public static class InstallRunner
 
         if (plan.Operation is InstallOperation.Uninstall or InstallOperation.UndoUpdate or InstallOperation.RestoreUpscalerFiles
             or InstallOperation.SwitchBack or InstallOperation.RemoveWithoutRecord) return null;
+        // Removing only follows the game's own records; it copies nothing in.
+        if (plan.Operation == InstallOperation.RemoveFromGame)
+            return plan.InstallRoot is null || Directory.Exists(plan.InstallRoot) ? null : "The game folder in the plan doesn't exist.";
         if (plan.Operation == InstallOperation.SwitchBuild)
         {
             // Like an update, plus the user's DLSS 5 file from the user-files folder under its known name.

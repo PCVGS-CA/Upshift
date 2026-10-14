@@ -647,6 +647,31 @@ errors and no warnings.
       uninstall), hook test (`hooktest`, F13 via SendInput, 7 checks), UI on a throwaway game (frame cap values, move
       button and move with a stand-in user file, switch back, Esc). Not tested: the hook in a real game (RE Requiem), the
       countdown with a real measurement (needs the UAC prompt), the new build in a game.
+  - **Remove Upshift from all games (2026-10-14, after test.5):**
+    - Core `Install/GameCleanup.cs`: `Find` (games with an active OptiScaler record or an upscaler-files record),
+      `WhyNotNow` (running from the game's folders, or a recorded file locked → skip), `Remove` = shader-recorder values
+      off (KitUndo/PutBack) → `Uninstall` (RemoveChanged off, ini saved to saved-settings) → `UpscalerFiles.Restore` for
+      entries still Upshift's copy (or already the original); a file changed since stays with its backup and record, listed.
+      `InstallOperation.RemoveFromGame` + `InstallPlan.InstallRoot`, through `InstallRunner` (and its UAC helper).
+      `OptiScalerInstaller.RunningFrom`/`IsLocked` are public now.
+    - App `Services/RemoveFromGames.cs` (summary; recorder removed from data when every game finished; driver shader
+      cache backup restored). Settings > "Remove Upshift from all games…" (through `GameUpdates.RunExclusiveAsync`).
+    - **Uninstaller:** Velopack's uninstall hook has a 30 s limit, so `Program.Uninstalling` only copies the program
+      folder to `%TEMP%\Upshift-uninstall-<stamp>` (about 1 s for 166 MB here) and starts that copy with
+      `--after-uninstall` (shell start, so it isn't waited for), then returns. The copy asks the games question (Yes by
+      default; a 5-minute timeout counts as Yes), shows the summary, asks the data question (No by default), then deletes
+      itself (`cmd /c ping … & rmdir`). If the copy can't be made in 18 s, the hook asks only the data question and says
+      the games were left. Updates never run the uninstall hook.
+    - **Debug-only `UPSHIFT_TEST_DATA`** points the app and the `--after-uninstall` copy at a throwaway data folder.
+      **Never run `--after-uninstall`, `--veloapp-uninstall` or the Settings removal on Claude's data copy without it**:
+      that library lists the real games (The Witcher 3, Silent Hill 2, RoboCop, Resident Evil Requiem…). On 2026-10-14 a
+      stale build ignored the override and the question listed the real games; it was answered No and nothing changed
+      (records checked). Always rebuild and check the question's list before answering Yes.
+    - Tested: harness 172 checks (two throwaway games: in-use skip, OptiScaler + recorder values + upscaler restore,
+      a game-changed file kept, REFramework and saves untouched, run twice), the real hook from the Debug build on
+      throwaway data (Yes; one game skipped for a locked file and listed; No to data; temp copy gone), and the Settings
+      button on throwaway data. Not tested: a real `Update.exe --uninstall` (no real installer from Claude's shell), games
+      in protected folders (UAC helper), a running game detected by process (only a locked file).
 
 ## Next
 

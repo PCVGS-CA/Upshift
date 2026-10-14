@@ -518,6 +518,75 @@ public sealed partial class SettingsPage : Page
         GpuList.ItemsSource = await AppServices.GetAllGpusAsync();
     }
 
+    /// <summary>"Remove Upshift from all games…": lists the games, asks, removes, then shows what was done and skipped.</summary>
+    private async void RemoveFromGames_Click(object sender, RoutedEventArgs e)
+    {
+        if (Services.GameUpdates.IsBusy || Services.InstallRunner.IsRunning)
+        {
+            RemoveFromGamesText.Text = "Another change to a game is running. Try again when it has finished.";
+            return;
+        }
+        var games = AppServices.Library.Current.ToList();
+        var targets = await Task.Run(() => Core.Install.GameCleanup.Find(games));
+        var cacheBackup = new Core.ShaderPrebuild.ShaderCaches(AppServices.DataDir).HasBackup;
+        if (targets.Count == 0 && !cacheBackup)
+        {
+            RemoveFromGamesText.Text = "No game has changes from Upshift.";
+            return;
+        }
+
+        var list = targets.Select(t => "• " + t.Name).ToList();
+        if (cacheBackup) list.Add("• The driver shader cache backup from Pre-build shaders (put back)");
+        var answer = await ShowDialogAsync(new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "Remove Upshift from all games?",
+            Content = new ScrollViewer
+            {
+                MaxHeight = 360,
+                Content = new TextBlock
+                {
+                    TextWrapping = TextWrapping.Wrap,
+                    Text = string.Join("\n", list) + "\n\nOptiScaler and everything Upshift added goes, and the game's own DLSS, FSR and XeSS files " +
+                           "Upshift replaced come back. Your OptiScaler settings are saved, so a reinstall can restore them. Files changed " +
+                           "since Upshift's change are left as they are and listed. Games in protected folders ask for Windows' permission."
+                }
+            },
+            PrimaryButtonText = "Remove", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary
+        });
+        if (answer != ContentDialogResult.Primary) return;
+
+        RemoveFromGamesButton.IsEnabled = false;
+        RemoveFromGamesRing.IsActive = true;
+        try
+        {
+            var summary = await Services.RemoveFromGames.RunAsync(games, new Progress<string>(p => RemoveFromGamesText.Text = p), inApp: true);
+            RemoveFromGamesText.Text = summary.Skipped.Count == 0
+                ? $"Done: {summary.Done.Count} game(s)."
+                : $"Done: {summary.Done.Count} game(s); {summary.Skipped.Count} skipped (see the list).";
+            await ShowDialogAsync(new ContentDialog
+            {
+                XamlRoot = XamlRoot,
+                Title = summary.Skipped.Count == 0 ? "Upshift was removed from your games" : "Some games were skipped",
+                Content = new ScrollViewer
+                {
+                    MaxHeight = 420,
+                    Content = new TextBlock { Text = summary.Text(), TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true }
+                },
+                CloseButtonText = "OK"
+            });
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            RemoveFromGamesText.Text = $"Stopped: {ex.Message}";
+        }
+        finally
+        {
+            RemoveFromGamesButton.IsEnabled = true;
+            RemoveFromGamesRing.IsActive = false;
+        }
+    }
+
     private void OpenDataFolder_Click(object sender, RoutedEventArgs e)
     {
         Directory.CreateDirectory(AppServices.DataDir);

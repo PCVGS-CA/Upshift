@@ -108,6 +108,18 @@
             </StackPanel>
 
             <StackPanel Spacing="8">
+                <TextBlock Text="Remove Upshift from all games" FontWeight="SemiBold" />
+                <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
+                           Text="Removes OptiScaler and everything Upshift added from every game, and puts back the game's own DLSS, FSR and XeSS files Upshift replaced, using each game's own record. Files Upshift didn't add (REFramework, saves, other mods) and the files you supply above stay where they are. A game that's running is skipped and listed. The uninstaller offers the same; this is for the portable version, which has no uninstaller." />
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Button x:Name="RemoveFromGamesButton" Content="Remove Upshift from all games…" Click="RemoveFromGames_Click"
+                            AutomationProperties.Name="Remove Upshift from all games…" />
+                    <ProgressRing x:Name="RemoveFromGamesRing" IsActive="False" Width="18" Height="18" />
+                </StackPanel>
+                <TextBlock x:Name="RemoveFromGamesText" FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap" />
+            </StackPanel>
+
+            <StackPanel Spacing="8">
                 <TextBlock Text="Hidden games" FontWeight="SemiBold" />
                 <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
                            Text="Games you hid with right-click, Hide from library. They're still scanned; they just don't show up." />

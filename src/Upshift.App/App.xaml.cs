@@ -42,6 +42,10 @@ public partial class App : Application
             // Data from before the rename (%LocalAppData%\PCVGS\UpscalerManager) moves to %LocalAppData%\Upshift once.
             // This must run before AppServices is touched, since its services are created from the data folder.
             DataFolder.Path = Core.Services.DataMigration.Run();
+#if DEBUG
+            // Tests of changes to many games run against a throwaway data folder (and its own list of games).
+            if (Environment.GetEnvironmentVariable("UPSHIFT_TEST_DATA") is { Length: > 0 } testData) DataFolder.Path = testData;
+#endif
 
             // Upshift.exe --crash-test: fails on purpose here, to check that a start-up crash reaches crash.log.
             if (commandLine.Contains("--crash-test"))

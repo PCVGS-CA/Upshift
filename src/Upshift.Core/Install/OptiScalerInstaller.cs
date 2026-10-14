@@ -6,7 +6,7 @@ using Upshift.Core.Detection;
 
 namespace Upshift.Core.Install;
 
-public enum InstallOperation { Install, Uninstall, Configure, Update, UndoUpdate, Repair, UpdateUpscalerFiles, RestoreUpscalerFiles, SwitchBuild, SwitchBack, RemoveWithoutRecord }
+public enum InstallOperation { Install, Uninstall, Configure, Update, UndoUpdate, Repair, UpdateUpscalerFiles, RestoreUpscalerFiles, SwitchBuild, SwitchBack, RemoveWithoutRecord, RemoveFromGame }
 
 /// <summary>Everything needed to install or uninstall, so an elevated copy of the app can carry it out from a file.</summary>
 public sealed class InstallPlan
@@ -63,6 +63,12 @@ public sealed class InstallPlan
     /// changed ("Remove anyway and restore the originals"). Off: such files are left in place and listed.
     /// </summary>
     public bool RemoveChanged { get; set; }
+
+    /// <summary>
+    /// RemoveFromGame only: the game's install folder, where the record of upscaler files Upshift updated lives (often
+    /// not the exe folder in TargetDir).
+    /// </summary>
+    public string? InstallRoot { get; set; }
 
     /// <summary>
     /// RemoveWithoutRecord only (Upshift's record is missing or damaged): the files and folders the user ticked, relative to
@@ -773,19 +779,7 @@ public static partial class OptiScalerInstaller
     {
         var check = new UninstallCheck();
         if (ReadManifest(target) is not { Removed: false } manifest) return check;
-        var roots = new[] { target, installDir }.Where(d => !string.IsNullOrEmpty(d))
-            .Select(d => Path.GetFullPath(d).TrimEnd('\\') + "\\").Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        foreach (var process in System.Diagnostics.Process.GetProcesses())
-        {
-            try
-            {
-                var exe = process.MainModule?.FileName;
-                if (exe is not null && roots.Any(r => exe.StartsWith(r, StringComparison.OrdinalIgnoreCase)))
-                    check.Running.Add(Path.GetFileName(exe));
-            }
-            catch (Exception) { /* system or elevated processes can't be inspected; they don't run from a game folder */ }
-            finally { process.Dispose(); }
-        }
+        check.Running.AddRange(RunningFrom(target, installDir));
         check.NeedsPermission = !CanWrite(target);
 
         foreach (var file in manifest.Added)
@@ -808,7 +802,29 @@ public static partial class OptiScalerInstaller
         return check;
     }
 
-    private static bool IsLocked(string path)
+    /// <summary>The names of programs running from these folders (or below), e.g. the game or its launcher.</summary>
+    public static List<string> RunningFrom(params string?[] folders)
+    {
+        var running = new List<string>();
+        var roots = folders.Where(d => !string.IsNullOrEmpty(d))
+            .Select(d => Path.GetFullPath(d!).TrimEnd('\\') + "\\").Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (roots.Count == 0) return running;
+        foreach (var process in System.Diagnostics.Process.GetProcesses())
+        {
+            try
+            {
+                var exe = process.MainModule?.FileName;
+                if (exe is not null && roots.Any(r => exe.StartsWith(r, StringComparison.OrdinalIgnoreCase)))
+                    running.Add(Path.GetFileName(exe));
+            }
+            catch (Exception) { /* system or elevated processes can't be inspected; they don't run from a game folder */ }
+            finally { process.Dispose(); }
+        }
+        return running.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    /// <summary>True when another program has the file open (a running game, say).</summary>
+    public static bool IsLocked(string path)
     {
         try
         {
