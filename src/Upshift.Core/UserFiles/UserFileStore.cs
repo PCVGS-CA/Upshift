@@ -233,7 +233,7 @@ public sealed record FoundFile(string Path, string? Version, DateTime Modified);
 public sealed record FileSearchResult(List<FoundFile> Found, bool Cancelled);
 
 /// <summary>Windows folders .NET has no SpecialFolder value for.</summary>
-internal static class KnownFolders
+public static class KnownFolders
 {
     private static readonly Guid DownloadsId = new("374DE290-123F-4565-9164-39C4925E467B");
 

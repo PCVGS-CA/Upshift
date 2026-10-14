@@ -30,6 +30,12 @@ public sealed class UpscalerCatalog
 
     /// <summary>Capcom RE Engine games and REFramework: the engine's fingerprint and the OptiScaler wiki's lists.</summary>
     public ReEngineCatalog? ReEngine { get; set; }
+
+    /// <summary>
+    /// Where the user gets the modified FSR 4.1.1b file (Upshift only opens the page, never downloads it), and the release
+    /// archive's hash, so a file the user picks can be checked against the archive they downloaded.
+    /// </summary>
+    public UserFileRelease? Fsr411bRelease { get; set; }
 }
 
 /// <summary>
@@ -380,4 +386,18 @@ public sealed class HelixSrDownload
     public string Name { get; set; } = "";
     public string From { get; set; } = "";
     public string Url { get; set; } = "";
+}
+
+/// <summary>A release page for a file the user supplies, and its archive (as the release lists it) for checking their copy.</summary>
+public sealed class UserFileRelease
+{
+    public string Url { get; set; } = "";
+    public string Name { get; set; } = "";
+    /// <summary>The archive's file name; browsers may add " (1)" before the extension.</summary>
+    public string ArchiveName { get; set; } = "";
+    public long ArchiveSize { get; set; }
+    public string ArchiveSha256 { get; set; } = "";
+    /// <summary>The file inside the archive that the user picks.</summary>
+    public string FileName { get; set; } = "";
+    public string? Notes { get; set; }
 }

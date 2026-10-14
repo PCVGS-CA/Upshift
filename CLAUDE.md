@@ -673,6 +673,15 @@ errors and no warnings.
       button on throwaway data. Not tested: a real `Update.exe --uninstall` (no real installer from Claude's shell), games
       in protected folders (UAC helper), a running game detected by process (only a locked file).
 
+  - **FSR 4.1.1b release check (test.7, 2026-10-14):** catalog `fsr411bRelease` (the3rdparty1917/fsr4xyz tag 4.1.1b,
+    `FSR_4.1.1b_INT8_with_RDNA2_fix.7z`, 3,456,158 bytes, SHA-256 `66e9a818…69ff` from GitHub's asset digest; the release
+    publishes no DLL hash). Settings: "Get FSR 4.1.1b" (Launcher, https only) and the line under it. On import,
+    `Core/UserFiles/ReleaseFileCheck.Check` looks for the archive (name, also with " (1)") in the file's folder and two
+    above, Downloads, Desktop; size + SHA-256 must match; then hashes the DLL inside in memory (SharpCompress) and compares.
+    A confirmed DLL hash is kept in `user-files\release-files.json` (archive hash → DLL hash) for the row's label and
+    later picks. Different → warning, kept. **Claude didn't download the archive** (standing rule), so the real DLL hash is
+    unknown; tested with a stand-in archive (harness 178 checks).
+
 ## Next
 
 1. **DLSS 5 follow-ups:**

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-10-14T12:00Z",
+  "updated": "2026-10-14T16:00Z",
   "notes": "Upshift's built-in catalog. Upshift will later download a newer version of this file from its GitHub repo, so new forks and GPU support can be added without releasing a new version. The userAgent values below are fallbacks; the app sends Upshift/<its version>.",
 
   "components": [
@@ -405,6 +405,16 @@
       ],
       "footer": "With frame generation on, the number is the final frame rate you see, generated frames included: OptiScaler halves it for the real frames itself. A number above your screen's rate has little effect. Turn on Show FPS counter first to see what the game runs at. Takes effect after restarting the game."
     }
+  },
+
+  "fsr411bRelease": {
+    "notes": "Upshift never downloads this file: Settings only opens the release page. The release (published 2026-09-08 by the3rdparty1917) lists only the archive's SHA-256, so a picked amd_fidelityfx_upscaler_dx12.dll is checked against the user's own downloaded archive when it's found (Downloads, Desktop, or next to the file). Read on 2026-10-14.",
+    "url": "https://github.com/the3rdparty1917/fsr4xyz/releases/tag/4.1.1b",
+    "name": "FSR 4.1.1b",
+    "archiveName": "FSR_4.1.1b_INT8_with_RDNA2_fix.7z",
+    "archiveSize": 3456158,
+    "archiveSha256": "66e9a818e0c914def7712c8dac06b08e64a64dbcfe77f3162d43ea6de93869ff",
+    "fileName": "amd_fidelityfx_upscaler_dx12.dll"
   },
 
   "helixSr": {

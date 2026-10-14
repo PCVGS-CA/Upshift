@@ -143,7 +143,20 @@ public sealed partial class SettingsPage : Page
                             : $"Version {VersionText(kind, info.Version)} · SHA-256 {info.Sha256} · Community build, can't be verified. {use}"
             });
             if (kind == UserFileKind.Fsr411bInt8 && info is not null)
+            {
+                if (AppServices.Catalog.Fsr411bRelease is { } release)
+                    texts.Children.Add(new TextBlock
+                    {
+                        FontSize = 12, TextWrapping = TextWrapping.Wrap,
+                        Text = ReleaseFileCheck.Remembered(info.Sha256, release, AppServices.UserFiles.Folder) switch
+                        {
+                            ReleaseMatch.Matches => $"✓ The file from the {release.Name} release (checked against its download).",
+                            ReleaseMatch.Different => $"⚠ Not the file from the {release.Name} release. Kept because you chose it.",
+                            _ => $"Not checked against the {release.Name} release (its download wasn't found when you added it)."
+                        }
+                    });
                 texts.Children.Add(new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap, Text = use });
+            }
             if (kind == UserFileKind.DlssNr)
             {
                 // The catalog's rule for this card (or the pretend one), in one sentence.
@@ -177,7 +190,26 @@ public sealed partial class SettingsPage : Page
 
             var row = new StackPanel { Spacing = 6 };
             row.Children.Add(texts);
-            row.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Children = { select, find, remove } });
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Children = { select, find, remove } };
+            row.Children.Add(buttons);
+            if (kind == UserFileKind.Fsr411bInt8 && AppServices.Catalog.Fsr411bRelease is { Url.Length: > 0 } get)
+            {
+                // Upshift only opens the release page; it never downloads this file.
+                var open = new Button { Content = $"Get {get.Name}" };
+                ToolTipService.SetToolTip(open, get.Url);
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(open, $"Get {get.Name}");
+                open.Click += async (_, _) =>
+                {
+                    if (Uri.TryCreate(get.Url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps)
+                        await Windows.System.Launcher.LaunchUriAsync(uri);
+                };
+                buttons.Children.Add(open);
+                row.Children.Add(new TextBlock
+                {
+                    FontSize = 12, TextWrapping = TextWrapping.Wrap, Foreground = Brush("SubtleTextBrush"),
+                    Text = $"Download the release, then choose {get.FileName} here. Made for RDNA 2 cards."
+                });
+            }
             row.Children.Add(results);
             UserFileRows.Children.Add(new Border
             {
@@ -445,6 +477,27 @@ public sealed partial class SettingsPage : Page
         try
         {
             await AppServices.UserFiles.ImportAsync(kind, path);
+            if (kind == UserFileKind.Fsr411bInt8 && AppServices.Catalog.Fsr411bRelease is { } release)
+            {
+                var dir = Path.GetDirectoryName(Path.GetFullPath(path));
+                var up = dir is null ? null : Path.GetDirectoryName(dir);
+                var folders = new[] { dir, up, up is null ? null : Path.GetDirectoryName(up), KnownFolders.Downloads,
+                    Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory) }.OfType<string>();
+                var check = await Task.Run(() => ReleaseFileCheck.Check(path, release, folders, AppServices.UserFiles.Folder));
+                BuildUserFileRows();
+                await ShowDialogAsync(new ContentDialog
+                {
+                    XamlRoot = XamlRoot,
+                    Title = check.Match switch
+                    {
+                        ReleaseMatch.Matches => $"{release.Name} file added",
+                        ReleaseMatch.Different => $"This isn't the {release.Name} file",
+                        _ => "File added, not checked"
+                    },
+                    Content = new TextBlock { Text = check.Message, TextWrapping = TextWrapping.Wrap },
+                    CloseButtonText = "OK"
+                });
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
