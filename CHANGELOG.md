@@ -54,7 +54,7 @@ If you have an RX 5000 or RX 6000 card and try it, please tell us how it went, g
 ### Fixes
 
 - A small "Esc" hint no longer pops up at random places on a game's page. Esc still goes back to the Library.
-- Frame cap: the X clears the cap, and an empty box (or 0) means no cap; neither turns into 1 fps any more. The lowest cap is 10 fps.
+- Frame cap: the X clears the cap, and an empty box (or 0) means no cap; neither turns into 1 fps any more. The lowest cap is 10 fps. Clearing now always writes OptiScaler's "off" value (0) to OptiScaler.ini: before, a cap that was already in the file when Upshift first changed it (for example 40, set in OptiScaler's menu or restored with your settings) came back after saving.
 - "Is it working?" before the game's first run now says "Run the game once, then press Check again."
 - The PresentMon row on the Updates page showed a greyed-out "No download" when PresentMon wasn't on the PC; it's a working Download button again.
 - Restoring your previous OptiScaler settings after a reinstall no longer brings back settings that pointed at HelixSR's files.

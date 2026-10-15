@@ -282,12 +282,17 @@ public static class OptiScalerOptions
     /// <summary>
     /// OptiScaler's own frame limiter, [Framerate] FramerateLimit (a float, 0 = off). It works through Reflex: the game has
     /// to send Reflex markers (support Reflex); on AMD and Intel cards OptiScaler loads the fakenvapi.dll from its package
-    /// to stand in for Reflex. Null puts back what the file had (off).
+    /// to stand in for Reflex. Null (no cap) writes OptiScaler's "off" value, 0. It never "puts back" an earlier value: a cap
+    /// that was in the file before Upshift's change (set in OptiScaler's menu, or restored with the user's settings after a
+    /// reinstall) would come back, and the cap the user just cleared would stay.
     /// </summary>
     public static List<IniSetting> FrameCapSettings(double? fps) => new()
     {
-        new("Framerate", "FramerateLimit", fps is > 0 ? fps.Value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) : null)
+        new("Framerate", "FramerateLimit", fps is > 0 ? fps.Value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) : NoFrameCap)
     };
+
+    /// <summary>OptiScaler's value for no frame limit.</summary>
+    public const string NoFrameCap = "0";
 
     /// <summary>The lowest and highest frame cap Upshift writes.</summary>
     public const double MinFrameCap = 10, MaxFrameCap = 1000;

@@ -66,8 +66,8 @@ public static partial class OptiScalerInstaller
 
         foreach (var change in manifest.IniChanges)
             list.Add(change.Key.Equals("FramerateLimit", StringComparison.OrdinalIgnoreCase)
-                ? new(change.ChangedUtc, $"Frame cap set to {change.Current} fps",
-                    $"OptiScaler.ini: [Framerate] FramerateLimit = {change.Current}. OptiScaler's default is {change.Original ?? "not set"} (off).")
+                ? new(change.ChangedUtc, CapText(change.Current) is { } cap ? $"Frame cap set to {cap}" : "Frame cap turned off",
+                    $"OptiScaler.ini: [Framerate] FramerateLimit = {change.Current}. Before Upshift's change: {CapText(change.Original) ?? "off"}.")
                 : new(change.ChangedUtc, $"OptiScaler.ini: [{change.Section}] {change.Key} = {change.Current}",
                     $"OptiScaler's default is {change.Original ?? "not set"}"));
 
@@ -83,6 +83,12 @@ public static partial class OptiScalerInstaller
         "fsr4-4.1.1b" => "FSR 4.1.1b",
         _ => kind
     };
+
+    /// <summary>"40 fps" for a frame cap value, or null when it's off (0, auto or not set).</summary>
+    private static string? CapText(string? value) =>
+        double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v) && v > 0
+            ? $"{v.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)} fps"
+            : null;
 
     private static string Shorten(IReadOnlyList<string> names) =>
         names.Count <= 6 ? string.Join(", ", names) : $"{string.Join(", ", names.Take(6))} and {names.Count - 6} more";

@@ -682,6 +682,14 @@ errors and no warnings.
     later picks. Different → warning, kept. **Claude didn't download the archive** (standing rule), so the real DLL hash is
     unknown; tested with a stand-in archive (harness 178 checks).
 
+  - **Frame cap clear (test.8, 2026-10-14):** the X sent FramerateLimit = null, which Configure treats as "put back the
+    value from before Upshift's change". Silent Hill 2's ini had 40 with no IniChange for it (from the 1.0.1 settings
+    restore), so 40 stayed and the page re-read it. `FrameCapSettings(null)` now writes `0` (`OptiScalerOptions.NoFrameCap`,
+    OptiScaler's off value); the change list says "Frame cap turned off" / "Before Upshift's change: 40 fps". The cap is
+    stored only in OptiScaler.ini (and its IniChange). Tested on a copy of SH2's real ini and record: harness (the old
+    clear left 40; the new one writes 0) and the app (X → 0 and "No cap", after restart too; type 40 → X → 0). The real
+    SH2 ini is unchanged (`9b10b5a8…`); the user's own copy still has 40 until they clear it with test.8.
+
 ## Next
 
 1. **DLSS 5 follow-ups:**
