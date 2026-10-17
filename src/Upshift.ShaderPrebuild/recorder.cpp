@@ -24,6 +24,7 @@
 #include "recording.h"
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <cstdio>
 #include <mutex>
@@ -145,6 +146,17 @@ void Save(std::vector<Job>& batch)
     for (FILE* f : { g_pipelines, g_refused, g_timing }) if (f) fflush(f);
 }
 
+/// The session's "still running" mark: alive.txt holds the time since the hooks went in, rewritten at most every 30
+/// seconds, so Upshift knows when the session ended (to within 30 seconds) even if the game was killed.
+void Alive()
+{
+    static double last = -1e18;
+    const double now = NowMs();
+    if (now - last < 30000) return;
+    last = now;
+    if (FILE* f = _wfopen((g_session / L"alive.txt").c_str(), L"w")) { fprintf(f, "%.0f\n", now - g_start); fclose(f); }
+}
+
 void WriterLoop()
 {
     std::vector<Job> batch;
@@ -152,13 +164,20 @@ void WriterLoop()
     {
         {
             std::unique_lock g(g_queueLock);
-            g_queueReady.wait(g, [] { return !g_queue.empty(); });
+            // Wakes for queued work, or every 30 seconds to refresh the alive mark while the game builds nothing.
+            if (!g_queueReady.wait_for(g, std::chrono::seconds(30), [] { return !g_queue.empty(); }))
+            {
+                g.unlock();
+                Alive();
+                continue;
+            }
             batch.swap(g_queue);
             g_saving = true;
         }
         Save(batch);
         batch.clear();
         g_saving = false;
+        Alive();
     }
 }
 
@@ -395,7 +414,7 @@ DWORD WINAPI Start(void*)
     // The session notes are written straight away (the writer isn't running yet).
     if (FILE* f = _wfopen((g_session / L"session.txt").c_str(), L"a"))
     {
-        fprintf(f, "program\t%s\nprocess_id\t%lu\nstarted\t%s\nrecorder\tupshift_rec 3 (Upshift: background writes)\n",
+        fprintf(f, "program\t%s\nprocess_id\t%lu\nstarted\t%s\nrecorder\tupshift_rec 4 (Upshift: background writes, alive mark)\n",
                 Narrow(exe).c_str(), GetCurrentProcessId(), Stamp().c_str());
         fclose(f);
     }

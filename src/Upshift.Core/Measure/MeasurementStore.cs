@@ -25,6 +25,8 @@ public sealed class MeasurementRun
     public double LowFps { get; set; }
     /// <summary>The highest one-second average (FrameStats.MaxFps). Null for runs saved before Upshift 1.3.0.</summary>
     public double? MaxFps { get; set; }
+    /// <summary>Frames over twice the median frame time (null for runs measured before this was recorded).</summary>
+    public int? Spikes { get; set; }
     public int Frames { get; set; }
     /// <summary>The time the frames covered: the real length of the run.</summary>
     public double Seconds { get; set; }

@@ -281,7 +281,7 @@ public static class Measurement
         var verdict = BottleneckRules.Judge(stats.AverageFps, timing, load, CapOf(settings), refresh, frameGenOn);
         AppServices.Measurements.Add(game.Id, new MeasurementRun
         {
-            Utc = DateTime.UtcNow, AverageFps = stats.AverageFps, LowFps = stats.LowFps, MaxFps = stats.MaxFps, Frames = stats.Frames,
+            Utc = DateTime.UtcNow, AverageFps = stats.AverageFps, LowFps = stats.LowFps, MaxFps = stats.MaxFps, Frames = stats.Frames, Spikes = stats.Spikes,
             Seconds = stats.Seconds, PlannedSeconds = seconds, StoppedEarly = stoppedEarly,
             GeneratedFrames = stats.GeneratedFrames, RefreshHz = refresh, Settings = settings,
             CpuBusyMs = timing?.CpuBusyMs, CpuWaitMs = timing?.CpuWaitMs, GpuBusyMs = timing?.GpuBusyMs, GpuWaitMs = timing?.GpuWaitMs,

@@ -117,6 +117,15 @@ public sealed class ShaderPrebuildView : CardPart
             });
         if (_note is { } note) panel.Children.Add(new InfoBar { IsOpen = true, IsClosable = false, Severity = InfoBarSeverity.Warning, Message = note });
 
+        // ---- Did it help? ----
+        var help = new StackPanel { Spacing = 8 };
+        help.Children.Add(Text("Did it help?", 14, bold: true));
+        var helpBody = new StackPanel { Spacing = 8 };
+        helpBody.Children.Add(Text("Comparing sessions…", 12, subtle: true));
+        help.Children.Add(helpBody);
+        panel.Children.Add(help);
+        _ = FillHelpAsync(card, helpBody);
+
         // ---- What it doesn't do ----
         panel.Children.Add(Text("What it doesn't do: it only restores shaders already learned. New areas still build their shaders once (and are " +
                                 "learned then). Ray tracing shaders aren't covered. What's learned belongs to this graphics card model; a different " +
@@ -144,6 +153,108 @@ public sealed class ShaderPrebuildView : CardPart
                 : learning ? "Nothing learned yet: play the game normally, and what it builds is learned." : "Nothing learned yet. Turn learning on, then play the game normally.";
         if (waiting > 0) text += $" {waiting} recording{(waiting == 1 ? "" : "s")} will be added once the game is closed.";
         status.Text = text;
+    }
+
+    // ---------------- Did it help? ----------------
+
+    /// <summary>
+    /// The latest Cold start and Pre-built sessions side by side (in a card that's also the picture "Save as image" makes),
+    /// the verdict, what's missing to make the comparison, and Copy as text / Save as image.
+    /// </summary>
+    private async Task FillHelpAsync(GameCardViewModel card, StackPanel body)
+    {
+        StutterComparison comparison;
+        try { comparison = await Task.Run(() => ShaderPrebuildGames.Comparison(card.Info)); }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            body.Children.Clear();
+            body.Children.Add(Text($"The sessions couldn't be compared: {ex.Message}", 12, subtle: true));
+            return;
+        }
+        body.Children.Clear();
+        body.Children.Add(Text("Each play session is labelled by what came just before it: Cold start (the first after Clear driver shader cache), " +
+                               "Pre-built (the first after Pre-build now) or Normal. The latest Cold start and Pre-built sessions are compared.", 12, subtle: true));
+        if (!comparison.HasAny)
+        {
+            foreach (var line in comparison.Missing) body.Children.Add(Text(line, 13));
+            return;
+        }
+        var pc = Pc();
+        var result = ResultCard(card.Name, comparison, pc);
+        body.Children.Add(result);
+        foreach (var line in comparison.Missing) body.Children.Add(Text(line, 13));
+
+        var status = Text("", 12, subtle: true);
+        var copy = new Button { Content = "Copy as text" };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(copy, "Copy the shader comparison as text");
+        copy.Click += (_, _) =>
+        {
+            var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
+            package.SetText(StutterReport.Text(card.Name, comparison, pc));
+            Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+            status.Text = "Copied.";
+        };
+        var image = new Button { Content = "Save as image…" };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(image, "Save the shader comparison as an image");
+        image.Click += async (_, _) => status.Text = await Helpers.ImageExport.SavePngAsync(result, $"{card.Name} shader pre-build {DateTime.Now:yyyy-MM-dd}") ?? "";
+        body.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { copy, image } });
+        body.Children.Add(status);
+        body.Children.Add(Text("Shared results never include your Windows user name, the PC's name or any folder path. " +
+                               "Export all results (under Measure performance) includes this comparison.", 12, subtle: true));
+    }
+
+    /// <summary>The PC, for shared results (no user name, PC name or folder path); NVIDIA's own driver number.</summary>
+    private static Core.Services.PcInfo Pc()
+    {
+        var gpu = AppServices.Gpu;
+        var driver = gpu?.Vendor == Core.Models.GpuVendor.Nvidia ? Core.Install.Dlss5.NvidiaDriver(gpu.DriverVersion) ?? gpu.DriverVersion : gpu?.DriverVersion;
+        return Core.Services.PcInfo.Read(gpu?.Name, driver);
+    }
+
+    /// <summary>The comparison as a dark result card, like Measure's: game, PC, the two columns, the verdict.</summary>
+    private static FrameworkElement ResultCard(string gameName, StutterComparison c, Core.Services.PcInfo pc)
+    {
+        var dim = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 0x9A, 0xA4, 0xAE));
+        var white = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.White);
+        var accent = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 0x6F, 0xC9, 0xAE));
+        var grid = new Grid { ColumnSpacing = 18, RowSpacing = 4 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        void Cell(int row, int col, string text, double size, bool strong, Microsoft.UI.Xaml.Media.Brush brush)
+        {
+            var t = new TextBlock { Text = text, FontSize = size, FontWeight = strong ? FontWeights.SemiBold : FontWeights.Normal, Foreground = brush };
+            Grid.SetRow(t, row);
+            Grid.SetColumn(t, col);
+            grid.Children.Add(t);
+        }
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        Cell(0, 1, "Cold start", 13, true, white);
+        Cell(0, 2, "Pre-built", 13, true, white);
+        var row = 1;
+        foreach (var (label, cold, pre) in StutterReport.Rows(c))
+        {
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            var strong = label is "Builds over 10 ms" or "Time spent building";
+            Cell(row, 0, label, 12, false, dim);
+            Cell(row, 1, cold, strong ? 14 : 12, strong, white);
+            Cell(row, 2, pre, strong ? 14 : 12, strong, white);
+            row++;
+        }
+        var stack = new StackPanel { Spacing = 10 };
+        stack.Children.Add(new TextBlock { Text = gameName, FontSize = 18, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Foreground = white });
+        stack.Children.Add(new TextBlock { Text = $"{pc.GraphicsText} · {pc.ProcessorText} · {pc.WindowsText}", FontSize = 11, TextWrapping = TextWrapping.Wrap, Foreground = dim });
+        stack.Children.Add(grid);
+        if (c.Verdict is { } verdict)
+            stack.Children.Add(new TextBlock { Text = verdict, FontSize = 15, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Foreground = accent });
+        stack.Children.Add(new TextBlock { Text = "Pre-build shaders (Experimental) · Upshift", FontSize = 11, Foreground = accent });
+        var border = new Border
+        {
+            Padding = new Thickness(18, 16, 18, 14), CornerRadius = new CornerRadius(10), Child = stack, HorizontalAlignment = HorizontalAlignment.Left,
+            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 0x16, 0x1B, 0x22))
+        };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(border, "Did it help? comparison");
+        return border;
     }
 
     private async Task SetLearningAsync(Core.Models.GameInfo game, bool on)

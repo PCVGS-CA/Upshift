@@ -207,52 +207,8 @@ public sealed class MeasureView : UserControl
 
     private static Microsoft.UI.Xaml.Media.SolidColorBrush White => new(Microsoft.UI.Colors.White);
 
-    /// <summary>
-    /// Renders the result card to a PNG first (while it's on screen: the save dialog closes the flyout), then asks where
-    /// to save it. Returns a status line, or null when cancelled.
-    /// </summary>
-    private static async Task<string?> SaveImageAsync(UIElement card, string gameName, MeasurementRun run)
-    {
-        byte[] pixels;
-        int width, height;
-        try
-        {
-            var target = new Microsoft.UI.Xaml.Media.Imaging.RenderTargetBitmap();
-            await target.RenderAsync(card, (int)(card.ActualSize.X * 2), (int)(card.ActualSize.Y * 2));
-            pixels = System.Runtime.InteropServices.WindowsRuntime.WindowsRuntimeBufferExtensions.ToArray(await target.GetPixelsAsync());
-            (width, height) = (target.PixelWidth, target.PixelHeight);
-            if (width == 0 || height == 0) return "The image couldn't be made: the result card wasn't on screen.";
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { return $"The image couldn't be made: {ex.Message}"; }
-
-        Windows.Storage.StorageFile? file = null;
-        try
-        {
-            var picker = new Windows.Storage.Pickers.FileSavePicker { SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.PicturesLibrary };
-            picker.FileTypeChoices.Add("PNG image", new List<string> { ".png" });
-            picker.SuggestedFileName = SafeName($"{gameName} {run.Utc.ToLocalTime():yyyy-MM-dd HHmm}");
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(App.MainAppWindow));
-            file = await picker.PickSaveFileAsync();
-            if (file is null) return null;
-            using (var stream = await file.OpenAsync(Windows.Storage.FileAccessMode.ReadWrite))
-            {
-                stream.Size = 0;
-                var encoder = await Windows.Graphics.Imaging.BitmapEncoder.CreateAsync(Windows.Graphics.Imaging.BitmapEncoder.PngEncoderId, stream);
-                encoder.SetPixelData(Windows.Graphics.Imaging.BitmapPixelFormat.Bgra8, Windows.Graphics.Imaging.BitmapAlphaMode.Premultiplied,
-                    (uint)width, (uint)height, 192, 192, pixels);
-                await encoder.FlushAsync();
-            }
-            return $"Saved as {file.Name}.";
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        {
-            // The save dialog makes an empty file; don't leave it behind.
-            try { if (file is not null && new FileInfo(file.Path).Length == 0) File.Delete(file.Path); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
-            return $"The image wasn't saved: {ex.Message}";
-        }
-    }
-
-    private static string SafeName(string name) => string.Concat(name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '-' : c));
+    private static Task<string?> SaveImageAsync(UIElement card, string gameName, MeasurementRun run) =>
+        Helpers.ImageExport.SavePngAsync(card, $"{gameName} {run.Utc.ToLocalTime():yyyy-MM-dd HHmm}");
 
     /// <summary>"Export all results": every game's runs on this PC as one CSV file.</summary>
     private async Task ExportAllAsync()
@@ -263,7 +219,7 @@ public sealed class MeasureView : UserControl
             .OrderBy(r => r.Item1).ThenByDescending(r => r.r.Utc)
             .ToList();
         string message;
-        if (rows.Count == 0) message = "There are no results to export yet.";
+        if (rows.Count == 0 && !await ShaderPrebuildGames.HasComparisonsAsync()) message = "There are no results to export yet.";
         else
         {
             try
@@ -276,6 +232,9 @@ public sealed class MeasureView : UserControl
                 if (file is null) return;
                 await File.WriteAllTextAsync(file.Path, ResultSharing.Csv(rows, Pc()), new System.Text.UTF8Encoding(true));
                 message = $"{rows.Count} result{(rows.Count == 1 ? "" : "s")} exported to {file.Name}.";
+                // Pre-build shaders (Experimental, when on): its "Did it help?" results, one row per game, in a file beside it.
+                if (await ShaderPrebuildGames.ExportComparisonsAsync(file.Path, Pc()) is { } shaderFile)
+                    message += $" Pre-build shaders' \"Did it help?\" results are in {shaderFile}.";
             }
             catch (Exception ex) when (ex is not OutOfMemoryException) { message = $"The results weren't exported: {ex.Message}"; }
         }

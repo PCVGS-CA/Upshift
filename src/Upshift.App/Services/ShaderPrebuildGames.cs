@@ -86,6 +86,48 @@ public static class ShaderPrebuildGames
         catch (Exception ex) when (ex is not OutOfMemoryException) { return ex.Message; }
     }
 
+    /// <summary>"Did it help?" for one game: its sessions labelled, and the latest Cold start and Pre-built compared.</summary>
+    public static StutterComparison Comparison(GameInfo game)
+    {
+        var gameDir = GameDir(game);
+        var events = new ShaderCaches(AppServices.DataDir).Events().Concat(PrebuildReport.PrebuildEvents(gameDir)).ToList();
+        var runs = AppServices.Measurements.Get(game.Id).Runs;
+        return StutterReport.Compare(StutterReport.Label(ShaderLibrary.Sessions(gameDir), events, runs));
+    }
+
+    /// <summary>Games with a Cold start or Pre-built session (only while the feature is on).</summary>
+    private static List<(string Name, StutterComparison Comparison)> Comparisons()
+    {
+        if (!Enabled) return new();
+        var list = new List<(string, StutterComparison)>();
+        foreach (var game in AppServices.Library.Current.Where(g => !g.HasAntiCheat && ShaderLibrary.ProgramOf(g) is not null).OrderBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase))
+        {
+            try
+            {
+                if (!Directory.Exists(Path.Combine(GameDir(game), "recordings"))) continue;
+                var c = Comparison(game);
+                if (c.HasAny) list.Add((game.Name, c));
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { }
+        }
+        return list;
+    }
+
+    public static Task<bool> HasComparisonsAsync() => Task.Run(() => Comparisons().Count > 0);
+
+    /// <summary>
+    /// "Export all results": the "Did it help?" results, one row per game, in a CSV beside the Measure results
+    /// ("… - shader pre-build.csv"; its columns differ, so the two tables stay separate). Returns the file name, or null.
+    /// </summary>
+    public static async Task<string?> ExportComparisonsAsync(string measureCsvPath, Core.Services.PcInfo pc)
+    {
+        var games = await Task.Run(Comparisons);
+        if (games.Count == 0) return null;
+        var path = Path.Combine(Path.GetDirectoryName(measureCsvPath)!, Path.GetFileNameWithoutExtension(measureCsvPath) + " - shader pre-build.csv");
+        await File.WriteAllTextAsync(path, StutterReport.Csv(games, pc), new System.Text.UTF8Encoding(true));
+        return Path.GetFileName(path);
+    }
+
     /// <summary>The Settings switch turned off: learning off in every game, and the recorder removed. Returns problems.</summary>
     public static async Task<List<string>> TurnOffEverywhereAsync()
     {

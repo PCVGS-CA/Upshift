@@ -11,8 +11,10 @@ namespace Upshift.Core.Measure;
 /// <param name="MaxFps">The highest one-second average: the frames in the best whole second of the run. Null when the run
 /// was shorter than one whole second. A single very fast frame (a loading screen) can't set it on its own.</param>
 /// <param name="Timing">Where each frame's time went (CPU and GPU busy and waiting), when PresentMon recorded it.</param>
+/// <param name="Spikes">Frame-time spikes: frames that took more than twice the usual (median) frame time, the hitches you
+/// feel as stutter (a shader being built, say).</param>
 public sealed record FrameStats(int Frames, double Seconds, double AverageFps, double LowFps, int GeneratedFrames, bool FrameTypeKnown, double? MaxFps = null,
-    FrameTiming? Timing = null);
+    FrameTiming? Timing = null, int? Spikes = null);
 
 /// <summary>
 /// Averages per rendered frame from PresentMon 2.6.0's default CSV (column names checked against its source,
@@ -73,7 +75,16 @@ public static class PresentMonCsv
         var slowest = times.OrderByDescending(t => t).Take(Math.Max(1, times.Count / 100)).Average();
         var generated = frames.Count(f => IsGenerated(f.Type));
         return new FrameStats(frames.Count, seconds, frames.Count / seconds, 1000.0 / slowest, generated, typeCol >= 0, MaxOneSecondFps(times),
-            Timing(frames));
+            Timing(frames), Spikes(times));
+    }
+
+    /// <summary>Frames that took more than twice the median frame time.</summary>
+    public static int Spikes(IReadOnlyList<double> frameTimesMs)
+    {
+        if (frameTimesMs.Count == 0) return 0;
+        var sorted = frameTimesMs.OrderBy(t => t).ToList();
+        var median = sorted.Count % 2 == 1 ? sorted[sorted.Count / 2] : (sorted[sorted.Count / 2 - 1] + sorted[sorted.Count / 2]) / 2;
+        return frameTimesMs.Count(t => t > 2 * median);
     }
 
     private sealed record Frame(double Ms, string? Type, double? CpuBusy, double? CpuWait, double? GpuBusy, double? GpuWait, double? Sync);

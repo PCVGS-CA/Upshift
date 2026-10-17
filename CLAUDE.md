@@ -690,6 +690,24 @@ errors and no warnings.
     clear left 40; the new one writes 0) and the app (X → 0 and "No cap", after restart too; type 40 → X → 0). The real
     SH2 ini is unchanged (`9b10b5a8…`); the user's own copy still has 40 until they clear it with test.8.
 
+  - **"Did it help?" (test.9, 2026-10-17):** `Core/ShaderPrebuild/StutterComparison.cs` (`StutterReport`: `Label` = the
+    first session of the game after a "cache cleared" event is ColdStart, after a "pre-build" event PreBuilt, all else
+    Normal; `SessionEnd` = newest write of `alive.txt`/`timing.csv`/`session.txt`; a Measure run overlapping the session is
+    attached; `Compare` = latest of each, verdict on builds over 10 ms (or total build ms when the cold start had none),
+    "No improvement" said plainly, a note when play times differ more than 2×; `Rows`/`Text`/`Csv`).
+    - Recorder `upshift_rec 4`: the writer thread rewrites `alive.txt` (ms since hooks) at most every 30 s, also when
+      idle (`wait_for` 30 s), so a killed game's session still has an end.
+    - `FrameStats.Spikes` / `MeasurementRun.Spikes`: frames over twice the median frame time (new runs only).
+    - App: the card's "Did it help?" section (dark result card = the image), `Helpers/ImageExport` (shared with Measure),
+      `ShaderPrebuildGames.Comparison`/`ExportComparisonsAsync`: Export all results writes `<name> - shader pre-build.csv`
+      beside the Measure CSV (different columns, so a separate table), only while the feature is on.
+    - Tested: harness 196 checks (labels incl. "second session after a clear is Normal", end from the alive mark, Measure
+      matching, verdict 97%, missing texts, no user/PC name or paths; the real recorder writes alive.txt), and the app on
+      a throwaway data folder (`UPSHIFT_TEST_DATA`, synthetic sessions): the card, Copy as text, Save as image, Export.
+      Not tested: a real game session with the new recorder, a real Measure run during a session.
+    - The user's real Silent Hill 2 ini changed on 2026-10-15 outside Upshift (`FramerateLimit=auto`, no IniChange); the
+      harness's SH2 frame-cap tests now set 40 in their copy first.
+
 ## Next
 
 1. **DLSS 5 follow-ups:**
