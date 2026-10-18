@@ -2,10 +2,11 @@
   <!--
     Upshift's version, in one place. The About section, the HTTP User-Agent, the Velopack installer and the GitHub
     release all read it from here. To release, change it, add a matching "## [x.y.z]" section to CHANGELOG.md, and
-    push a tag "vx.y.z" (the release workflow refuses a tag that doesn't match).
+    push a tag "vx.y.z" (the release workflow refuses a tag that doesn't match). A beta is "x.y.z-beta.N": it uses the
+    "## [x.y.z]" notes and is published as a pre-release in the "beta" update channel.
   -->
   <PropertyGroup>
-    <Version>1.3.0</Version>
+    <Version>1.3.0-beta.1</Version>
     <!-- Keeps the version in About as "1.0.0" rather than "1.0.0+<commit>". -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>

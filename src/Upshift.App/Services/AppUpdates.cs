@@ -11,6 +11,10 @@ public enum AppUpdateState { Idle, NotInstalled, Checking, UpToDate, Available, 
 /// release list; nothing is downloaded until the user chooses "Restart to update". A copy that wasn't installed with
 /// the installer (a build from Visual Studio, say) can't update itself, but still learns the latest version from
 /// GitHub's release list, so the Updates page can show it.
+/// Channels: stable versions are packed in Velopack's "win" channel and published as normal GitHub releases; betas
+/// (x.y.z-beta.N) in the "beta" channel as GitHub pre-releases. A stable copy reads only "win" and skips pre-releases, so
+/// it never sees a beta. A beta reads "beta" (later betas) and also "win", so the final release replaces it; from then on
+/// it's a stable copy.
 /// Changed is raised on whichever thread did the work.
 /// </summary>
 public static class AppUpdates
@@ -18,7 +22,13 @@ public static class AppUpdates
     private const string Repo = "PCVGS-CA/Upshift";
     private static readonly SemaphoreSlim Gate = new(1, 1);
     private static UpdateManager? _manager;
+    private static UpdateManager? _stableManager;
     private static UpdateInfo? _update;
+    /// <summary>The manager that found <see cref="_update"/> (a beta's update can come from either channel).</summary>
+    private static UpdateManager? _updateFrom;
+
+    /// <summary>This copy is a beta (x.y.z-beta.N): it also looks at pre-releases.</summary>
+    public static bool IsBeta => AppInfo.Version.Contains("-beta", StringComparison.OrdinalIgnoreCase);
 
     public static AppUpdateState State { get; private set; } = AppUpdateState.Idle;
 
@@ -37,7 +47,12 @@ public static class AppUpdates
 
     public static event Action? Changed;
 
-    private static UpdateManager Manager => _manager ??= new UpdateManager(new GithubSource(AppInfo.RepoUrl, null, false));
+    /// <summary>This copy's own channel (from its package): "win" for stable, "beta" for a beta, which also reads pre-releases.</summary>
+    private static UpdateManager Manager => _manager ??= new UpdateManager(new GithubSource(AppInfo.RepoUrl, null, IsBeta));
+
+    /// <summary>For a beta: the stable channel, so the final release (e.g. 1.3.0) replaces the beta.</summary>
+    private static UpdateManager StableManager => _stableManager ??=
+        new UpdateManager(new GithubSource(AppInfo.RepoUrl, null, false), new UpdateOptions { ExplicitChannel = "win" });
 
     /// <summary>
     /// False for a build run straight from Visual Studio or an unzipped build folder. The installed app and the
@@ -70,13 +85,22 @@ public static class AppUpdates
             {
                 // Only the version is read here; this copy can't install it.
                 var list = await AppServices.Components.GitHub.GetReleasesAsync(Repo, CancellationToken.None);
-                LatestVersion = list.Releases.Where(r => !r.Prerelease).Select(r => r.Tag.TrimStart('v', 'V')).FirstOrDefault() ?? LatestVersion;
+                // A stable copy only counts stable releases; a beta counts betas too. The highest version wins.
+                LatestVersion = list.Releases.Where(r => IsBeta || !r.Prerelease).Select(r => r.Tag.TrimStart('v', 'V'))
+                    .Aggregate((string?)null, (best, v) => best is null || IsNewer(v, best) ? v : best) ?? LatestVersion;
                 Set(AppUpdateState.NotInstalled,
                     (LatestVersion is { } l && IsNewer(l, AppInfo.Version) ? $"Upshift {l} is out. " : "") +
                     "This copy can't update itself because it wasn't installed with the Upshift installer. New versions are on GitHub.");
                 return;
             }
             _update = await Manager.CheckForUpdatesAsync();
+            _updateFrom = Manager;
+            if (IsBeta && await StableManager.CheckForUpdatesAsync() is { } stable
+                && (_update is null || IsNewer(stable.TargetFullRelease.Version.ToString(), _update.TargetFullRelease.Version.ToString())))
+            {
+                _update = stable;
+                _updateFrom = StableManager;
+            }
             if (_update is null)
             {
                 LatestVersion = AppInfo.Version;
@@ -110,7 +134,8 @@ public static class AppUpdates
                 return;
             }
             Set(AppUpdateState.Downloading, $"Downloading Upshift {version}…");
-            await Manager.DownloadUpdatesAsync(update, percent => Set(AppUpdateState.Downloading, $"Downloading Upshift {version}… {percent}%"));
+            var manager = _updateFrom ?? Manager;
+            await manager.DownloadUpdatesAsync(update, percent => Set(AppUpdateState.Downloading, $"Downloading Upshift {version}… {percent}%"));
 
             // An install may have been started while the download ran.
             if (IsWorkRunning())
@@ -118,7 +143,7 @@ public static class AppUpdates
                 Set(AppUpdateState.Available, $"Upshift {version} is downloaded. Wait for the install or update in progress to finish, then restart.");
                 return;
             }
-            Manager.ApplyUpdatesAndRestart(update.TargetFullRelease);
+            manager.ApplyUpdatesAndRestart(update.TargetFullRelease);
         }
         catch (Exception ex)
         {
@@ -130,14 +155,10 @@ public static class AppUpdates
     private static bool IsWorkRunning() => GameUpdates.IsBusy || InstallRunner.IsRunning;
 
     /// <summary>
-    /// "1.0.3" is newer than "1.0.2", and a release is newer than its own test builds ("1.3.0" than "1.3.0-test.2");
-    /// anything that isn't a version counts as not newer.
+    /// SemVer order: "1.0.3" is newer than "1.0.2", a release is newer than its pre-releases ("1.3.0" than "1.3.0-beta.2"
+    /// or "1.3.0-test.9"), and "1.3.0-beta.2" than "1.3.0-beta.1". Anything that isn't a version counts as not newer.
     /// </summary>
-    public static bool IsNewer(string candidate, string current)
-    {
-        if (!System.Version.TryParse(candidate.Split('-')[0], out var a) || !System.Version.TryParse(current.Split('-')[0], out var b)) return false;
-        return a > b || (a == b && !candidate.Contains('-') && current.Contains('-'));
-    }
+    public static bool IsNewer(string candidate, string current) => Core.Services.SemVer.IsNewer(candidate, current);
 
     private static void Set(AppUpdateState state, string message)
     {

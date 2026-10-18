@@ -89,6 +89,17 @@ try {
         throw "The tag '$Tag' doesn't match the version $version in Directory.Build.props. Tag the release 'v$version'."
     }
     $notesVersion = $version
+    # Betas ("1.3.0-beta.1") go in Velopack's "beta" channel (releases.beta.json): stable copies read only "win", so they
+    # never see a beta. Their notes are the release's "## [1.3.0]" section, after a line saying it's a beta.
+    $channel = 'win'
+    $isBeta = $version -match '^(\d+\.\d+\.\d+)-beta\.\d+$'
+    if ($isBeta) {
+        $channel = 'beta'
+        $notesVersion = $Matches[1]
+    }
+    elseif ($version -match '-') {
+        if (-not $TestBuild) { throw "Only x.y.z and x.y.z-beta.N versions can be released (got '$version')." }
+    }
     if ($TestBuild -ne 0) {
         if ($Tag) { throw "-TestBuild is for test installers only and can't be used with -Tag." }
         if ($TestBuild -lt 1) { throw "-TestBuild must be 1 or more." }
@@ -106,7 +117,17 @@ try {
     }
     New-Item -ItemType Directory -Force $OutDir | Out-Null
     $notes = Join-Path $OutDir 'release-notes.md'
-    [IO.File]::WriteAllText($notes, $match.Groups[1].Value.Trim() + "`n", $utf8)
+    $notesText = $match.Groups[1].Value.Trim()
+    if ($isBeta) {
+        # The newest stable release below this one in CHANGELOG.md, for "use 1.2.0 instead".
+        $stable = [regex]::Matches($changelog, '(?m)^## \[(\d+\.\d+\.\d+)\]') | ForEach-Object { $_.Groups[1].Value } |
+            Where-Object { [version]$_ -lt [version]$notesVersion } | Select-Object -First 1
+        if (-not $stable) { throw "CHANGELOG.md has no stable release below $notesVersion to point beta testers at." }
+        $notesText = "**Beta: for testing. If you want the tested version, use [$stable](https://github.com/PCVGS-CA/Upshift/releases/tag/v$stable).**`n`n" +
+            "This is $version, a pre-release of $notesVersion. Installed copies of $stable and older never update to it; a beta updates to later betas and then to the final $notesVersion.`n`n" +
+            $notesText
+    }
+    [IO.File]::WriteAllText($notes, $notesText + "`n", $utf8)
 
     # ---- "Pre-build shaders" (experimental): the native recorder and pre-build program, with Visual Studio's MSBuild ----
     # (the dotnet CLI can't build C++; Upshift.App.csproj copies the results into the publish folder)
@@ -135,12 +156,12 @@ try {
     Invoke-Checked 'vpk pack' {
         dotnet vpk pack --packId $packId --packVersion $version --packDir $PublishDir --mainExe Upshift.exe `
             --packTitle $packTitle --packAuthors PCVGS --icon src/Upshift.App/Assets/Upshift.ico `
-            --releaseNotes $notes --shortcuts $shortcuts --runtime win-x64 --outputDir $OutDir
+            --releaseNotes $notes --shortcuts $shortcuts --runtime win-x64 --channel $channel --outputDir $OutDir
     }
 
     # Friendlier names for the two files people download. The update feed doesn't refer to either.
-    Move-Item -Force (Join-Path $OutDir "$packId-win-Setup.exe") (Join-Path $OutDir 'Upshift-Setup-x64.exe')
-    Move-Item -Force (Join-Path $OutDir "$packId-win-Portable.zip") (Join-Path $OutDir 'Upshift-Portable-x64.zip')
+    Move-Item -Force (Join-Path $OutDir "$packId-$channel-Setup.exe") (Join-Path $OutDir 'Upshift-Setup-x64.exe')
+    Move-Item -Force (Join-Path $OutDir "$packId-$channel-Portable.zip") (Join-Path $OutDir 'Upshift-Portable-x64.zip')
 
     # The installer and both exes in the portable zip (Velopack's launcher and the app) have the icon, and the zip and
     # the update package carry Assets\Upshift.ico for the window.
@@ -157,8 +178,10 @@ try {
     finally {
         if (Test-Path $unzip) { Remove-Item -Recurse -Force $unzip }
     }
-    $nupkg = Get-ChildItem $OutDir -Filter "$packId-$version-full.nupkg" | Select-Object -First 1
-    if (-not $nupkg) { throw "Icon check: $packId-$version-full.nupkg is missing." }
+    # Velopack adds the channel to the name outside the default one: Upshift.App-1.3.0-beta.1-beta-full.nupkg.
+    $nupkgName = if ($channel -eq 'win') { "$packId-$version-full.nupkg" } else { "$packId-$version-$channel-full.nupkg" }
+    $nupkg = Get-ChildItem $OutDir -Filter $nupkgName | Select-Object -First 1
+    if (-not $nupkg) { throw "Icon check: $nupkgName is missing." }
     $zip = [IO.Compression.ZipFile]::OpenRead($nupkg.FullName)
     try {
         if (-not ($zip.Entries | Where-Object { $_.FullName -match '(^|/)Assets/Upshift\.ico$' })) { throw "Icon check: Assets/Upshift.ico is missing from $($nupkg.Name)." }
@@ -175,6 +198,7 @@ try {
     }
     [IO.File]::AppendAllText($notes, ($sums -join "`n") + "`n", $utf8)
 
+    Write-Host "Channel: $channel"
     Write-Host "Release files in ${OutDir}:"
     Get-ChildItem $OutDir -File | ForEach-Object { Write-Host ("  {0,-40} {1,8:N1} MB" -f $_.Name, ($_.Length / 1MB)) }
 }

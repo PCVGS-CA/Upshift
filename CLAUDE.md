@@ -708,6 +708,26 @@ errors and no warnings.
     - The user's real Silent Hill 2 ini changed on 2026-10-15 outside Upshift (`FramerateLimit=auto`, no IniChange); the
       harness's SH2 frame-cap tests now set 40 in their copy first.
 
+- **1.3.0-beta.1 (2026-10-18): public beta**, GitHub pre-release from branch `beta` (tag `v1.3.0-beta.1`). 1.2.0 stays
+  the stable release (Latest). **main is untouched** and must stay 1.2.0-compatible until the final 1.3.0.
+  - **Channels:** `package.ps1` packs x.y.z-beta.N in Velopack's `beta` channel (`releases.beta.json`, nupkg
+    `Upshift.App-<v>-beta-full.nupkg`), notes = the `## [x.y.z]` section after a "Beta: for testing… use <newest stable>"
+    line. The workflow uploads `releases.<channel>.json` and publishes betas with `--prerelease --latest=false`; its
+    delta download uses `--pre --channel beta` for betas.
+  - **Who sees what:** 1.1.0 and 1.2.0 use `GithubSource(prerelease: false)` on channel `win` (and their portable
+    "latest" check skips pre-releases), so they never see a beta. A beta (`AppUpdates.IsBeta`) reads channel `beta` with
+    pre-releases (later betas) and also `win` with `ExplicitChannel = "win"` (the final release); the higher version
+    wins. After the final, it's a stable copy.
+  - **Order (SemVer, `Core/Services/SemVer`):** 1.2.0 < 1.3.0-beta.1 < beta.2 < beta.10 < 1.3.0-test.N < 1.3.0. A PC with a
+    1.3.0-test.N install doesn't update to a beta (test sorts above beta); it gets the final 1.3.0, or install the beta
+    over it by hand.
+  - **Catalog:** betas read `catalog.json` on the `beta` branch (`AppSettings.BetaCatalogUrl`, chosen by
+    `IsBetaBuild`); stable versions read main. The 1.3 catalog must not reach main while 1.1/1.2 are in use: their DLSS 5
+    switch would take Skynizz's zip whole (no `packageFiles`/`overlay`; everything sits under `DLSS5-Optimised\`).
+    **Before the final 1.3.0:** decide how main's catalog changes (e.g. keep a 1.2-compatible catalog on main and move
+    1.3+ to a new path), and pack the final so betas find it (they also read `win`, so a normal release is enough).
+  - Catalog fixes for the beta: commit to `beta`, bump `updated`.
+
 ## Next
 
 1. **DLSS 5 follow-ups:**

@@ -4,7 +4,7 @@ All notable changes to Upshift. Each release's section becomes its GitHub releas
 
 ## [1.3.0]
 
-HelixSR support (experimental, still in testing), a warning for Capcom RE Engine games, and a more flexible Measure performance.
+A page for each game, a new DLSS 5 build, uninstall that can undo Upshift's changes to games, Pre-build shaders (experimental), HelixSR (experimental, still in testing), a warning for Capcom RE Engine games, and a more flexible Measure performance.
 
 ### New
 
@@ -52,6 +52,18 @@ HelixSR support (experimental, still in testing), a warning for Capcom RE Engine
 - A crash of Upshift after that setup was hardened against, but it isn't confirmed fixed.
 
 If you have an RX 5000 or RX 6000 card and try it, please tell us how it went, good or bad, with **Report a problem** (About page, or in the game's panel). On other cards the HelixSR row explains why it isn't needed.
+
+### Not tested yet
+
+These were tested only on test folders, copies or made-up data, not in a real game or a real install:
+
+- The new DLSS 5 build running in a game, and "Move to the new DLSS 5 build" on a real game.
+- Pre-build shaders' recorder and "Did it help?" with real play sessions, and clearing the real driver shader cache.
+- Measure's hotkey in a game that keeps keys to itself (such as Resident Evil Requiem), and "Start in 10 seconds" with a real measurement.
+- Removing Upshift from games through a real uninstall, and games in protected folders that need Windows' permission.
+- The FSR 4.1.1b check with the real release file (Upshift never downloads it).
+- HelixSR in a game (see above).
+- Updating from one beta to the next, or to the final 1.3.0 (that needs a second release to exist).
 
 ### Fixes
 
