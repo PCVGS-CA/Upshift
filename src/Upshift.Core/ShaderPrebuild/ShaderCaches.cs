@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 
 namespace Upshift.Core.ShaderPrebuild;
@@ -180,6 +181,31 @@ public sealed class ShaderCaches
             if (stamp is not null && ShaderLibrary.ParseStamp(stamp) is { } t) events.Add((t, cleared ? "cache cleared" : "cache restored"));
         }
         return events;
+    }
+
+    /// <summary>
+    /// Each "Clear driver shader cache": when, and how many files were left in place because a running program had
+    /// them open (read from the log lines "N moved aside (M in use by running programs, left in place)").
+    /// </summary>
+    public List<(DateTime When, int InUse)> Clears()
+    {
+        var clears = new List<(DateTime, int)>();
+        DateTime? current = null;
+        var inUse = 0;
+        foreach (var line in SafeRead(LogFile).Split('\n'))
+        {
+            if (line.StartsWith("Shader caches moved aside "))
+            {
+                if (current is { } c) clears.Add((c, inUse));
+                current = ShaderLibrary.ParseStamp(line.Split(' ').ElementAtOrDefault(4) ?? "");
+                inUse = 0;
+            }
+            else if (line.StartsWith("Shader caches restored ")) { if (current is { } c) clears.Add((c, inUse)); current = null; }
+            else if (current is not null && System.Text.RegularExpressions.Regex.Match(line, @"\((\d+) in use by running programs") is { Success: true } m)
+                inUse += int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);
+        }
+        if (current is { } last) clears.Add((last, inUse));
+        return clears;
     }
 
     private void AppendLog(IEnumerable<string> lines)

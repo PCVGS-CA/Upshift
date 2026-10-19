@@ -67,6 +67,9 @@ These were tested only on test folders, copies or made-up data, not in a real ga
 
 ### Fixes
 
+- Since beta.1: **Clear driver shader cache** and **Pre-build now** are refused while the game is running, with a message saying so. The game is found by its own folders as well as its name, so its launcher counts too. Both check again at the moment they start, a pre-build stops if the game is started during it, and the card updates by itself when the game starts or closes.
+- Since beta.1: **"Did it help?"** no longer mislabels a session played while a pre-build was running. Such a session isn't compared, and the card says why and what to do. A Cold start after a cache clear that left files in place (in use by running programs) is compared with a note that it may have been partly warm.
+- Since beta.1: the Measure length box no longer shows arrows that float over the text below while typing.
 - A small "Esc" hint no longer pops up at random places on a game's page. Esc still goes back to the Library.
 - Frame cap: the X clears the cap, and an empty box (or 0) means no cap; neither turns into 1 fps any more. The lowest cap is 10 fps. Clearing now always writes OptiScaler's "off" value (0) to OptiScaler.ini: before, a cap that was already in the file when Upshift first changed it (for example 40, set in OptiScaler's menu or restored with your settings) came back after saving.
 - "Is it working?" before the game's first run now says "Run the game once, then press Check again."

@@ -65,6 +65,31 @@ public static class PrebuildReport
         return events;
     }
 
+    /// <summary>
+    /// Finished pre-builds for the game: when each started and ended. The summary (replays\*.txt) is named by the end
+    /// time and holds the seconds it took. A pre-build that was stopped writes no summary, so it isn't listed.
+    /// </summary>
+    public static List<(DateTime Start, DateTime End)> PrebuildRuns(string gameDir)
+    {
+        var runs = new List<(DateTime, DateTime)>();
+        try
+        {
+            var dir = Path.Combine(gameDir, "replays");
+            if (!Directory.Exists(dir)) return runs;
+            foreach (var file in Directory.EnumerateFiles(dir, "*.txt"))
+            {
+                if (ShaderLibrary.ParseStamp(Path.GetFileNameWithoutExtension(file)) is not { } end) continue;
+                double seconds = 0;
+                foreach (var line in File.ReadLines(file))
+                    if (line.StartsWith("seconds\t", StringComparison.Ordinal))
+                        double.TryParse(line[8..], NumberStyles.Float, CultureInfo.InvariantCulture, out seconds);
+                runs.Add((end.AddSeconds(-Math.Ceiling(seconds)), end));
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        return runs.OrderBy(r => r.Item1).ToList();
+    }
+
     /// <summary>The report as text (for "Copy as text"), with the graphics card and driver so PCs can be compared.</summary>
     public static string Text(string gameName, string program, string graphicsCard, string? driver, IReadOnlyList<SessionStats> sessions)
     {

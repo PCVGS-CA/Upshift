@@ -103,8 +103,10 @@ try {
     if ($TestBuild -ne 0) {
         if ($Tag) { throw "-TestBuild is for test installers only and can't be used with -Tag." }
         if ($TestBuild -lt 1) { throw "-TestBuild must be 1 or more." }
-        if ($version -match '-') { throw "-TestBuild needs a plain x.y.z version in Directory.Build.props (got '$version')." }
-        $version = "$version-test.$TestBuild"
+        if ($version -match '-' -and -not $isBeta) { throw "-TestBuild needs an x.y.z or x.y.z-beta.N version in Directory.Build.props (got '$version')." }
+        # After a beta, test builds of the next one sort between them: 1.3.0-beta.1 < 1.3.0-beta.1.test.2 < 1.3.0-beta.2,
+        # in the beta channel, so the next beta replaces them. Before any beta: x.y.z-test.N, below x.y.z.
+        $version = if ($isBeta) { "$version.test.$TestBuild" } else { "$version-test.$TestBuild" }
     }
     Write-Host "Upshift $version"
 

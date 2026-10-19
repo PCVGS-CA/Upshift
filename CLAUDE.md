@@ -727,6 +727,25 @@ errors and no warnings.
     **Before the final 1.3.0:** decide how main's catalog changes (e.g. keep a 1.2-compatible catalog on main and move
     1.3+ to a new path), and pack the final so betas find it (they also read `win`, so a normal release is enough).
   - Catalog fixes for the beta: commit to `beta`, bump `updated`.
+- **After beta.1 (2026-10-18), fixes from the user's SH2 recording (test build 1.3.0-beta.1.test.1):**
+  - Cause of the missing Pre-built session: the game was started during the 76 s pre-build. Pre-build events are
+    stamped at their end, so the session began "before" it, got the Cold start label, and the 15:31 measurement was in
+    the same session. Also the old name-only running check counted Upshift's own pre-build copy (it runs under the
+    game's exe name from the data folder), which is why the card said "The game is running" during the pre-build.
+  - `ShaderPrebuildGames.RunningByName` (exe + launcher names, skips copies under the data folder; used for drawing,
+    re-checked every 3 s by the card) and `RunningProgram` (also `RunningFrom` the game's folders; used just before Clear
+    and Pre-build, and every 2 s during a pre-build, which stops if the game starts). `PrebuildSession.Start` refuses.
+  - `PrebuildReport.PrebuildRuns` (start = end − seconds from `replays\*.txt`), `ShaderCaches.Clears` (in-use count per
+    clear); `StutterReport.Label(…, prebuilds, clears)` sets `Problem` (pre-build overlapped: not compared, a note says
+    why) and `Caveat` (partial clear before a Cold start). `StutterComparison.Notes` go into the card, text and CSV.
+  - Measure length NumberBox: `SpinButtonPlacementMode.Hidden`.
+  - Test builds after a beta: `package.ps1 -TestBuild N` with a beta version gives `x.y.z-beta.M.test.N` (beta channel),
+    which sorts between beta.M and beta.M+1.
+  - Tested: harness 207 checks (the reported sequence, the clean sequence, a real partial clear with a locked file), and
+    the app on throwaway data with a stand-in game process (a renamed ping.exe in the game folder): Pre-build and Clear
+    refused at the click right after the game started, the card's buttons following start/stop. Not tested: a pre-build
+    stopped because the game starts during it (no learned shaders on the throwaway game), with the real SH2.
+
 
 ## Next
 

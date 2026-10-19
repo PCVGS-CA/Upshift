@@ -353,7 +353,8 @@ public sealed class MeasureView : UserControl
         {
             Value = Measurement.ChosenSeconds, Minimum = MeasureThresholds.MinSeconds, Maximum = MeasureThresholds.MaxSeconds,
             SmallChange = 10, LargeChange = 60, Width = 110, AcceptsExpression = false,
-            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
+            // No spin buttons: the compact ones float over the text below while typing. Up/Down keys still step.
+            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Hidden,
             ValidationMode = NumberBoxValidationMode.InvalidInputOverwritten, VerticalAlignment = VerticalAlignment.Center
         };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(box, "Measuring length in seconds");

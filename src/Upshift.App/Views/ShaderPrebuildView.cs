@@ -21,11 +21,21 @@ public sealed class ShaderPrebuildView : CardPart
     private bool _busy;
     private string? _note;
 
+    /// <summary>Whether the game was running when the card was last drawn (null before that).</summary>
+    private bool? _drawnRunning;
+    private readonly DispatcherTimer _runningWatch = new() { Interval = TimeSpan.FromSeconds(3) };
+
     public ShaderPrebuildView()
     {
         // Shown again (back from Settings, say): the switch or a pre-build may have changed meanwhile.
-        Loaded += (_, _) => { PrebuildSession.Changed += Rebuild; ShaderPrebuildGames.EnabledChanged += Rebuild; Rebuild(); };
-        Unloaded += (_, _) => { PrebuildSession.Changed -= Rebuild; ShaderPrebuildGames.EnabledChanged -= Rebuild; };
+        Loaded += (_, _) => { PrebuildSession.Changed += Rebuild; ShaderPrebuildGames.EnabledChanged += Rebuild; Rebuild(); _runningWatch.Start(); };
+        Unloaded += (_, _) => { PrebuildSession.Changed -= Rebuild; ShaderPrebuildGames.EnabledChanged -= Rebuild; _runningWatch.Stop(); };
+        // The game started or closed since the card was drawn: draw it again, so its buttons and text match.
+        _runningWatch.Tick += (_, _) =>
+        {
+            if (Card?.Info is not { } game || _drawnRunning is null) return;
+            if ((ShaderPrebuildGames.RunningByName(game) is not null) != _drawnRunning) Rebuild();
+        };
     }
 
     protected override void Build()
@@ -62,7 +72,8 @@ public sealed class ShaderPrebuildView : CardPart
 
         var gameDir = ShaderPrebuildGames.GameDir(game);
         var program = ShaderLibrary.ProgramOf(game)!;
-        var running = IsRunning(program);
+        var running = ShaderPrebuildGames.RunningByName(game) is not null;
+        _drawnRunning = running;
         var learning = ShaderPrebuildGames.IsLearning(game);
 
         // ---- Learn ----
@@ -89,7 +100,7 @@ public sealed class ShaderPrebuildView : CardPart
             Content = "Pre-build now", Style = (Style)Application.Current.Resources["AccentButtonStyle"],
             IsEnabled = !running && !_busy && !PrebuildSession.Running
         };
-        prebuild.Click += (_, _) => PrebuildSession.Start(game);
+        prebuild.Click += (_, _) => PrebuildSession.Start(game);   // it checks again that the game isn't running
         row.Children.Add(prebuild);
         if (isThisGame)
         {
@@ -177,12 +188,16 @@ public sealed class ShaderPrebuildView : CardPart
         if (!comparison.HasAny)
         {
             foreach (var line in comparison.Missing) body.Children.Add(Text(line, 13));
+            foreach (var line in comparison.AllNotes)
+                body.Children.Add(new InfoBar { IsOpen = true, IsClosable = false, Severity = InfoBarSeverity.Warning, Message = line });
             return;
         }
         var pc = Pc();
         var result = ResultCard(card.Name, comparison, pc);
         body.Children.Add(result);
         foreach (var line in comparison.Missing) body.Children.Add(Text(line, 13));
+        foreach (var line in comparison.AllNotes)
+            body.Children.Add(new InfoBar { IsOpen = true, IsClosable = false, Severity = InfoBarSeverity.Warning, Message = line });
 
         var status = Text("", 12, subtle: true);
         var copy = new Button { Content = "Copy as text" };
@@ -284,7 +299,7 @@ public sealed class ShaderPrebuildView : CardPart
                                "and Restore puts it back.", 12, subtle: true));
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         var clear = new Button { Content = "Clear driver shader cache (with backup)", IsEnabled = !running };
-        clear.Click += async (_, _) => await ClearAsync(caches, card.Name, program);
+        clear.Click += async (_, _) => await ClearAsync(caches, card.Info);
         var restore = new Button { Content = caches.BackupTime is { } t ? $"Restore backup ({t:d MMM HH:mm})" : "Restore backup", IsEnabled = caches.HasBackup && !running };
         restore.Click += async (_, _) => await ShowLinesAsync("Restore the shader cache backup", caches.Restore());
         var report = new Button { Content = "Report" };
@@ -306,9 +321,14 @@ public sealed class ShaderPrebuildView : CardPart
     /// Clear, after showing exactly what moves and where its backup goes. Refused while the game runs (checked again just
     /// before clearing, in case it was started while the question was open).
     /// </summary>
-    private async Task ClearAsync(ShaderCaches caches, string gameName, string program)
+    private async Task ClearAsync(ShaderCaches caches, Core.Models.GameInfo game)
     {
-        if (IsRunning(program)) { await ShowLinesAsync("Clear driver shader cache", new() { $"{gameName} is running. Close it first: its shaders can't be cleared while it uses them." }); return; }
+        var gameName = game.Name;
+        if (await Task.Run(() => ShaderPrebuildGames.RunningProgram(game)) is { } running)
+        {
+            await ShowLinesAsync("Clear driver shader cache", new() { $"Not cleared: {running} is running. Close {gameName} first: a cache cleared while the game runs isn't a cold start." });
+            return;
+        }
         if (ShowDialog is null) return;
         var preview = await Task.Run(caches.Preview);
         var panel = new StackPanel { Spacing = 8 };
@@ -332,7 +352,11 @@ public sealed class ShaderPrebuildView : CardPart
             PrimaryButtonText = "Clear", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close, IsPrimaryButtonEnabled = preview.Count > 0
         });
         if (answer != ContentDialogResult.Primary) return;
-        if (IsRunning(program)) { await ShowLinesAsync("Clear driver shader cache", new() { $"{gameName} was started meanwhile, so nothing was cleared." }); return; }
+        if (await Task.Run(() => ShaderPrebuildGames.RunningProgram(game)) is { } started)
+        {
+            await ShowLinesAsync("Clear driver shader cache", new() { $"Not cleared: {started} was started meanwhile. Close {gameName}, then try again." });
+            return;
+        }
         await ShowLinesAsync("Driver shader cache cleared", caches.Clear(gameName));
     }
 
@@ -378,14 +402,6 @@ public sealed class ShaderPrebuildView : CardPart
     }
 
     private static string Size(long bytes) => bytes < 1024 * 1024 ? $"{Math.Max(1, bytes / 1024)} KB" : $"{bytes / 1024.0 / 1024:0} MB";
-
-    private static bool IsRunning(string program)
-    {
-        var name = Path.GetFileNameWithoutExtension(program);
-        var processes = Process.GetProcessesByName(name);
-        foreach (var p in processes) p.Dispose();
-        return processes.Length > 0;
-    }
 
     private static FrameworkElement Wrap(UIElement panel) => new Border
     {

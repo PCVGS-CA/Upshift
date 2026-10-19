@@ -8,14 +8,22 @@ namespace Upshift.Core.ShaderPrebuild;
 public enum SessionKind { Normal, ColdStart, PreBuilt }
 
 /// <summary>One recorded play session with its label, when it ended, and a Measure run made during it (if any).</summary>
-public sealed record LabelledSession(PrebuildReport.SessionStats Stats, SessionKind Kind, DateTime Started, DateTime? Ended, MeasurementRun? Measure)
+/// <param name="Problem">Why the session can't be compared (a pre-build ran while it was being played), or null.</param>
+/// <param name="Caveat">Something that makes it less clean but still comparable (a partial cache clear), or null.</param>
+public sealed record LabelledSession(PrebuildReport.SessionStats Stats, SessionKind Kind, DateTime Started, DateTime? Ended, MeasurementRun? Measure,
+    string? Problem = null, string? Caveat = null)
 {
     public double? PlayMinutes => Ended is { } end ? Math.Max(0, (end - Started).TotalMinutes) : null;
 }
 
-/// <summary>The latest Cold start and Pre-built sessions side by side, the verdict, and what's missing to make one.</summary>
-public sealed record StutterComparison(LabelledSession? Cold, LabelledSession? PreBuilt, string? Verdict, double? CutPercent, IReadOnlyList<string> Missing)
+/// <summary>
+/// The latest Cold start and Pre-built sessions side by side, the verdict, what's missing to make one, and notes on
+/// sessions that couldn't be compared or that are less clean than they look.
+/// </summary>
+public sealed record StutterComparison(LabelledSession? Cold, LabelledSession? PreBuilt, string? Verdict, double? CutPercent, IReadOnlyList<string> Missing,
+    IReadOnlyList<string>? Notes = null)
 {
+    public IReadOnlyList<string> AllNotes => Notes ?? Array.Empty<string>();
     public bool HasAny => Cold is not null || PreBuilt is not null;
 }
 
@@ -37,8 +45,13 @@ public static class StutterReport
         _ => "Normal"
     };
 
+    /// <param name="prebuilds">Finished pre-builds (start and end). A session that overlaps one can't be compared: the game
+    /// built shaders while they were being pre-built. The "pre-build" events are their end times.</param>
+    /// <param name="clears">Each cache clear and how many files it left in place (in use): a Cold start after a partial
+    /// clear gets a caveat.</param>
     public static List<LabelledSession> Label(IReadOnlyList<ShaderLibrary.SessionInfo> sessions, IReadOnlyList<(DateTime When, string What)> events,
-        IReadOnlyList<MeasurementRun> runs)
+        IReadOnlyList<MeasurementRun> runs, IReadOnlyList<(DateTime Start, DateTime End)>? prebuilds = null,
+        IReadOnlyList<(DateTime When, int InUse)>? clears = null)
     {
         var ordered = sessions.Where(s => s.Started is not null).OrderBy(s => s.Started).ToList();
         var sorted = events.OrderBy(e => e.When).ToList();
@@ -53,7 +66,14 @@ public static class StutterReport
                 && !ordered.Take(i).Any(earlier => earlier.Started > last.When))   // the first session after it
                 kind = what == ColdEvent ? SessionKind.ColdStart : SessionKind.PreBuilt;
             var end = SessionEnd(session.Folder);
-            result.Add(new LabelledSession(PrebuildReport.Stats(session, sorted), kind, start, end, MeasureDuring(runs, start, end)));
+            string? problem = null, caveat = null;
+            var overlaps = prebuilds?.Where(p => p.Start <= (end ?? start) && p.End >= start).ToList();
+            if (overlaps is { Count: > 0 })
+                problem = $"a pre-build ran while the game was running ({overlaps[0].Start:HH:mm}–{overlaps[0].End:HH:mm}), so the game and the pre-build built shaders at the same time";
+            if (kind == SessionKind.ColdStart && clears?.Where(c => c.When <= start).OrderBy(c => c.When).LastOrDefault() is { InUse: > 0 } partial)
+                caveat = $"Clear driver shader cache left {partial.InUse} file{(partial.InUse == 1 ? "" : "s")} in place before the Cold start " +
+                         "(in use by running programs), so it may have been partly warm and the real improvement can be bigger than shown.";
+            result.Add(new LabelledSession(PrebuildReport.Stats(session, sorted), kind, start, end, MeasureDuring(runs, start, end), problem, caveat));
         }
         return result;
     }
@@ -88,14 +108,21 @@ public static class StutterReport
 
     public static StutterComparison Compare(IReadOnlyList<LabelledSession> labelled)
     {
-        var cold = labelled.LastOrDefault(s => s.Kind == SessionKind.ColdStart);
-        var pre = labelled.LastOrDefault(s => s.Kind == SessionKind.PreBuilt);
+        var cold = labelled.LastOrDefault(s => s.Kind == SessionKind.ColdStart && s.Problem is null);
+        var pre = labelled.LastOrDefault(s => s.Kind == SessionKind.PreBuilt && s.Problem is null);
+        // Sessions that can't be compared, newer than what is compared: said plainly rather than left out silently.
+        var newestCompared = new[] { cold?.Started, pre?.Started }.Max() ?? DateTime.MinValue;
+        var notes = labelled.Where(s => s.Problem is not null && s.Started > newestCompared).TakeLast(3)
+            .Select(s => $"The session from {s.Started.ToString("d MMM HH:mm", CultureInfo.InvariantCulture)} isn't compared: {s.Problem}. " +
+                         "Close the game before Pre-build now, wait for it to finish, then start the game.")
+            .ToList();
+        if (cold?.Caveat is { } caveat) notes.Add(caveat);
         var missing = new List<string>();
         if (cold is null)
             missing.Add("No Cold start session yet: under Test tools, press Clear driver shader cache, then play the game for a few minutes.");
         if (pre is null)
             missing.Add("No Pre-built session yet: under Test tools, press Clear driver shader cache, then Pre-build now, then play the same part of the game.");
-        if (cold is null || pre is null) return new(cold, pre, null, null, missing);
+        if (cold is null || pre is null) return new(cold, pre, null, null, missing, notes);
 
         double c = cold.Stats.Over10, p = pre.Stats.Over10;
         var what = "Shader stutter";
@@ -111,7 +138,7 @@ public static class StutterReport
         }
         if (cold.PlayMinutes is { } cm && pre.PlayMinutes is { } pm && cm > 0 && pm > 0 && Math.Max(cm, pm) / Math.Min(cm, pm) > 2)
             verdict += " (the two sessions' play times differ a lot; compare the same part of the game for a fair result)";
-        return new(cold, pre, verdict, cut, missing);
+        return new(cold, pre, verdict, cut, missing, notes);
     }
 
     private static string Count(LabelledSession s, string what) =>
@@ -157,6 +184,7 @@ public static class StutterReport
         sb.AppendLine();
         if (c.Verdict is { } v) sb.AppendLine(v);
         foreach (var m in c.Missing) sb.AppendLine(m);
+        foreach (var n in c.AllNotes) sb.AppendLine(n);
         sb.AppendLine("Measured with Upshift (Pre-build shaders, Experimental). Frame-time spikes: frames over twice the usual frame time.");
         return sb.ToString();
     }
@@ -166,7 +194,7 @@ public static class StutterReport
         "game", "verdict", "stutter_cut_pct",
         "cold_played", "cold_built", "cold_build_ms", "cold_over_10ms", "cold_longest_ms", "cold_play_minutes", "cold_low_fps", "cold_spikes",
         "prebuilt_played", "prebuilt_built", "prebuilt_build_ms", "prebuilt_over_10ms", "prebuilt_longest_ms", "prebuilt_play_minutes", "prebuilt_low_fps", "prebuilt_spikes",
-        "processor", "graphics_card", "driver", "windows"
+        "processor", "graphics_card", "driver", "windows", "notes"
     };
 
     /// <summary>
@@ -189,7 +217,7 @@ public static class StutterReport
                 };
             var cells = new[] { name, c.Verdict ?? "", N(c.CutPercent, 0) }
                 .Concat(Side(c.Cold)).Concat(Side(c.PreBuilt))
-                .Concat(new[] { pc.Processor ?? "", pc.GraphicsCard ?? "", pc.DriverVersion ?? "", pc.Windows ?? "" });
+                .Concat(new[] { pc.Processor ?? "", pc.GraphicsCard ?? "", pc.DriverVersion ?? "", pc.Windows ?? "", string.Join(" ", c.AllNotes) });
             sb.AppendLine(string.Join(",", cells.Select(Cell)));
         }
         return sb.ToString();

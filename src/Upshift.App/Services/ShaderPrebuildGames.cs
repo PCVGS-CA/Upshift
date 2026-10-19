@@ -90,9 +90,50 @@ public static class ShaderPrebuildGames
     public static StutterComparison Comparison(GameInfo game)
     {
         var gameDir = GameDir(game);
-        var events = new ShaderCaches(AppServices.DataDir).Events().Concat(PrebuildReport.PrebuildEvents(gameDir)).ToList();
+        var caches = new ShaderCaches(AppServices.DataDir);
+        var events = caches.Events().Concat(PrebuildReport.PrebuildEvents(gameDir)).ToList();
         var runs = AppServices.Measurements.Get(game.Id).Runs;
-        return StutterReport.Compare(StutterReport.Label(ShaderLibrary.Sessions(gameDir), events, runs));
+        return StutterReport.Compare(StutterReport.Label(ShaderLibrary.Sessions(gameDir), events, runs, PrebuildReport.PrebuildRuns(gameDir), caches.Clears()));
+    }
+
+    /// <summary>
+    /// The game's program that's running, or null. A quick check by name (the game's exe and its launcher's), leaving out
+    /// Upshift's own pre-build copy, which runs under the game's name from Upshift's data folder.
+    /// </summary>
+    public static string? RunningByName(GameInfo game)
+    {
+        var names = new[] { ShaderLibrary.ProgramOf(game), game.LaunchExePath is { Length: > 0 } l ? Path.GetFileName(l) : null }
+            .Where(n => n is { Length: > 0 }).Distinct(StringComparer.OrdinalIgnoreCase);
+        var data = Path.GetFullPath(AppServices.DataDir).TrimEnd('\\') + "\\";
+        foreach (var name in names)
+        {
+            foreach (var p in System.Diagnostics.Process.GetProcessesByName(Path.GetFileNameWithoutExtension(name!)))
+            {
+                using (p)
+                {
+                    string? path = null;
+                    try { path = p.MainModule?.FileName; } catch (Exception) { /* can't be read: counts as the game */ }
+                    if (path is not null && path.StartsWith(data, StringComparison.OrdinalIgnoreCase)) continue;   // Upshift's pre-build copy
+                    return name;
+                }
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// The thorough check, run just before clearing the cache or pre-building (and while a pre-build runs): anything
+    /// running from the game's folders (the game or its launcher), or the game's programs by name. Null when nothing runs.
+    /// </summary>
+    public static string? RunningProgram(GameInfo game)
+    {
+        try
+        {
+            var folders = new[] { game.TargetDir, game.InstallDir, game.LaunchExePath is { Length: > 0 } l ? Path.GetDirectoryName(l) : null };
+            if (OptiScalerInstaller.RunningFrom(folders).FirstOrDefault() is { } running) return running;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { }
+        return RunningByName(game);
     }
 
     /// <summary>Games with a Cold start or Pre-built session (only while the feature is on).</summary>
@@ -160,21 +201,44 @@ public static class PrebuildSession
     {
         if (Running || ShaderLibrary.ProgramOf(game) is not { } program) return;
         _ui = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+        // Checked again here, just before it starts: a pre-build while the game runs builds shaders twice at once and
+        // spoils the comparison.
+        if (ShaderPrebuildGames.RunningProgram(game) is { } running)
+        {
+            LastResult = new PrebuildResult(false, 0, 0, 0, null, $"Not started: {running} is running. Close {game.Name} first, then press Pre-build now.");
+            LastGameId = game.Id;
+            Changed?.Invoke();
+            return;
+        }
         GameId = game.Id;
         Progress = null;
         _cts = new CancellationTokenSource();
         var gameDir = ShaderPrebuildGames.GameDir(game);
         var progress = new Progress<PrebuildProgress>(p => { Progress = p; Changed?.Invoke(); });
         Changed?.Invoke();
+        var cts = _cts;
+        string? startedMeanwhile = null;
+        // The game started while its shaders are being pre-built: stop (the pre-build would only compete with the game).
+        _ = Task.Run(async () =>
+        {
+            while (!cts.IsCancellationRequested)
+            {
+                try { await Task.Delay(2000, cts.Token); } catch (OperationCanceledException) { return; }
+                if (ShaderPrebuildGames.RunningProgram(game) is { } running) { startedMeanwhile = running; cts.Cancel(); return; }
+            }
+        });
         _ = Task.Run(async () =>
         {
             PrebuildResult result;
             try
             {
                 ShaderLibrary.Merge(gameDir);   // the latest finished session counts too
-                result = await PrebuildRunner.RunAsync(ShaderPrebuildGames.AppPrebuild, program, gameDir, progress, _cts.Token);
+                result = await PrebuildRunner.RunAsync(ShaderPrebuildGames.AppPrebuild, program, gameDir, progress, cts.Token);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException) { result = new PrebuildResult(false, 0, 0, 0, null, ex.Message); }
+            if (startedMeanwhile is { } who)
+                result = result with { Success = false, Problem = $"Stopped: {who} was started while the shaders were being pre-built. Close {game.Name}, press Pre-build now again, and start the game once it's done." };
+            cts.Cancel();   // ends the watcher
             _ui?.TryEnqueue(() =>
             {
                 LastResult = result;
