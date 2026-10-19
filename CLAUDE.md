@@ -81,7 +81,7 @@ errors and no warnings.
     - `RemoteCatalog` loads a newer catalog from the online address: `AppSettings.DefaultCatalogUrl` (the raw
       `catalog.json` on `main` of PCVGS-CA/Upshift) unless the `catalogUrl` setting names another. It's used from
       the next start when valid and newer; otherwise the built-in copy is used. **Bump `"updated"` in catalog.json
-      whenever it changes**, or installed copies won't pick the change up.
+      whenever it changes**, or installed copies won't pick the change up. Since 1.3.0 the file is `catalog.v2.json`; `catalog.json` is frozen for 1.1/1.2.
     - `DlssNames` turns a DLSS version into its name, e.g. "310.9.1 (DLSS 4.5)".
   - `Components/`:
     - `GitHubClient` reads the releases API with an ETag cache and handles the rate limit.
@@ -769,6 +769,13 @@ errors and no warnings.
   - **Colour:** one accent; chips are neutral grey for every vendor (`Ui.VendorColors`); success InfoBars are
     Informational; yellow only for real warnings.
   - Library header line: "Better upscaling in any game. One click, undo anytime."
+
+- **1.3.0 (2026-10-18): stable release**, tag `v1.3.0` from main (main fast-forwarded to the release commit), from the
+  simplified beta.2 code the user verified. 1.2.0 copies get it through the `win` channel; betas through their `win` check.
+  - **Catalog split:** 1.3+ embeds and reads `src/Upshift.Core/Catalog/catalog.v2.json` (embedded under the logical name
+    `catalog.json`; online at main/…/catalog.v2.json, betas at beta/…/catalog.v2.json). `src/Upshift.Core/Catalog/catalog.json`
+    is **frozen at 1.2.0's content** for 1.1.0 and 1.2.0, which read it from main: never edit it. Catalog changes go in
+    `catalog.v2.json` (bump its `updated`).
 
 ## Next
 

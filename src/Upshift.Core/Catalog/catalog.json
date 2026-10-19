@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-10-14T16:00Z",
+  "updated": "2026-10-04",
   "notes": "Upshift's built-in catalog. Upshift will later download a newer version of this file from its GitHub repo, so new forks and GPU support can be added without releasing a new version. The userAgent values below are fallbacks; the app sends Upshift/<its version>.",
 
   "components": [
@@ -24,21 +24,7 @@
       "assetPattern": "(?i)^OptiScaler-DLSSNR-.*\\.zip$",
       "pinnedVersion": "v0.2.0-dlssnr",
       "installable": true,
-      "replacedBy": "optiscaler-dlss5",
-      "notes": "Replaced by optiscaler-dlss5 (2026-10-14): games on it are offered a move. Checked v0.2.0-dlssnr (2026-09-28): OptiScaler.dll, OptiScaler.ini, the forwarder nvngx.dll_dlssnr.dll, and the FSR/XeSS DLLs under OptiScaler\\. No nvngx_dlssnr.dll (the author won't ship it). Settings in [DlssNr]: Enabled (default off), ToggleKey (unbound), TransferStrength, ColourStrength, WorkingScale (model resolution, up to 2.0). Needs driver 616.56+."
-    },
-    {
-      "id": "optiscaler-dlss5",
-      "name": "OptiScaler DLSS 5 (Skynizz)",
-      "kind": "injector",
-      "description": "OptiScaler fork that adds NVIDIA DLSS 5 Neural Rendering, cheaper and steadier (the model before the upscaler, an edit cache). Needs the user's own nvngx_dlssnr.dll.",
-      "repo": "Skynizz/optiscaler-dlss5",
-      "assetPattern": "(?i)^OptiScaler-DLSS5-[\\d.]+-win-x64\\.zip$",
-      "pinnedVersion": "v1.2.1",
-      "installable": true,
-      "packageFiles": [ "OptiScaler.dll", "OptiScaler.ini", "nvngx.dll_dlssnr.dll" ],
-      "overlay": true,
-      "notes": "Checked v1.2.1 (2026-10-14, GPL-3.0, zip SHA-256 0d5b2488...ec6, also GitHub's digest): DLSS5-Optimised\\ with OptiScaler.dll (the fork's own OptiScaler build), OptiScaler.ini and the forwarder nvngx.dll_dlssnr.dll, plus its own installer (INSTALL.bat, install.py), README and tools\\, which Upshift never copies (packageFiles). No FSR/XeSS/fakenvapi files, so it goes on top of the installed OptiScaler (overlay). No nvngx_dlssnr.dll. [DlssNr] has the keys Upshift writes (Enabled, ToggleKey, TransferStrength, ColourStrength, WorkingScale) plus PreSr, CacheEnabled, CacheInterval, Passes, Style and more; its installer sets PreSr=true, CacheEnabled=true, CacheInterval=1 (its Quality preset). Official OptiScaler has no Neural Rendering yet (v0.9.4; PR #1116 open on 2026-10-14)."
+      "notes": "Checked v0.2.0-dlssnr (2026-09-28): OptiScaler.dll, OptiScaler.ini, the forwarder nvngx.dll_dlssnr.dll, and the FSR/XeSS DLLs under OptiScaler\\. No nvngx_dlssnr.dll (the author won't ship it). Settings in [DlssNr]: Enabled (default off), ToggleKey (unbound), TransferStrength, ColourStrength, WorkingScale (model resolution, up to 2.0). Needs driver 616.56+."
     },
     {
       "id": "amd-nr",
@@ -55,7 +41,7 @@
       "id": "presentmon",
       "name": "PresentMon",
       "kind": "tool",
-      "description": "Intel's frame-timing tool (MIT licence). Upshift's Measure performance runs its console app for the length the user chooses (60 seconds by default). Downloaded the first time you measure; never bundled.",
+      "description": "Intel's frame-timing tool (MIT licence). Upshift's Measure performance runs its console app for 60 seconds per measurement. Downloaded the first time you measure; never bundled.",
       "repo": "GameTechDev/PresentMon",
       "assetPattern": "(?i)^PresentMon-[\\d.]+-x64\\.exe$",
       "pinnedVersion": "v2.6.0",
@@ -163,8 +149,8 @@
     },
     {
       "id": "dlssnr",
-      "name": "OptiScaler DLSS 5 (Skynizz)",
-      "componentId": "optiscaler-dlss5",
+      "name": "OptiScaler DLSSNR",
+      "componentId": "optiscaler-dlssnr",
       "vendor": "Nvidia",
       "generations": [ "Blackwell" ],
       "needsNvidiaDll": true,
@@ -174,8 +160,8 @@
     },
     {
       "id": "dlssnr-older-rtx",
-      "name": "OptiScaler DLSS 5 (Skynizz)",
-      "componentId": "optiscaler-dlss5",
+      "name": "OptiScaler DLSSNR",
+      "componentId": "optiscaler-dlssnr",
       "vendor": "Nvidia",
       "generations": [ "Ada Lovelace", "Ampere", "Turing" ],
       "needsNvidiaDll": true,
@@ -351,24 +337,11 @@
           "forCard": { "RDNA 4": "AMD's newest, AI-based upscaler, made for your card: the best choice on it." }
         },
         { "id": "fsr31", "text": "AMD's upscaler that runs on any card: fast, but softer and with more shimmer than the AI upscalers." },
-        { "id": "fsr22", "text": "An older FSR, only worth trying if FSR 3.1 misbehaves in this game." },
-        {
-          "id": "helixsr",
-          "name": "DLSS 3.7 via HelixSR (experimental, still in testing)",
-          "text": "Experimental. NVIDIA's DLSS 3.7 network running on your Radeon's normal shader cores, through HelixSR, an unofficial project not affiliated with NVIDIA or AMD. It aims at DLSS-like sharpness and stability, costs more GPU time than FSR 3.1, and its author hasn't tested it on Windows."
-        }
+        { "id": "fsr22", "text": "An older FSR, only worth trying if FSR 3.1 misbehaves in this game." }
       ],
       "cardNotes": [
         { "vendors": [ "Nvidia" ], "generations": [ "Turing", "Ampere", "Ada Lovelace", "Blackwell" ], "text": "On your card, DLSS is almost always the best choice." },
         { "vendors": [ "Amd" ], "generations": [ "RDNA 4" ], "text": "On your card, FSR 4 is the best choice." },
-        {
-          "vendors": [ "Amd" ], "generations": [ "RDNA 2", "RDNA 2 integrated" ],
-          "text": "On your card, the two best-looking choices are FSR 4 with your 4.1.1b file and DLSS 3.7 via HelixSR (experimental). FSR 4.1.1b is AMD's own AI upscaler in a version modified to run on RX 6000 cards; HelixSR runs NVIDIA's DLSS network through an unofficial project. Which looks and runs better depends on the game: try both in the same scene and quality mode, and compare them with Measure performance. They can't be on at the same time."
-        },
-        {
-          "vendors": [ "Amd" ], "generations": [ "RDNA 1" ],
-          "text": "On your card, DLSS 3.7 via HelixSR (experimental) is the only AI upscaler that can run; nobody has tested it on an RX 5000 yet. Compare it with FSR 3.1 in the same scene using Measure performance."
-        },
         { "vendors": [ "Amd" ], "text": "On your card, XeSS or FSR 4 (INT8) usually look better than FSR 3.1; FSR 3.1 is the fastest." },
         { "vendors": [ "Intel" ], "text": "On your card, XeSS is the best choice." },
         { "vendors": [ "Nvidia" ], "text": "Your card can't run DLSS; XeSS usually looks better than FSR 3.1, and FSR 3.1 is the fastest." }
@@ -405,64 +378,5 @@
       ],
       "footer": "With frame generation on, the number is the final frame rate you see, generated frames included: OptiScaler halves it for the real frames itself. A number above your screen's rate has little effect. Turn on Show FPS counter first to see what the game runs at. Takes effect after restarting the game."
     }
-  },
-
-  "fsr411bRelease": {
-    "notes": "Upshift never downloads this file: Settings only opens the release page. The release (published 2026-09-08 by the3rdparty1917) lists only the archive's SHA-256, so a picked amd_fidelityfx_upscaler_dx12.dll is checked against the user's own downloaded archive when it's found (Downloads, Desktop, or next to the file). Read on 2026-10-14.",
-    "url": "https://github.com/the3rdparty1917/fsr4xyz/releases/tag/4.1.1b",
-    "name": "FSR 4.1.1b",
-    "archiveName": "FSR_4.1.1b_INT8_with_RDNA2_fix.7z",
-    "archiveSize": 3456158,
-    "archiveSha256": "66e9a818e0c914def7712c8dac06b08e64a64dbcfe77f3162d43ea6de93869ff",
-    "fileName": "amd_fidelityfx_upscaler_dx12.dll"
-  },
-
-  "helixSr": {
-    "notes": "Experimental. Upshift downloads only this release, checks the zip and the two setup scripts against these hashes, and runs the author's setup (helixsr-setup.ps1 OUT -Yes, after the user accepts Upshift's notice). The release has no NVIDIA files: the setup builds helixsr_weights.bin and helixsr_kernels.pak on the user's PC from NVIDIA's DLSS 310.7.0 DLL. Never change the version without reading the new release's helixsr-setup.ps1 and setup/helixsr_setup.py again (what they download, from where, what they run) and pinning their new hashes. Read on 2026-10-10 for 1.4.3.",
-    "version": "1.4.3",
-    "pageUrl": "https://github.com/lonewolf0622/HelixSR",
-    "assetUrl": "https://github.com/lonewolf0622/HelixSR/releases/download/v1.4.3/HelixSR-1.4.3.zip",
-    "assetSize": 2342525,
-    "assetSha256": "d79e849444e0ea8928c0b8df22ec21368ac08ec038417c087a3d2df7a6722119",
-    "zipFolder": "HelixSR-1.4.3",
-    "setupScript": "helixsr-setup.ps1",
-    "scriptSha256": {
-      "helixsr-setup.ps1": "f92c42c5ca2d1174c3fafcf742b5ed722e15da149277cc050e685d4a50411bc2",
-      "setup/helixsr_setup.py": "ed62d3d09c1cfa55345f4b835b9318e7737c0c562b502d008ebf1be07efbf857",
-      "setup/lib/model/launch_synth.exe": "9bc5bc7855200f38d74944ec467110c34befdbb03113ee835b68aeb263f4fbab",
-      "amd_fidelityfx_dx12.dll": "3fe8d532516b6441bd8893d986c494a19795375ebd2a6dffb1a9742e3db7dcfd"
-    },
-    "setupDownloads": [
-      { "name": "Python 3.14.8 (embeddable package)", "from": "python.org", "url": "https://www.python.org/ftp/python/3.14.8/python-3.14.8-embed-amd64.zip" },
-      { "name": "numpy 2.5.3", "from": "PyPI (files.pythonhosted.org)", "url": "https://files.pythonhosted.org/packages/a4/73/d2c08231e4fde7e415501fd02c715d96e98599b2d8384445933944152984/numpy-2.5.3-cp314-cp314-win_amd64.whl" },
-      { "name": "Microsoft's DirectX Shader Compiler 1.9.2607", "from": "Microsoft's GitHub", "url": "https://github.com/microsoft/DirectXShaderCompiler/releases/tag/v1.9.2607" },
-      { "name": "NVIDIA's DLSS 310.7.0 file (nvngx_dlss.dll), used once and deleted", "from": "NVIDIA's GitHub", "url": "https://github.com/NVIDIA/DLSS/tree/v310.7.0" }
-    ],
-    "dlssLicenseUrl": "https://github.com/NVIDIA/DLSS/blob/v310.7.0/LICENSE.txt",
-    "setupMinutes": 5,
-    "filesMb": 10,
-    "toolsMb": 100,
-    "generations": [ "RDNA 1", "RDNA 2", "RDNA 2 integrated" ],
-    "untestedGenerations": [ "RDNA 1" ]
-  },
-  "reEngine": {
-    "notes": "Capcom RE Engine games need REFramework before OptiScaler works (OptiScaler wiki, 'Capcom RE engine games': 'Capcom RE games in general require REFramework for Optiscaler to work'). Upshift recognises them by engineFiles next to the exe, not by name, and never downloads or installs REFramework. requiresReFramework (firm warning) and noWarning hold the OptiScaler wiki's titles; checked 2026-10-10: the RE 2/3/4/7/8 and Devil May Cry 5 pages need REFramework's pd-upscaler branch, the others say 'Requires REFramework'; Monster Hunter Rise's page says REFramework isn't required. Any other RE Engine game gets the softer warning. A store name may leave out the title's number ('Resident Evil Requiem'); that still matches. Capcom's REX engine (RE Engine's successor) has no game yet: re-check engineFiles when the first REX game ships.",
-    "engineFiles": [ "re_chunk_000.pak" ],
-    "reFrameworkFiles": [ "dinput8.dll", "ReShade64.dll", "reframework" ],
-    "requiresReFramework": [
-      "Resident Evil 9 Requiem",
-      "Resident Evil 8 Village",
-      "Resident Evil 7 Biohazard",
-      "Resident Evil 4 (2023)",
-      "Resident Evil 3 (2020)",
-      "Resident Evil 2 (2019)",
-      "Devil May Cry 5",
-      "Monster Hunter Wilds",
-      "Monster Hunter Stories 3: Twisted Reflection",
-      "Dragon's Dogma 2",
-      "Onimusha: Way of the Sword",
-      "PRAGMATA"
-    ],
-    "noWarning": [ "Monster Hunter Rise" ]
   }
 }

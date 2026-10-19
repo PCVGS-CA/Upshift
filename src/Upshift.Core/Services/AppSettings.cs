@@ -17,14 +17,14 @@ public sealed class AppSettings
 
     /// <summary>
     /// Upshift's own catalog on GitHub, used when CatalogUrl is empty, so fixes and new entries reach everyone with a
-    /// commit. When it can't be reached, or isn't newer, the built-in copy is used. Stable versions read catalog.json on
+    /// commit. When it can't be reached, or isn't newer, the built-in copy is used. Stable versions read catalog.v2.json on
     /// main; betas (x.y.z-beta.N) read it on the "beta" branch, so a beta's catalog changes never reach older versions
     /// (1.2.0's DLSS 5 switch, for one, can't use 1.3's DLSS 5 entries).
     /// </summary>
     public static string DefaultCatalogUrl { get; } = IsBetaBuild ? BetaCatalogUrl : MainCatalogUrl;
 
-    public const string MainCatalogUrl = "https://raw.githubusercontent.com/PCVGS-CA/Upshift/main/src/Upshift.Core/Catalog/catalog.json";
-    public const string BetaCatalogUrl = "https://raw.githubusercontent.com/PCVGS-CA/Upshift/beta/src/Upshift.Core/Catalog/catalog.json";
+    public const string MainCatalogUrl = "https://raw.githubusercontent.com/PCVGS-CA/Upshift/main/src/Upshift.Core/Catalog/catalog.v2.json";
+    public const string BetaCatalogUrl = "https://raw.githubusercontent.com/PCVGS-CA/Upshift/beta/src/Upshift.Core/Catalog/catalog.v2.json";
 
     /// <summary>This build's version (from Directory.Build.props) is a beta.</summary>
     public static bool IsBetaBuild =>

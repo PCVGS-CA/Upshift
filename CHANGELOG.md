@@ -2,7 +2,7 @@
 
 All notable changes to Upshift. Each release's section becomes its GitHub release notes, so the heading must be `## [x.y.z]` with the same version as `Directory.Build.props` (a date after it is fine).
 
-## [1.3.0]
+## [1.3.0] - 2026-10-18
 
 A simpler game page, a new DLSS 5 build, uninstall that can undo Upshift's changes to games, HelixSR (experimental, still in testing), a warning for Capcom RE Engine games, and a more flexible Measure performance.
 
@@ -61,11 +61,10 @@ These were tested only on test folders, copies or made-up data, not in a real ga
 - Removing Upshift from games through a real uninstall, and games in protected folders that need Windows' permission.
 - The FSR 4.1.1b check with the real release file (Upshift never downloads it).
 - HelixSR in a game (see above).
-- Updating from one beta to the next, or to the final 1.3.0 (that needs a second release to exist).
 
 ### Fixes
 
-- Since beta.1: the Measure length box no longer shows arrows that float over the text below while typing.
+- The Measure length box no longer shows arrows that float over the text below while typing.
 - A small "Esc" hint no longer pops up at random places on a game's page. Esc still goes back to the Library.
 - Frame cap: the X clears the cap, and an empty box (or 0) means no cap; neither turns into 1 fps any more. The lowest cap is 10 fps. Clearing now always writes OptiScaler's "off" value (0) to OptiScaler.ini: before, a cap that was already in the file when Upshift first changed it (for example 40, set in OptiScaler's menu or restored with your settings) came back after saving.
 - "Is it working?" before the game's first run now says "Run the game once, then press Check again."

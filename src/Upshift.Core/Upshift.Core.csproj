@@ -17,7 +17,8 @@
 
   <ItemGroup>
     <!-- Built-in copy of the catalog. A newer one can be loaded from the "catalogUrl" setting. -->
-    <EmbeddedResource Include="Catalog\catalog.json" LogicalName="catalog.json" />
+    <!-- The catalog 1.3+ uses. Catalog\catalog.json is the frozen 1.2.0 catalog that 1.1.0 and 1.2.0 still read from main: never edit or embed it. -->
+    <EmbeddedResource Include="Catalog\catalog.v2.json" LogicalName="catalog.json" />
   </ItemGroup>
 
 </Project>
