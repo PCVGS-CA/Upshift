@@ -138,7 +138,9 @@ try {
     }
     # The exe carries the icon (Explorer, the taskbar fallback); the window loads Assets\Upshift.ico next to it.
     Assert-ExeIcon (Join-Path $PublishDir 'Upshift.exe') 'published Upshift.exe'
-    Assert-File (Join-Path $PublishDir 'X    # ---- Pack with Velopack ----
+    Assert-File (Join-Path $PublishDir 'Assets\Upshift.ico') 'published Assets\Upshift.ico'
+
+    # ---- Pack with Velopack ----
     Invoke-Checked 'dotnet tool restore' { dotnet tool restore }
     Invoke-Checked 'vpk pack' {
         dotnet vpk pack --packId $packId --packVersion $version --packDir $PublishDir --mainExe Upshift.exe `
