@@ -875,10 +875,7 @@ public sealed partial class UpdatesPage : Page
 
     private static TextBlock Cell(string text) => new() { Text = text, FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis };
 
-    private static TextBlock Subtle(string text) => new()
-    {
-        Text = text, FontSize = 12, TextWrapping = TextWrapping.Wrap, Foreground = Brush("SubtleTextBrush")
-    };
+    private static TextBlock Subtle(string text) => Helpers.Hints.Note(text);
 
     private static void AutomationName(DependencyObject element, string name) =>
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(element, name);

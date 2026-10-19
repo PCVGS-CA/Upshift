@@ -1,6 +1,5 @@
 using Upshift.Core.Install;
 using Upshift.Core.Models;
-using Upshift.Core.ShaderPrebuild;
 
 namespace Upshift.App.Services;
 
@@ -41,7 +40,7 @@ public sealed class RemovalSummary
         if (ShaderCache.Count > 0)
         {
             lines.Add("");
-            lines.Add("Driver shader cache backup put back:");
+            lines.Add("Removed what Pre-build shaders (no longer in Upshift) left:");
             lines.AddRange(ShaderCache.Select(l => $"  • {l}"));
         }
         return string.Join("\n", lines);
@@ -97,21 +96,12 @@ public static class RemoveFromGames
             }
         }
 
-        // The recorder lives in Upshift's data; it goes once no game can still load it.
-        if (everyGameDone)
-            try { ShaderLibrary.RemoveRecorder(dataDir); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
-
-        // The driver shader caches moved aside by Pre-build shaders' test tools come back.
-        try
+        // What the removed "Pre-build shaders" left (its data, moved-aside driver caches) goes once every game is done.
+        if (everyGameDone && ShaderLeftovers.Pending(dataDir))
         {
-            var caches = new ShaderCaches(dataDir);
-            if (caches.HasBackup)
-            {
-                progress?.Report("Putting back the driver shader cache…");
-                summary.ShaderCache.AddRange(await Task.Run(caches.Restore));
-            }
+            progress?.Report("Removing what Pre-build shaders left…");
+            summary.ShaderCache.AddRange(await Task.Run(() => ShaderLeftovers.RemoveData(dataDir)));
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { summary.ShaderCache.Add($"The driver shader cache backup couldn't be put back: {ex.Message}"); }
         return summary;
     }
 }

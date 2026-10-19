@@ -86,9 +86,6 @@ public static class ProblemReport
     {
         // Never HelixSR's network files (NVIDIA's network), whatever adds them: .bin and .pak entries are left out.
         items = items.Where(i => !Install.HelixSr.IsNetworkFile(i.Name)).ToList();
-        // Never what "Pre-build shaders" learned (recordings, shader files, libraries): they stay on the PC.
-        items = items.Where(i => !i.Name.Contains("shaderwarm", StringComparison.OrdinalIgnoreCase)
-                                 && !i.Text.Contains("USWREC1", StringComparison.Ordinal) && !i.Text.Contains("USWLIB1", StringComparison.Ordinal)).ToList();
         var temp = zipPath + ".tmp";
         using (var zip = ZipFile.Open(temp, ZipArchiveMode.Create))
         {

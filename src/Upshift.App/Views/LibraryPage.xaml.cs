@@ -14,33 +14,6 @@ public sealed partial class LibraryPage : Page
 {
     public LibraryViewModel ViewModel { get; } = new();
 
-    private const string NotesKey = "game.notes";
-
-    /// <summary>The suggestion notes show three lines until "Show all" is pressed; the choice is remembered.</summary>
-    private void ApplyNotesState()
-    {
-        RecommendationNotes.MaxLines = Helpers.Sections.IsOpen(NotesKey) ? 0 : 3;
-        UpdateShowAll();
-    }
-
-    /// <summary>"Show all" when lines are hidden, "Show less" when more than three are shown, nothing otherwise.</summary>
-    private void UpdateShowAll()
-    {
-        var open = Helpers.Sections.IsOpen(NotesKey);
-        var threeLines = 3 * RecommendationNotes.FontSize * 1.4;
-        var more = open ? RecommendationNotes.ActualHeight > threeLines + 1 : RecommendationNotes.IsTextTrimmed;
-        RecommendationShowAll.Content = open ? "Show less" : "Show all";
-        RecommendationShowAll.Visibility = more ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    private void RecommendationNotes_TrimmedChanged(TextBlock sender, IsTextTrimmedChangedEventArgs args) => UpdateShowAll();
-
-    private void RecommendationShowAll_Click(object sender, RoutedEventArgs e)
-    {
-        Helpers.Sections.Set(NotesKey, !Helpers.Sections.IsOpen(NotesKey));
-        ApplyNotesState();
-    }
-
     public LibraryPage()
     {
         InitializeComponent();
@@ -56,18 +29,16 @@ public sealed partial class LibraryPage : Page
         Dlss5Panel.ShowDialog = ShowDialogAsync;
         MeasurePanel.Library = ViewModel;
         MeasurePanel.ShowDialog = ShowDialogAsync;
-        ShaderPanel.ShowDialog = ShowDialogAsync;
+        // The options view's other settings go under "More options".
+        OptionsPanel.MoreChanged += () => MoreOptionsHost.Content = OptionsPanel.MoreContent;
 
-
-        // Collapsible sections open as they were last left, for every game and across restarts.
+        // Collapsible sections open as they were last left, for every game and across restarts ("More options" starts closed).
         Helpers.Sections.Bind(FilesExpander, "game.files");
         Helpers.Sections.Bind(UpscalerFilesExpander, "game.upscalerFiles");
-        ApplyNotesState();
-        RecommendationNotes.SizeChanged += (_, _) => UpdateShowAll();
+        Helpers.Sections.Bind(MoreOptions, "game.moreOptions");
 
         // The game page's code-built parts act through the page.
         NoticesPanel.RemoveOptiScaler = UninstallAsync;
-        LastRunPanel.OpenPerformance = () => ShowTab("performance");
 
         // Back from playing: read OptiScaler's log again for the selected game.
         AppServices.WindowActivated += () => DispatcherQueue.TryEnqueue(() => ViewModel.Selected?.RefreshLoadStatus());
@@ -123,7 +94,7 @@ public sealed partial class LibraryPage : Page
 
     // ---------------- The game page ----------------
 
-    private ScrollViewer[] Tabs => new[] { OverviewTab, UpscalingTab, FilesTab, PerformanceTab, HistoryTab };
+    private ScrollViewer[] Tabs => new[] { UpscalingTab, FilesTab, PerformanceTab, HistoryTab };
 
     private bool IsGamePageOpen => GameView.Visibility == Visibility.Visible;
 
@@ -135,7 +106,7 @@ public sealed partial class LibraryPage : Page
         if (e.ClickedItem is GameCardViewModel game) OpenGamePage(game);
     }
 
-    /// <summary>Opens a game's page in place of the Library, on the Overview tab.</summary>
+    /// <summary>Opens a game's page in place of the Library, on the Upscaling tab.</summary>
     private void OpenGamePage(GameCardViewModel game)
     {
         _libraryOffset = GridScroller()?.VerticalOffset ?? 0;
@@ -143,7 +114,7 @@ public sealed partial class LibraryPage : Page
         GamesGrid.SelectedItem = game;
         LibraryView.Visibility = Visibility.Collapsed;
         GameView.Visibility = Visibility.Visible;
-        ShowTab("overview");
+        ShowTab("upscaling");
         LoadHeaderArt(game);
         BackButton.Focus(FocusState.Programmatic);
     }
@@ -192,13 +163,21 @@ public sealed partial class LibraryPage : Page
         if (sender.SelectedItem is SelectorBarItem { Tag: string tag }) ShowTab(tag, fromBar: true);
     }
 
-    /// <summary>Shows one tab ("overview", "upscaling", "files", "performance", "history").</summary>
+    /// <summary>
+    /// Shows one page: the two tabs ("upscaling", "performance"), or Files and History from the Advanced menu ("files",
+    /// "history"), which leave no tab selected.
+    /// </summary>
     private void ShowTab(string tag, bool fromBar = false)
     {
-        var tabs = new[] { ("overview", OverviewTab), ("upscaling", UpscalingTab), ("files", FilesTab), ("performance", PerformanceTab), ("history", HistoryTab) };
+        var tabs = new[] { ("upscaling", UpscalingTab), ("files", FilesTab), ("performance", PerformanceTab), ("history", HistoryTab) };
         foreach (var (name, view) in tabs) view.Visibility = name == tag ? Visibility.Visible : Visibility.Collapsed;
-        if (!fromBar && TabBar.Items.FirstOrDefault(i => (string)i.Tag == tag) is { } item) TabBar.SelectedItem = item;
-        if (tag == "overview") { InUsePanel.Rebuild(); LastRunPanel.Rebuild(); }
+        if (!fromBar) TabBar.SelectedItem = TabBar.Items.FirstOrDefault(i => (string)i.Tag == tag);
+        AdvancedButton.Content = tag switch { "files" => "Advanced: Files", "history" => "Advanced: History", _ => "Advanced" };
+    }
+
+    private void AdvancedItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuFlyoutItem { Tag: string tag }) ShowTab(tag);
     }
 
     private CancellationTokenSource? _artCts;

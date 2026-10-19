@@ -747,6 +747,29 @@ errors and no warnings.
     stopped because the game starts during it (no learned shaders on the throwaway game), with the real SH2.
 
 
+- **Simplify (2026-10-18, test build 1.3.0-beta.1.test.2): "a clean manager for OptiScaler and its forks, plus Measure".**
+  - **Pre-build shaders removed completely** (Core `ShaderPrebuild/`, native `src/Upshift.ShaderPrebuild`, the view, the
+    Settings switch, `AppSettings.ShaderPrebuild`, csproj/package.ps1 native build steps, changelog mentions). Everything
+    above about the shader pre-build, the recorder, the test tools and "Did it help?" is history only.
+    - What it may have left is cleaned once at start-up: `Core/Install/ShaderLeftovers` (`Loads`, `TurnOff` = Upshift's
+      recorded values put back or the old kit's four to "auto", `RemoveData` = moved-aside driver caches back + delete
+      `data\shaderwarm`) and `App/Services/ShaderLeftoverCleanup` (after the Library loads; data only deleted when every
+      game succeeded). "Remove Upshift from all games" and the uninstaller use the same.
+    - Silent Hill 2's OptiScaler.ini had learning on: turned off with Upshift's own put-back on 2026-10-18 (only
+      OptiScaler.ini and its record changed; `[Plugins] Path/LoadAsiPlugins` back to auto). The Witcher 3 and RE Requiem
+      have no OptiScaler.ini now.
+  - **Game page:** tabs Upscaling (default) and Performance; Files and History behind the "Advanced" DropDownButton
+    (`ShowTab("files"|"history")`, no tab selected). The Overview is gone: its warnings sit at the top of Upscaling; "Is it
+    working?", Dlss5View, "Upscalers in this game" and Suggestions are under the "More options" expander
+    (`game.moreOptions`, closed by default). `OptiScalerOptionsView` shows Upscaler, Frame generation and Frame cap;
+    the rest goes to `MoreContent` (hosted in `MoreOptionsHost`). `InUseView`/`LastRunView` deleted.
+  - **Text:** `Helpers/Hints` — a note of 12 words or fewer is shown; longer shows its first sentence (if short) or
+    "Details", with "ⓘ" and the full text as tooltip and automation name. All views' `Subtle(...)` and
+    `CardPart.Text(subtle: true)` use it. "Which one should I pick?" is a "?" link.
+  - **Colour:** one accent; chips are neutral grey for every vendor (`Ui.VendorColors`); success InfoBars are
+    Informational; yellow only for real warnings.
+  - Library header line: "Better upscaling in any game. One click, undo anytime."
+
 ## Next
 
 1. **DLSS 5 follow-ups:**

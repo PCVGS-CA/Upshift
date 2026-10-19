@@ -457,11 +457,12 @@ public sealed class Dlss5View : UserControl
         return panel;
     }
 
-    private static TextBlock Subtle(string text) => new()
+    private static TextBlock Subtle(string text)
     {
-        Text = text, FontSize = 12, Foreground = Res("SubtleTextBrush"), TextWrapping = TextWrapping.Wrap,
-        Visibility = text.Length == 0 ? Visibility.Collapsed : Visibility.Visible
-    };
+        var note = Helpers.Hints.Note(text);
+        if (text.Length == 0) note.Visibility = Visibility.Collapsed;
+        return note;
+    }
 
     private static Microsoft.UI.Xaml.Media.Brush Res(string key) => (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources[key];
 }

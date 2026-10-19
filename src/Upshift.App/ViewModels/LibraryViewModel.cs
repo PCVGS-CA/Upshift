@@ -273,6 +273,8 @@ public sealed partial class LibraryViewModel : ObservableObject
         ShowHelixSrNotices(await Services.HelixSrGames.PauseAfterBadExitAsync());
         HasHelixSrPaused = Services.HelixSrGames.Paused.Count > 0;
         ShowHelixSrNotices(await Services.HelixSrGames.CheckAllAsync());
+        // Once after 1.3.0-beta.1: OptiScaler.ini values and data left by the removed "Pre-build shaders".
+        await Services.ShaderLeftoverCleanup.RunAsync();
     }
 
     [RelayCommand]

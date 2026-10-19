@@ -15,12 +15,12 @@ public sealed record Bottleneck(BottleneckVerdict Verdict, bool LessCertain, boo
 
     public string Advice => Verdict switch
     {
-        BottleneckVerdict.GraphicsCard => "Try a lower upscaler quality (Balanced or Performance instead of Quality), or lower graphics settings.",
-        BottleneckVerdict.Processor => "Lower graphics settings won't help much here. Frame generation can raise the frame rate when the processor is the limit.",
+        BottleneckVerdict.GraphicsCard => "Try a lower upscaler quality or lower graphics settings. For example Balanced or Performance instead of Quality.",
+        BottleneckVerdict.Processor => "Try frame generation; lower graphics settings won't help much here. Frame generation can raise the frame rate when the processor is the limit.",
         BottleneckVerdict.FrameCap => ByVSync
-            ? "The game runs at your screen's refresh rate with VSync on, so VSync sets the frame rate, not the hardware."
-            : "The game reaches your frame cap, so the cap sets the frame rate. Raise or remove it to see what the PC can do.",
-        _ => "Neither part is clearly holding the game back: a lower upscaler quality and frame generation can both help a little."
+            ? "VSync sets the frame rate here, not the hardware. The game runs at your screen's refresh rate with VSync on."
+            : "Your frame cap sets the frame rate. Raise or remove it to see what the PC can do.",
+        _ => "Nothing clearly holds the game back. A lower upscaler quality and frame generation can both help a little."
     };
 
     public string? Caution => LessCertain

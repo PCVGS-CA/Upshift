@@ -71,13 +71,6 @@
             </StackPanel>
 
             <StackPanel Spacing="8">
-                <TextBlock Text="Shader pre-build (Experimental)" FontWeight="SemiBold" />
-                <ToggleSwitch x:Name="ShaderPrebuildSwitch" Toggled="ShaderPrebuild_Toggled" AutomationProperties.Name="Shader pre-build (Experimental)" />
-                <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
-                           Text="Learns which shaders a game builds while you play, and builds them all again after the graphics driver's shader cache is wiped (a driver update, say), so the game doesn't stutter while it rebuilds them. For Direct3D 12 games with OptiScaler installed by Upshift, never for games with anti-cheat. Its card is on each game's Performance tab. Off: nothing of it shows, and nothing is added to any game." />
-            </StackPanel>
-
-            <StackPanel Spacing="8">
                 <TextBlock Text="Optional files you supply" FontWeight="SemiBold" />
                 <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
                            Text="The app never downloads or bundles these. Point it at a copy you already have and it's copied into the app's own folder." />

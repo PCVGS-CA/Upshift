@@ -60,8 +60,8 @@ public sealed class MeasureView : UserControl
         });
 
         var body = new StackPanel { Spacing = 12 };
-        body.Children.Add(Subtle("Records the game's frame rate for as long as you choose, with PresentMon, Intel's free frame-timing tool " +
-                                 "(downloaded from its GitHub page the first time). Nothing measured leaves this PC."));
+        body.Children.Add(Subtle("Records the game's frame rate with PresentMon. Nothing leaves this PC. " +
+                                 "PresentMon is Intel's free frame-timing tool, downloaded from its GitHub page the first time."));
         body.Children.Add(Controls(card));
         if (runs.Count > 0 && VerdictBlock(runs[0]) is { } verdict) body.Children.Add(verdict);
         if (runs.Count > 0) body.Children.Add(Comparison(card, runs));
@@ -219,7 +219,7 @@ public sealed class MeasureView : UserControl
             .OrderBy(r => r.Item1).ThenByDescending(r => r.r.Utc)
             .ToList();
         string message;
-        if (rows.Count == 0 && !await ShaderPrebuildGames.HasComparisonsAsync()) message = "There are no results to export yet.";
+        if (rows.Count == 0) message = "There are no results to export yet.";
         else
         {
             try
@@ -232,9 +232,6 @@ public sealed class MeasureView : UserControl
                 if (file is null) return;
                 await File.WriteAllTextAsync(file.Path, ResultSharing.Csv(rows, Pc()), new System.Text.UTF8Encoding(true));
                 message = $"{rows.Count} result{(rows.Count == 1 ? "" : "s")} exported to {file.Name}.";
-                // Pre-build shaders (Experimental, when on): its "Did it help?" results, one row per game, in a file beside it.
-                if (await ShaderPrebuildGames.ExportComparisonsAsync(file.Path, Pc()) is { } shaderFile)
-                    message += $" Pre-build shaders' \"Did it help?\" results are in {shaderFile}.";
             }
             catch (Exception ex) when (ex is not OutOfMemoryException) { message = $"The results weren't exported: {ex.Message}"; }
         }
@@ -320,11 +317,11 @@ public sealed class MeasureView : UserControl
             {
                 IsOpen = true, IsClosable = false, Message = Measurement.Message,
                 Severity = Measurement.MessageIsProblem ? InfoBarSeverity.Warning
-                    : Measurement.State == MeasureState.Idle ? InfoBarSeverity.Success : InfoBarSeverity.Informational
+                    : Measurement.State == MeasureState.Idle ? InfoBarSeverity.Informational : InfoBarSeverity.Informational
             });
         else if (Measurement.State == MeasureState.Idle || Measurement.GameId != card.Info.Id)
-            panel.Children.Add(Subtle($"Press Measure this game, then start the game, get to a normal gameplay area and press {Measurement.HotkeyName} " +
-                                      "(change the key in Settings). A beep marks the start and two beeps the end."));
+            panel.Children.Add(Subtle($"Press Measure, start the game, then press {Measurement.HotkeyName} in play. " +
+                                      $"Get to a normal gameplay area first. Change the key in Settings. A beep marks the start and two beeps the end."));
         return panel;
     }
 
@@ -588,7 +585,7 @@ public sealed class MeasureView : UserControl
         if (latest.Bottleneck is not { } b) return null;
         var panel = new StackPanel { Spacing = 4 };
         panel.Children.Add(new TextBlock { Text = b.Title + (b.LessCertain ? " (less certain)" : ""), FontWeight = FontWeights.SemiBold, FontSize = 14 });
-        panel.Children.Add(new TextBlock { Text = b.Advice, TextWrapping = TextWrapping.Wrap, FontSize = 13 });
+        panel.Children.Add(Helpers.Hints.Note(b.Advice, 13));
         if (b.Caution is { } caution) panel.Children.Add(Subtle(caution));
         return panel;
     }
@@ -664,10 +661,7 @@ public sealed class MeasureView : UserControl
         Build();
     }
 
-    private static TextBlock Subtle(string text) => new()
-    {
-        Text = text, FontSize = 12, TextWrapping = TextWrapping.Wrap, Foreground = Res("SubtleTextBrush")
-    };
+    private static TextBlock Subtle(string text) => Helpers.Hints.Note(text);
 
     private static Microsoft.UI.Xaml.Media.Brush Res(string key) => (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources[key];
 }

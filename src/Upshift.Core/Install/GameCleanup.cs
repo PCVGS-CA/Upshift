@@ -1,5 +1,4 @@
 using Upshift.Core.Models;
-using Upshift.Core.ShaderPrebuild;
 
 namespace Upshift.Core.Install;
 
@@ -93,13 +92,13 @@ public static class GameCleanup
             try
             {
                 var iniPath = Path.Combine(target, "OptiScaler.ini");
-                if (File.Exists(iniPath) && IniFile.Load(iniPath) is var ini && ShaderLibrary.IsLearning(ini, dataDir))
+                if (File.Exists(iniPath) && IniFile.Load(iniPath) is var ini && ShaderLeftovers.Loads(ini, dataDir))
                 {
-                    var undo = ShaderLibrary.KitUndo(ini, manifest.IniChanges, dataDir);
+                    var undo = ShaderLeftovers.TurnOff(ini, manifest.IniChanges, dataDir);
                     var off = OptiScalerInstaller.Configure(new InstallPlan
                     {
                         Operation = InstallOperation.Configure, GameId = plan.GameId, GameName = plan.GameName, TargetDir = target,
-                        IniSettings = undo.Count > 0 ? undo : ShaderLibrary.PutBackSettings()
+                        IniSettings = undo
                     }, log);
                     if (!off.Success) problems.Add($"the shader recorder's settings: {off.Message}");
                 }

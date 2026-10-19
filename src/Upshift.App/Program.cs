@@ -157,12 +157,12 @@ public static class Program
     {
         var games = AppServices.Library.LoadCachedAsync().GetAwaiter().GetResult();
         var targets = Core.Install.GameCleanup.Find(games);
-        var cacheBackup = new Core.ShaderPrebuild.ShaderCaches(AppServices.DataDir).HasBackup;
+        var cacheBackup = Core.Install.ShaderLeftovers.Pending(AppServices.DataDir);
         if (targets.Count == 0 && !cacheBackup) return;
 
         var names = targets.Take(8).Select(t => "  • " + t.Name).ToList();
         if (targets.Count > 8) names.Add($"  • and {targets.Count - 8} more");
-        if (cacheBackup) names.Add("  • the driver shader cache backup from Pre-build shaders (put back)");
+        if (cacheBackup) names.Add("  • what Pre-build shaders left (its data and moved-aside driver caches)");
         var answer = MessageBoxTimeoutW(IntPtr.Zero,
             "Also remove OptiScaler and Upshift's changes from your games?\n\n" + string.Join("\n", names) + "\n\n" +
             "Yes removes OptiScaler and everything Upshift added, and puts back the game's own DLSS, FSR and XeSS files that " +

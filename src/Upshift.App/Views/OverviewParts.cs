@@ -38,6 +38,8 @@ public abstract class CardPart : UserControl
 
     protected static TextBlock Text(string text, double size = 14, bool bold = false, bool subtle = false)
     {
+        // Subtle notes follow the one-short-line rule (longer text goes into a tooltip).
+        if (subtle) return Helpers.Hints.Note(text, size);
         var block = new TextBlock { Text = text, FontSize = size, TextWrapping = TextWrapping.Wrap, FontWeight = bold ? FontWeights.SemiBold : FontWeights.Normal };
         if (subtle) block.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SubtleTextBrush"];
         return block;
@@ -125,103 +127,6 @@ public sealed class GameNoticesView : CardPart
         };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(bar, "REFramework notice");
         return bar;
-    }
-}
-
-/// <summary>The Overview's "In use" lines: OptiScaler's version, upscaler, frame generation, frame cap and FSR 4, and which upscaler to pick in the game.</summary>
-public sealed class InUseView : CardPart
-{
-    protected override void Build()
-    {
-        var card = Card;
-        var grid = new Grid { ColumnSpacing = 14, RowSpacing = 6 };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        var panel = new StackPanel { Spacing = 10 };
-        if (card is null) { Content = null; return; }
-
-        if (!card.IsInstalledByUs)
-        {
-            panel.Children.Add(Text(card.HasAntiCheat ? "Nothing is installed: this game has anti-cheat." : "OptiScaler isn't installed by Upshift in this game.", 14));
-            if (!card.HasAntiCheat)
-                panel.Children.Add(Text("Install it with Install OptiScaler at the top. Its options then appear here and under Upscaling.", 13, subtle: true));
-            Content = panel;
-            return;
-        }
-
-        var s = MeasureView.Snapshot(card);
-        var row = 0;
-        void Add(string label, string value)
-        {
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            var l = Text(label, 13, subtle: true);
-            var v = Text(value, 14, bold: true);
-            Grid.SetRow(l, row);
-            Grid.SetRow(v, row);
-            Grid.SetColumn(v, 1);
-            grid.Children.Add(l);
-            grid.Children.Add(v);
-            row++;
-        }
-        Add("Upscaler", s.Upscaler);
-        Add("Frame generation", s.FrameGeneration);
-        Add("Frame cap", s.FrameCap);
-        if (s.Fsr4 is { Length: > 0 } fsr4 && fsr4 != "Off") Add("FSR 4", fsr4);
-        panel.Children.Add(grid);
-
-        try
-        {
-            if (card.Info.TargetDir is { } dir && OptiScalerInstaller.ReadManifest(dir) is { Removed: false } manifest)
-            {
-                var ini = Path.Combine(dir, "OptiScaler.ini");
-                var helix = File.Exists(ini) && HelixSr.InUse(IniFile.Load(ini), AppServices.DataDir);
-                if (OptiScalerOptionsView.InGamePick(card, manifest, helix).Line is { } line)
-                {
-                    var pick = new Grid { ColumnSpacing = 8 };
-                    pick.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                    pick.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                    pick.Children.Add(new FontIcon { Glyph = "", FontSize = 14, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 2, 0, 0) });
-                    var t = Text(line, 13);
-                    Grid.SetColumn(t, 1);
-                    pick.Children.Add(t);
-                    panel.Children.Add(pick);
-                }
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
-        panel.Children.Add(Text("In game: press Insert to open the OptiScaler menu.", 12, subtle: true));
-        Content = panel;
-    }
-}
-
-/// <summary>The last measurement in one line, with a link to the Performance tab.</summary>
-public sealed class LastRunView : CardPart
-{
-    /// <summary>Opens the Performance tab.</summary>
-    public Action? OpenPerformance { get; set; }
-
-    protected override void Build()
-    {
-        var card = Card;
-        var panel = new StackPanel { Spacing = 6 };
-        var runs = card is null ? new() : AppServices.Measurements.Get(card.Info.Id).Runs;
-        if (runs.Count == 0)
-            panel.Children.Add(Text("Not measured yet. Measure performance is under Performance.", 13, subtle: true));
-        else
-        {
-            var r = runs[0];
-            var verdict = r.Bottleneck is { } b ? $" · {b.Title}{(b.LessCertain ? " (less certain)" : "")}" : "";
-            panel.Children.Add(Text($"{r.Utc.ToLocalTime():d MMM, HH:mm} · {Math.Round(r.AverageFps)} fps average · low {Math.Round(r.LowFps)} fps" +
-                                    (r.MaxFps is { } m ? $" · max {Math.Round(m)} fps" : "") + verdict, 14));
-            panel.Children.Add(Text($"{r.Settings.Upscaler}{(r.FrameGenOn ? ", frame generation on" : "")}{(r.Note is { Length: > 0 } n ? " · " + n : "")}", 12, subtle: true));
-        }
-        if (OpenPerformance is { } open)
-        {
-            var link = new HyperlinkButton { Content = runs.Count == 0 ? "Go to Performance" : "All results", Padding = new Thickness(0), FontSize = 12 };
-            link.Click += (_, _) => open();
-            panel.Children.Add(link);
-        }
-        Content = panel;
     }
 }
 

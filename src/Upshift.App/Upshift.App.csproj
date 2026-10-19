@@ -54,27 +54,5 @@
     <Content Include="Assets\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
-  <!--
-    "Pre-build shaders" (experimental): the native recorder (upshift_rec.asi) and pre-build program (upshift_prebuild.exe)
-    from ..\Upshift.ShaderPrebuild, copied to ShaderPrebuild\ next to Upshift.exe. Visual Studio's MSBuild builds them
-    here (always Release x64). The dotnet CLI can't build C++ projects, so build\package.ps1 builds them first with
-    Visual Studio's MSBuild and this only copies them; when they're missing, the app says the feature isn't available.
-  -->
-  <PropertyGroup>
-    <NativeDir>$(MSBuildThisFileDirectory)..\Upshift.ShaderPrebuild\</NativeDir>
-    <NativeOut>$(NativeDir)bin\x64\Release\</NativeOut>
-  </PropertyGroup>
-  <Target Name="BuildShaderPrebuild" BeforeTargets="Build" Condition="'$(MSBuildRuntimeType)' == 'Full'">
-    <MSBuild Projects="$(NativeDir)Upshift.ShaderPrebuild.vcxproj;$(NativeDir)Upshift.ShaderRecorder.vcxproj"
-             Properties="Configuration=Release;Platform=x64" Targets="Build" />
-  </Target>
-  <Target Name="CopyShaderPrebuild" AfterTargets="Build">
-    <Copy SourceFiles="$(NativeOut)upshift_prebuild.exe;$(NativeOut)upshift_rec.asi" DestinationFolder="$(OutDir)ShaderPrebuild"
-          SkipUnchangedFiles="true" Condition="Exists('$(NativeOut)upshift_rec.asi') And Exists('$(NativeOut)upshift_prebuild.exe')" />
-  </Target>
-  <Target Name="PublishShaderPrebuild" AfterTargets="Publish">
-    <Copy SourceFiles="$(NativeOut)upshift_prebuild.exe;$(NativeOut)upshift_rec.asi" DestinationFolder="$(PublishDir)ShaderPrebuild"
-          Condition="Exists('$(NativeOut)upshift_rec.asi') And Exists('$(NativeOut)upshift_prebuild.exe')" />
-  </Target>
 
 </Project>

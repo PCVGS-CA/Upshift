@@ -181,7 +181,10 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="Library" FontSize="26" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <StackPanel VerticalAlignment="Center" Spacing="2">
+                    <TextBlock Text="Library" FontSize="26" FontWeight="SemiBold" />
+                    <TextBlock Text="Better upscaling in any game. One click, undo anytime." Foreground="{StaticResource SubtleTextBrush}" />
+                </StackPanel>
                 <SplitButton Grid.Column="1" Command="{x:Bind ViewModel.ScanCommand}">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon Glyph="&#xE72C;" FontSize="14" />
@@ -206,7 +209,7 @@
 
             <!-- After a newer DLSS file finished downloading: how many games could use it -->
             <StackPanel Grid.Row="1">
-                <InfoBar IsOpen="{x:Bind ViewModel.HasDlssNotice, Mode=OneWay}" Severity="Success"
+                <InfoBar IsOpen="{x:Bind ViewModel.HasDlssNotice, Mode=OneWay}" Severity="Informational"
                          Title="{x:Bind ViewModel.DlssNotice, Mode=OneWay}" Closed="DlssNotice_Closed"
                          Visibility="{x:Bind ViewModel.HasDlssNotice, Mode=OneWay}" AutomationProperties.Name="DLSS notice">
                     <InfoBar.ActionButton>
@@ -375,13 +378,21 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <SelectorBar x:Name="TabBar" SelectionChanged="TabBar_SelectionChanged" AutomationProperties.Name="Game page tabs">
-                    <SelectorBarItem Text="Overview" Tag="overview" IsSelected="True" />
-                    <SelectorBarItem Text="Upscaling" Tag="upscaling" />
-                    <SelectorBarItem Text="Files" Tag="files" />
-                    <SelectorBarItem Text="Performance" Tag="performance" />
-                    <SelectorBarItem Text="History" Tag="history" />
-                </SelectorBar>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <SelectorBar x:Name="TabBar" SelectionChanged="TabBar_SelectionChanged" AutomationProperties.Name="Game page tabs">
+                        <SelectorBarItem Text="Upscaling" Tag="upscaling" IsSelected="True" />
+                        <SelectorBarItem Text="Performance" Tag="performance" />
+                    </SelectorBar>
+                    <!-- Files and History: what Upshift changed, for when something needs checking -->
+                    <DropDownButton x:Name="AdvancedButton" Content="Advanced" VerticalAlignment="Center" AutomationProperties.Name="Advanced">
+                        <DropDownButton.Flyout>
+                            <MenuFlyout Placement="Bottom">
+                                <MenuFlyoutItem Text="Files" Tag="files" Click="AdvancedItem_Click" />
+                                <MenuFlyoutItem Text="History" Tag="history" Click="AdvancedItem_Click" />
+                            </MenuFlyout>
+                        </DropDownButton.Flyout>
+                    </DropDownButton>
+                </StackPanel>
                 <!-- The status line for installs and updates, so it's seen on the game page too -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" MaxWidth="520">
                     <ProgressRing Width="16" Height="16" IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}" Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay}" />
@@ -391,9 +402,9 @@
             </Grid>
 
             <Grid Grid.Row="3">
-                <!-- ======== Overview ======== -->
-                <ScrollViewer x:Name="OverviewTab" AutomationProperties.Name="Overview page">
-                    <StackPanel Padding="24,16,24,24" Spacing="12">
+                <!-- ======== Upscaling: warnings, three choices, everything else under "More options" ======== -->
+                <ScrollViewer x:Name="UpscalingTab" AutomationProperties.Name="Upscaling page">
+                    <StackPanel Padding="24,16,24,24" Spacing="12" MaxWidth="820" HorizontalAlignment="Left">
                         <!-- Warnings first -->
                         <InfoBar IsOpen="{x:Bind ViewModel.Selected.HasAntiCheat, Mode=OneWay}" IsClosable="False" Visibility="{x:Bind ViewModel.Selected.HasAntiCheat, Mode=OneWay}"
                                  Severity="Warning" Title="Installs are blocked for this game"
@@ -420,81 +431,8 @@
                         </InfoBar>
                         <!-- Capcom RE Engine games without REFramework, and Battle.net games -->
                         <views:GameNoticesView x:Name="NoticesPanel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
-
-                        <helpers:ColumnsPanel Columns="3" MinColumnWidth="330" Spacing="12">
-                            <!-- What's installed and in use -->
-                            <Border helpers:ColumnsPanel.Column="0" Style="{StaticResource GameCardStyle}">
-                                <StackPanel Spacing="10">
-                                    <TextBlock Text="OptiScaler" Style="{StaticResource CardTitleStyle}" />
-                                    <Grid ColumnSpacing="8" Visibility="{x:Bind ViewModel.Selected.IsInstalledByUs, Mode=OneWay}">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <FontIcon Glyph="&#xE73E;" FontSize="14" Foreground="{StaticResource UpshiftAccentBrush}" VerticalAlignment="Top" Margin="0,2,0,0" />
-                                        <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.Selected.InstalledText, Mode=OneWay}" TextWrapping="Wrap" FontSize="13" />
-                                    </Grid>
-                                    <views:InUseView x:Name="InUsePanel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
-                                    <TextBlock Text="{x:Bind ViewModel.Selected.Fsr4Text, Mode=OneWay}" FontSize="12" TextWrapping="Wrap"
-                                               Visibility="{x:Bind ViewModel.Selected.HasFsr4Text, Mode=OneWay}" />
-                                </StackPanel>
-                            </Border>
-
-                            <!-- "Is it working?": OptiScaler's own log -->
-                            <Border helpers:ColumnsPanel.Column="1" Style="{StaticResource GameCardStyle}">
-                                <StackPanel Spacing="8">
-                                    <TextBlock Text="Is it working?" Style="{StaticResource CardTitleStyle}" />
-                                    <TextBlock Visibility="{x:Bind ViewModel.Selected.IsNotInstalledByUs, Mode=OneWay}" FontSize="13" TextWrapping="Wrap"
-                                               Foreground="{StaticResource SubtleTextBrush}" Text="Upshift checks OptiScaler's own log once OptiScaler is installed." />
-                                    <StackPanel Spacing="4" Visibility="{x:Bind ViewModel.Selected.IsInstalledByUs, Mode=OneWay}">
-                                        <!-- "According to OptiScaler's log: …" and when that run was -->
-                                        <TextBlock Text="{x:Bind ViewModel.Selected.LoadStatusText, Mode=OneWay}" TextWrapping="Wrap" IsTextSelectionEnabled="True"
-                                                   Visibility="{x:Bind ViewModel.Selected.HasLoadStatus, Mode=OneWay}" />
-                                        <TextBlock Text="{x:Bind ViewModel.Selected.LoadStatusDetail, Mode=OneWay}" FontSize="12" TextWrapping="Wrap"
-                                                   Foreground="{StaticResource SubtleTextBrush}" Visibility="{x:Bind ViewModel.Selected.HasLoadStatusDetail, Mode=OneWay}" />
-                                        <StackPanel Orientation="Horizontal" Spacing="10">
-                                            <Button Content="Turn on the check" Click="TurnOnLogCheck_Click" Margin="0,4,0,0"
-                                                    Visibility="{x:Bind ViewModel.Selected.CanTurnOnLogCheck, Mode=OneWay}" IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}" />
-                                            <HyperlinkButton Content="Check again" Click="CheckLogAgain_Click" Padding="0" FontSize="12" />
-                                        </StackPanel>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Border>
-
-                            <!-- Best on this card, and the last measurement -->
-                            <Border helpers:ColumnsPanel.Column="2" Style="{StaticResource GameCardStyle}">
-                                <StackPanel Spacing="8">
-                                    <TextBlock Text="Best on your graphics card" Style="{StaticResource CardTitleStyle}" />
-                                    <!-- Suggestion only: which upscaler and frame generation suit this card, and what the wiki says to pick in-game -->
-                                    <StackPanel Spacing="2" Visibility="{x:Bind ViewModel.Selected.HasRecommendation, Mode=OneWay}">
-                                        <Grid ColumnSpacing="8">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
-                                            <FontIcon Glyph="&#xE734;" FontSize="14" Foreground="{StaticResource UpshiftAccentBrush}" VerticalAlignment="Top" Margin="0,3,0,0" />
-                                            <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.Selected.Recommendation.Upscaler, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                        </Grid>
-                                        <!-- The notes: the first three lines, then "Show all" (remembered across restarts) -->
-                                        <TextBlock x:Name="RecommendationNotes" Text="{x:Bind ViewModel.Selected.Recommendation.Notes, Mode=OneWay}" FontSize="12"
-                                                   TextWrapping="Wrap" TextTrimming="CharacterEllipsis" Margin="22,0,0,0" IsTextTrimmedChanged="RecommendationNotes_TrimmedChanged" />
-                                        <HyperlinkButton x:Name="RecommendationShowAll" Content="Show all" FontSize="12" Padding="0" Margin="22,2,0,4"
-                                                         Visibility="Collapsed" Click="RecommendationShowAll_Click" />
-                                    </StackPanel>
-                                    <Border Height="1" Background="{StaticResource HairlineBrush}" Margin="0,4" />
-                                    <TextBlock Text="Last measurement" FontSize="12" Foreground="{StaticResource SubtleTextBrush}" />
-                                    <views:LastRunView x:Name="LastRunPanel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
-                                </StackPanel>
-                            </Border>
-                        </helpers:ColumnsPanel>
-                    </StackPanel>
-                </ScrollViewer>
-
-                <!-- ======== Upscaling ======== -->
-                <ScrollViewer x:Name="UpscalingTab" AutomationProperties.Name="Upscaling page" Visibility="Collapsed">
-                    <StackPanel Padding="24,16,24,24" Spacing="12">
                         <!-- A newer DLSS file for this game: "DLSS 4.5 (310.9.1) is ready for this game. It has 3.1.1 (DLSS 3)…" -->
-                        <InfoBar IsOpen="{x:Bind ViewModel.Selected.HasDlssBar, Mode=OneWay}" IsClosable="False" Severity="Success"
+                        <InfoBar IsOpen="{x:Bind ViewModel.Selected.HasDlssBar, Mode=OneWay}" IsClosable="False" Severity="Informational"
                                  Title="DLSS update" Message="{x:Bind ViewModel.Selected.DlssBarText, Mode=OneWay}"
                                  Visibility="{x:Bind ViewModel.Selected.HasDlssBar, Mode=OneWay}" AutomationProperties.Name="DLSS update">
                             <InfoBar.ActionButton>
@@ -502,49 +440,70 @@
                                         IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}" />
                             </InfoBar.ActionButton>
                         </InfoBar>
-                        <helpers:ColumnsPanel Columns="2" MinColumnWidth="420" Spacing="16">
-                            <StackPanel helpers:ColumnsPanel.Column="0" Spacing="16">
-                                <!-- Every OptiScaler option: upscaler (with HelixSR), frame generation, frame cap, FPS counter, DLSS model, FSR 4 -->
-                                <views:OptiScalerOptionsView x:Name="OptionsPanel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
-                                <TextBlock Visibility="{x:Bind ViewModel.Selected.IsNotInstalledByUs, Mode=OneWay}" TextWrapping="Wrap"
-                                           Foreground="{StaticResource SubtleTextBrush}"
-                                           Text="OptiScaler's options (upscaler, frame generation, frame cap, DLSS model, FSR 4) appear here once Upshift has installed OptiScaler in this game." />
+                        <!-- Upscaler, frame generation and frame cap; the rest goes into More options below -->
+                        <views:OptiScalerOptionsView x:Name="OptionsPanel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
+                        <TextBlock Visibility="{x:Bind ViewModel.Selected.IsNotInstalledByUs, Mode=OneWay}" TextWrapping="Wrap"
+                                   Foreground="{StaticResource SubtleTextBrush}" Text="Install OptiScaler to choose the upscaler, frame generation and frame cap." />
+                        <Expander x:Name="MoreOptions" Header="More options" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                  IsExpanded="False" AutomationProperties.Name="More options">
+                            <StackPanel Spacing="16">
+                                <!-- OptiScaler's other options (FPS counter, DLSS model, FSR 4…), built by the options view -->
+                                <ContentControl x:Name="MoreOptionsHost" HorizontalContentAlignment="Stretch" />
                                 <!-- DLSS 5 (Neural Rendering): this card's options, the switch to the DLSS 5 build and its settings -->
                                 <views:Dlss5View x:Name="Dlss5Panel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
-                            </StackPanel>
-                            <StackPanel helpers:ColumnsPanel.Column="1" Spacing="16">
-                                <StackPanel Spacing="8">
-                                    <TextBlock Text="Upscalers in this game" FontWeight="SemiBold" />
-                                    <Border CornerRadius="8" Background="{StaticResource CardSurfaceBrush}"
-                                            BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1"
-                                            Visibility="{x:Bind ViewModel.Selected.Upscalers.HasRows, Mode=OneWay}">
-                                        <ItemsControl ItemsSource="{x:Bind ViewModel.Selected.Upscalers.Rows, Mode=OneWay}"
-                                                      ItemTemplate="{StaticResource UpscalerRowTemplate}" />
-                                    </Border>
-                                    <TextBlock Visibility="{x:Bind ViewModel.Selected.Upscalers.HasNoRows, Mode=OneWay}" TextWrapping="Wrap"
-                                               Foreground="{StaticResource SubtleTextBrush}"
-                                               Text="No DLSS, FSR or XeSS in the game files or on PCGamingWiki. OptiScaler can still add FSR, XeSS and frame generation to many DirectX 11 and 12 games." />
-                                    <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap">
-                                        <Hyperlink NavigateUri="{x:Bind ViewModel.Selected.Upscalers.PageUri, Mode=OneWay}"
-                                                   Foreground="{StaticResource SubtleTextBrush}">Some details from PCGamingWiki</Hyperlink><Run Text="{x:Bind ViewModel.Selected.Upscalers.FooterSuffix, Mode=OneWay}" />
-                                    </TextBlock>
-                                    <Expander x:Name="FilesExpander" Header="Show files" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
-                                              IsExpanded="False"
-                                              Visibility="{x:Bind ViewModel.Selected.Upscalers.HasFiles, Mode=OneWay}">
-                                        <ItemsControl ItemsSource="{x:Bind ViewModel.Selected.Upscalers.Files, Mode=OneWay}">
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate x:DataType="x:String">
-                                                    <TextBlock Text="{x:Bind}" FontFamily="Consolas" FontSize="12" IsTextSelectionEnabled="True"
-                                                               TextWrapping="Wrap" Margin="0,2" />
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                    </Expander>
+                        <!-- "Is it working?": OptiScaler's own log -->
+                        <Border Style="{StaticResource GameCardStyle}" AutomationProperties.Name="Is it working?">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Is it working?" Style="{StaticResource CardTitleStyle}" />
+                                <TextBlock Visibility="{x:Bind ViewModel.Selected.IsNotInstalledByUs, Mode=OneWay}" FontSize="13" TextWrapping="Wrap"
+                                           Foreground="{StaticResource SubtleTextBrush}" Text="Upshift checks OptiScaler's own log once OptiScaler is installed." />
+                                <StackPanel Spacing="4" Visibility="{x:Bind ViewModel.Selected.IsInstalledByUs, Mode=OneWay}">
+                                    <!-- "According to OptiScaler's log: …" and when that run was -->
+                                    <TextBlock Text="{x:Bind ViewModel.Selected.LoadStatusText, Mode=OneWay}" TextWrapping="Wrap" IsTextSelectionEnabled="True"
+                                               Visibility="{x:Bind ViewModel.Selected.HasLoadStatus, Mode=OneWay}" />
+                                    <TextBlock Text="{x:Bind ViewModel.Selected.LoadStatusDetail, Mode=OneWay}" FontSize="12" TextWrapping="Wrap"
+                                               Foreground="{StaticResource SubtleTextBrush}" Visibility="{x:Bind ViewModel.Selected.HasLoadStatusDetail, Mode=OneWay}" />
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <Button Content="Turn on the check" Click="TurnOnLogCheck_Click" Margin="0,4,0,0"
+                                                Visibility="{x:Bind ViewModel.Selected.CanTurnOnLogCheck, Mode=OneWay}" IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}" />
+                                        <HyperlinkButton Content="Check again" Click="CheckLogAgain_Click" Padding="0" FontSize="12" />
+                                    </StackPanel>
                                 </StackPanel>
+                            </StackPanel>
+                        </Border>
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Upscalers in this game" FontWeight="SemiBold" />
+                                <Border CornerRadius="8" Background="{StaticResource CardSurfaceBrush}"
+                                        BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1"
+                                        Visibility="{x:Bind ViewModel.Selected.Upscalers.HasRows, Mode=OneWay}">
+                                    <ItemsControl ItemsSource="{x:Bind ViewModel.Selected.Upscalers.Rows, Mode=OneWay}"
+                                                  ItemTemplate="{StaticResource UpscalerRowTemplate}" />
+                                </Border>
+                                <TextBlock Visibility="{x:Bind ViewModel.Selected.Upscalers.HasNoRows, Mode=OneWay}" TextWrapping="Wrap"
+                                           Foreground="{StaticResource SubtleTextBrush}"
+                                           Text="No DLSS, FSR or XeSS found. OptiScaler may still add them."
+                                           ToolTipService.ToolTip="None in the game files or on PCGamingWiki. OptiScaler can still add FSR, XeSS and frame generation to many DirectX 11 and 12 games." />
+                                <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap">
+                                    <Hyperlink NavigateUri="{x:Bind ViewModel.Selected.Upscalers.PageUri, Mode=OneWay}"
+                                               Foreground="{StaticResource SubtleTextBrush}">Some details from PCGamingWiki</Hyperlink><Run Text="{x:Bind ViewModel.Selected.Upscalers.FooterSuffix, Mode=OneWay}" />
+                                </TextBlock>
+                                <Expander x:Name="FilesExpander" Header="Show files" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                          IsExpanded="False"
+                                          Visibility="{x:Bind ViewModel.Selected.Upscalers.HasFiles, Mode=OneWay}">
+                                    <ItemsControl ItemsSource="{x:Bind ViewModel.Selected.Upscalers.Files, Mode=OneWay}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="x:String">
+                                                <TextBlock Text="{x:Bind}" FontFamily="Consolas" FontSize="12" IsTextSelectionEnabled="True"
+                                                           TextWrapping="Wrap" Margin="0,2" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Expander>
+                            </StackPanel>
                                 <!-- Suggestions for this game (OptiScaler wiki) and general advice -->
                                 <views:SuggestionsView x:Name="SuggestionsPanel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
                             </StackPanel>
-                        </helpers:ColumnsPanel>
+                        </Expander>
                     </StackPanel>
                 </ScrollViewer>
 
@@ -695,8 +654,6 @@
                     <helpers:ColumnsPanel x:Name="PerformanceColumns" Columns="2" MinColumnWidth="460" Spacing="16" Margin="24,16,24,24">
                         <!-- Measure performance: PresentMon, results, bottleneck details, comparison, sharing -->
                         <views:MeasureView x:Name="MeasurePanel" helpers:ColumnsPanel.Column="0" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
-                        <!-- Pre-build shaders (Experimental): shows only while its switch in Settings is on, never for games with anti-cheat -->
-                        <views:ShaderPrebuildView x:Name="ShaderPanel" helpers:ColumnsPanel.Column="1" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
                     </helpers:ColumnsPanel>
                 </ScrollViewer>
 

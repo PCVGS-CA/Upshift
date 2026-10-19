@@ -363,10 +363,7 @@ public sealed class HelixSrRowView : UserControl
         FontWeight = strong ? FontWeights.SemiBold : FontWeights.Normal
     };
 
-    private static TextBlock Subtle(string text) => new()
-    {
-        Text = text, FontSize = 12, TextWrapping = TextWrapping.Wrap, Foreground = Res("SubtleTextBrush")
-    };
+    private static TextBlock Subtle(string text) => Helpers.Hints.Note(text);
 
     private static Microsoft.UI.Xaml.Media.Brush Res(string key) => (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources[key];
 }

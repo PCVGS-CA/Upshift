@@ -26,14 +26,8 @@ public static class Ui
         return new SolidColorBrush(ColorHelper.FromArgb(255, r, g, b));
     }
 
-    /// <summary>Company colours for chips: NVIDIA green, AMD red, Intel blue.</summary>
-    public static (string Background, string Foreground) VendorColors(GpuVendor vendor) => vendor switch
-    {
-        GpuVendor.Nvidia => ("#E6F2D8", "#2B560B"),
-        GpuVendor.Amd => ("#FBE7E7", "#7C1F1F"),
-        GpuVendor.Intel => ("#E3EEFA", "#0C447C"),
-        _ => ("#ECEEF1", "#454850")
-    };
+    /// <summary>Chips are neutral grey for every company: Upshift uses one accent colour, and the name says which it is.</summary>
+    public static (string Background, string Foreground) VendorColors(GpuVendor vendor) => ("#ECEEF1", "#454850");
 
     public static (string Background, string Foreground) FamilyColors(UpscalerFamily family) => family switch
     {

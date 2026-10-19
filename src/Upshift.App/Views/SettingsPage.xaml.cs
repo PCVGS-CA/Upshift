@@ -21,9 +21,6 @@ public sealed partial class SettingsPage : Page
         SteamGridDbKeyBox.Password = AppServices.Settings.Current.SteamGridDbKey ?? "";
         AutoCheckSwitch.IsOn = AppServices.Settings.Current.AutoCheckUpdates;
         AutoCheckSwitch.Toggled += AutoCheck_Toggled;
-        _loadingPrebuild = true;
-        ShaderPrebuildSwitch.IsOn = AppServices.Settings.Current.ShaderPrebuild;
-        _loadingPrebuild = false;
         CatalogUrlBox.Text = AppServices.Settings.Current.CatalogUrl;
         CatalogStatusText.Text = AppServices.CatalogStatus
             ?? (AppServices.UsingRemoteCatalog
@@ -302,8 +299,6 @@ public sealed partial class SettingsPage : Page
 
     private bool _building;
 
-    private bool _loadingPrebuild;
-
     private async Task<ContentDialogResult> ShowDialogAsync(ContentDialog dialog)
     {
         if (_dialogOpen) return ContentDialogResult.None;
@@ -311,52 +306,6 @@ public sealed partial class SettingsPage : Page
         try { return await dialog.ShowAsync(); }
         catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidOperationException) { return ContentDialogResult.None; }
         finally { _dialogOpen = false; }
-    }
-
-    /// <summary>
-    /// "Shader pre-build (Experimental)". Turning it off first turns learning off in every game that has it on (their
-    /// OptiScaler.ini values go back), after asking, and removes the recorder from Upshift's data folder.
-    /// </summary>
-    private async void ShaderPrebuild_Toggled(object sender, RoutedEventArgs e)
-    {
-        if (_loadingPrebuild) return;
-        var settings = AppServices.Settings.Current;
-        if (!ShaderPrebuildSwitch.IsOn)
-        {
-            var learning = Services.ShaderPrebuildGames.GamesLearning();
-            if (learning.Count > 0)
-            {
-                var answer = await ShowDialogAsync(new ContentDialog
-                {
-                    XamlRoot = XamlRoot, Title = "Turn shader pre-build off?",
-                    Content = new TextBlock
-                    {
-                        TextWrapping = TextWrapping.Wrap,
-                        Text = $"Learning is on in {string.Join(", ", learning.Select(g => g.Name))}. Turning the feature off turns learning off there too: " +
-                               "their OptiScaler.ini values go back to what they were. What was learned stays in Upshift's data folder."
-                    },
-                    PrimaryButtonText = "Turn off", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary
-                });
-                if (answer != ContentDialogResult.Primary)
-                {
-                    _loadingPrebuild = true;
-                    ShaderPrebuildSwitch.IsOn = true;
-                    _loadingPrebuild = false;
-                    return;
-                }
-                var problems = await Services.ShaderPrebuildGames.TurnOffEverywhereAsync();
-                if (problems.Count > 0)
-                    await ShowDialogAsync(new ContentDialog
-                    {
-                        XamlRoot = XamlRoot, Title = "Learning wasn't turned off everywhere", CloseButtonText = "OK",
-                        Content = new TextBlock { TextWrapping = TextWrapping.Wrap, Text = string.Join("\n", problems) }
-                    });
-            }
-            else Core.ShaderPrebuild.ShaderLibrary.RemoveRecorder(AppServices.DataDir);
-        }
-        settings.ShaderPrebuild = ShaderPrebuildSwitch.IsOn;
-        try { AppServices.Settings.Save(settings); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
-        Services.ShaderPrebuildGames.RaiseEnabledChanged();
     }
 
     private void ShowHelixSr_Toggled(object sender, RoutedEventArgs e)
@@ -581,7 +530,7 @@ public sealed partial class SettingsPage : Page
         }
         var games = AppServices.Library.Current.ToList();
         var targets = await Task.Run(() => Core.Install.GameCleanup.Find(games));
-        var cacheBackup = new Core.ShaderPrebuild.ShaderCaches(AppServices.DataDir).HasBackup;
+        var cacheBackup = Core.Install.ShaderLeftovers.Pending(AppServices.DataDir);
         if (targets.Count == 0 && !cacheBackup)
         {
             RemoveFromGamesText.Text = "No game has changes from Upshift.";
@@ -589,7 +538,7 @@ public sealed partial class SettingsPage : Page
         }
 
         var list = targets.Select(t => "• " + t.Name).ToList();
-        if (cacheBackup) list.Add("• The driver shader cache backup from Pre-build shaders (put back)");
+        if (cacheBackup) list.Add("• What Pre-build shaders left (its data and moved-aside driver caches)");
         var answer = await ShowDialogAsync(new ContentDialog
         {
             XamlRoot = XamlRoot,

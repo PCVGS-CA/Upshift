@@ -35,6 +35,18 @@ public sealed class OptiScalerOptionsView : UserControl
     /// <summary>True while controls are being filled in, so setting their initial values doesn't write anything.</summary>
     private bool _building;
 
+    /// <summary>The options beyond the main three (FPS counter, DLSS model, FSR 4…), for the page's "More options"; null when there are none.</summary>
+    public FrameworkElement? MoreContent { get; private set; }
+
+    /// <summary>Raised after each build, when <see cref="MoreContent"/> may have changed.</summary>
+    public event Action? MoreChanged;
+
+    private void SetMore(FrameworkElement? more)
+    {
+        MoreContent = more;
+        MoreChanged?.Invoke();
+    }
+
     public OptiScalerOptionsView()
     {
         // The developer preview's pretend card changes which options are offered (FSR 4, DLSS models…).
@@ -51,6 +63,7 @@ public sealed class OptiScalerOptionsView : UserControl
         {
             Content = null;
             Visibility = Visibility.Collapsed;
+            SetMore(null);
             return;
         }
         Visibility = Visibility.Visible;
@@ -126,7 +139,7 @@ public sealed class OptiScalerOptionsView : UserControl
                                      "OptiScaler.ini points at HelixSR's files in Upshift's shared folder; nothing of HelixSR's is put in the game folder." +
                                      (inGameLine is null ? "" : " " + inGameLine)));
         else if (inGameLine is not null)
-            body.Children.Add(Subtle(inGameLine));
+            body.Children.Add(Subtle(inGamePick is null ? inGameLine : $"In the game's menu, choose {inGamePick}. {inGameLine}"));
         else if (helixOffered && helixMissing is not null)
             body.Children.Add(Subtle($"{HelixSr.ChoiceLabel} can be added to this list: set HelixSR up first, on the Updates page."));
 
@@ -144,23 +157,24 @@ public sealed class OptiScalerOptionsView : UserControl
         body.Children.Add(Group(WithGuide(fgBox, catalog.Guides.FrameGen, modes.Select(m => (m.Id, m.Label)), gpu), fgNote,
             card.Suggestions?.HiddenFrameGen.Count > 0 ? Subtle("Some modes are hidden because the OptiScaler wiki says they don't work for this game.") : null));
 
-        // ---- Frame cap (OptiScaler's Reflex-based limiter) and its FPS counter ----
+        // ---- Frame cap (OptiScaler's Reflex-based limiter) ----
         body.Children.Add(FrameCapSection(card, ini, gpu));
-        body.Children.Add(FpsCounterSection(card, ini));
+
+        // ---- Everything else goes under the page's "More options" ----
+        var more = new StackPanel { Spacing = 14 };
+        more.Children.Add(FpsCounterSection(card, ini));
 
         // ---- DLSS model (NVIDIA RTX only) ----
         if (OptiScalerOptions.IsNvidiaRtx(gpu))
-            body.Children.Add(DlssSection(card, ini, gpu!));
+            more.Children.Add(DlssSection(card, ini, gpu!));
 
         // ---- FSR 4 (INT8) ----
         if (int8Shown)
-            body.Children.Add(Fsr4Section(card, gpu!, ini, manifest, communityName, currentUpscaler == HelixSr.ChoiceId));
+            more.Children.Add(Fsr4Section(card, gpu!, ini, manifest, communityName, currentUpscaler == HelixSr.ChoiceId));
 
-        body.Children.Add(Subtle(inGamePick is null
+        more.Children.Add(Subtle(inGamePick is null
             ? "This game has no DLSS, FSR or XeSS in its menu that Upshift knows of, so OptiScaler may have nothing to replace. Load a save, then press Insert to check."
             : "To check: load a save, then press Insert for OptiScaler's menu."));
-        if (card.Suggestions is { FromWiki: true })
-            body.Children.Add(Subtle("Tips for this game from the OptiScaler wiki are under Suggestions for this game."));
 
         var panel = new StackPanel { Spacing = 8 };
         panel.Children.Add(new TextBlock { Text = "OptiScaler options", FontWeight = FontWeights.SemiBold });
@@ -174,7 +188,21 @@ public sealed class OptiScalerOptionsView : UserControl
             Child = body
         });
         Content = panel;
+        SetMore(Card2("OptiScaler", more));
         _building = false;
+    }
+
+    /// <summary>A titled card like the main one, for the options under "More options".</summary>
+    private static FrameworkElement Card2(string title, UIElement body)
+    {
+        var panel = new StackPanel { Spacing = 8 };
+        panel.Children.Add(new TextBlock { Text = title, FontWeight = FontWeights.SemiBold });
+        panel.Children.Add(new Border
+        {
+            CornerRadius = new CornerRadius(8), Padding = new Thickness(16, 14, 16, 14), Background = Res("CardSurfaceBrush"),
+            BorderBrush = Res("HairlineBrush"), BorderThickness = new Thickness(1), Child = body
+        });
+        return panel;
     }
 
     /// <summary>Games whose switch back from HelixSR was tried this session (tried once, so a failure can't loop).</summary>
@@ -463,10 +491,11 @@ public sealed class OptiScalerOptionsView : UserControl
         void Refresh()
         {
             var hz = display?.RefreshHz;
-            hint.Text = hz is { } h
-                ? $"Type a frame rate the game can hold most of the time. Example: if it runs between 55 and 75 fps, a cap of 60 gives smoother motion. " +
-                  $"For games that run faster than your screen, use {OptiScalerOptions.CapUnderRefresh(h)} (just under your {h} Hz display)."
-                : "Type a frame rate the game can hold most of the time. Example: if it runs between 55 and 75 fps, a cap of 60 gives smoother motion.";
+            Helpers.Hints.Set(hint, hz is { } h
+                ? $"A rate the game can hold, or {OptiScalerOptions.CapUnderRefresh(h)} at {h} Hz. " +
+                  $"Example: if it runs between 55 and 75 fps, a cap of 60 gives smoother motion. For games that run faster than your screen, " +
+                  $"use {OptiScalerOptions.CapUnderRefresh(h)}, just under your {h} Hz display."
+                : "A frame rate the game can hold most of the time. Example: if it runs between 55 and 75 fps, a cap of 60 gives smoother motion.");
             hint.Visibility = Visibility.Visible;
             tooHigh.Visibility = hz is { } limit && !double.IsNaN(number.Value) && number.Value > limit ? Visibility.Visible : Visibility.Collapsed;
         }
@@ -660,7 +689,9 @@ public sealed class OptiScalerOptionsView : UserControl
                 Setters = { new Setter(FrameworkElement.MaxWidthProperty, 700.0) }
             }
         };
-        var link = new HyperlinkButton { Content = "Which one should I pick?", Padding = new Thickness(0), FontSize = 13 };
+        var link = new HyperlinkButton { Content = "?", Padding = new Thickness(6, 0, 6, 0), FontSize = 13, FontWeight = FontWeights.SemiBold };
+        ToolTipService.SetToolTip(link, "Which one should I pick?");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(link, "Which one should I pick?");
         link.Click += (_, _) => flyout.ShowAt(link);
 
         // The label and the link share one line above the control, so a wide dropdown doesn't squeeze the link.
@@ -721,11 +752,12 @@ public sealed class OptiScalerOptionsView : UserControl
         return panel;
     }
 
-    private static TextBlock Subtle(string text) => new()
+    private static TextBlock Subtle(string text)
     {
-        Text = text, FontSize = 12, Foreground = Res("SubtleTextBrush"), TextWrapping = TextWrapping.Wrap,
-        Visibility = text.Length == 0 ? Visibility.Collapsed : Visibility.Visible
-    };
+        var note = Helpers.Hints.Note(text);
+        if (text.Length == 0) note.Visibility = Visibility.Collapsed;
+        return note;
+    }
 
     private static StackPanel Group(params FrameworkElement?[] children)
     {
