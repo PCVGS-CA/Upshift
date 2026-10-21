@@ -2,7 +2,7 @@
 
 All notable changes to Upshift. Each release's section becomes its GitHub release notes, so the heading must be `## [x.y.z]` with the same version as `Directory.Build.props` (a date after it is fine).
 
-## [1.4.0]
+## [1.4.0] - 2026-10-20
 
 Official FSR 4.1 on older AMD cards, a driver check, a "This PC" panel, and SCSKiller as a companion tool.
 
