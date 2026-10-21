@@ -76,13 +76,15 @@ public static class HelixSr
     /// HelixSR is offered on the catalog's generations (RDNA 1 and RDNA 2, including RDNA 2 integrated graphics). On other
     /// cards the reason is said plainly. <paramref name="showForTesting"/> (Settings > Developer options) offers it anyway.
     /// </summary>
-    public static HelixSrCard ForCard(GpuInfo? gpu, HelixSrRelease release, bool showForTesting)
+    public static HelixSrCard ForCard(GpuInfo? gpu, HelixSrRelease release, bool showForTesting, OfficialFsr4 official = OfficialFsr4.NotCovered)
     {
-        if (gpu is not null && release.Generations.Contains(gpu.Generation))
+        if (gpu is not null && release.Generations.Contains(gpu.Generation) && official != OfficialFsr4.Ready)
             return new HelixSrCard(true, release.UntestedGenerations.Contains(gpu.Generation), null);
 
         var reason = gpu is null ? "Not available: Upshift couldn't detect your graphics card." : gpu.Vendor switch
         {
+            // AMD's Adrenalin 26.10.1 runs FSR 4.1 on RX 6000 itself.
+            GpuVendor.Amd when official == OfficialFsr4.Ready => "Not needed on this card: your AMD driver runs FSR 4.1 officially.",
             GpuVendor.Nvidia when OptiScalerOptions.IsNvidiaRtx(gpu) => $"Not needed on this card: your {ShortName(gpu.Name)} already runs DLSS.",
             GpuVendor.Amd when gpu.Generation is "RDNA 4" or "RDNA 3" => "Not needed on this card: FSR 4 is the better choice.",
             GpuVendor.Amd when gpu.Generation.StartsWith("RDNA", StringComparison.OrdinalIgnoreCase) =>

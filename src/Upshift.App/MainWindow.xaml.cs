@@ -46,6 +46,69 @@ public sealed partial class MainWindow : Window
         Services.AppUpdates.Changed += () => DispatcherQueue.TryEnqueue(ShowAppUpdate);
         AppUpdateBar.Closed += (_, _) => _appUpdateBarDismissed = true;
         _ = Task.Run(Services.AppUpdates.StartupAsync);
+
+        // A newer graphics driver (one lookup a day; a failed one shows nothing).
+        Services.DriverUpdates.Changed += () => DispatcherQueue.TryEnqueue(ShowDriverUpdate);
+        _ = Task.Run(Services.DriverUpdates.StartupAsync);
+    }
+
+    private void ShowDriverUpdate()
+    {
+        if (Services.DriverUpdates.Newer is not { } newer) return;
+        DriverText.Text = $"Newer driver available (version {newer.Version})";
+        ToolTipService.SetToolTip(DriverNotesButton, newer.ReleaseNotesUrl);
+        DriverPanel.Visibility = Visibility.Visible;
+    }
+
+    private async void DriverNotes_Click(object sender, RoutedEventArgs e)
+    {
+        // Only the vendor's own page, and only https.
+        if (Services.DriverUpdates.Newer is { } newer && Uri.TryCreate(newer.ReleaseNotesUrl, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps)
+            await Windows.System.Launcher.LaunchUriAsync(uri);
+    }
+
+    private bool _thisPcOpen;
+
+    /// <summary>"This PC": processor, graphics card and driver, memory, Windows, displays. No user name, PC name or folder path.</summary>
+    private async void ThisPc_Click(object sender, RoutedEventArgs e)
+    {
+        if (_thisPcOpen) return;
+        _thisPcOpen = true;
+        try
+        {
+            var pc = await Task.Run(Services.DriverUpdates.ThisPc);
+            var grid = new Grid { ColumnSpacing = 16, RowSpacing = 6 };
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            var lines = pc.Lines();
+            for (var i = 0; i < lines.Count; i++)
+            {
+                grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                var label = new TextBlock { Text = lines[i].Label, Foreground = (Brush)Application.Current.Resources["SubtleTextBrush"] };
+                var value = new TextBlock { Text = lines[i].Value, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true };
+                Grid.SetRow(label, i);
+                Grid.SetRow(value, i);
+                Grid.SetColumn(value, 1);
+                grid.Children.Add(label);
+                grid.Children.Add(value);
+            }
+            var dialog = new ContentDialog
+            {
+                Title = "This PC", Content = grid, XamlRoot = Content.XamlRoot,
+                PrimaryButtonText = "Copy as text", CloseButtonText = "Close", DefaultButton = ContentDialogButton.Close
+            };
+            dialog.PrimaryButtonClick += (_, args) =>
+            {
+                var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
+                package.SetText(pc.Text());
+                Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+                args.Cancel = true;   // stays open
+                dialog.PrimaryButtonText = "Copied";
+            };
+            await dialog.ShowAsync();
+        }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidOperationException) { }
+        finally { _thisPcOpen = false; }
     }
 
     private bool _appUpdateBarDismissed;

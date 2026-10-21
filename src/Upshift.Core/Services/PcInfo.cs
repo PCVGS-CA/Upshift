@@ -18,6 +18,31 @@ public sealed record PcInfo(string? Processor, string? GraphicsCard, string? Dri
     public string MemoryText => MemoryGb is { } gb ? $"{Math.Round(gb)} GB" : "Unknown";
     public string WindowsText => Windows ?? "Windows";
 
+    /// <summary>The driver's date, for the "This PC" panel.</summary>
+    public DateTime? DriverDate { get; init; }
+
+    /// <summary>Monitors as "LG ULTRAGEAR (main) · 2560 × 1440 · 165 Hz" (the monitor's own name, never a path).</summary>
+    public IReadOnlyList<string> Displays { get; init; } = Array.Empty<string>();
+
+    /// <summary>The "This PC" panel's rows.</summary>
+    public List<(string Label, string Value)> Lines()
+    {
+        var lines = new List<(string, string)>
+        {
+            ("Processor", ProcessorText),
+            ("Graphics card", GraphicsCard ?? "Unknown graphics card"),
+            ("Driver", (DriverVersion ?? "Unknown") + (DriverDate is { } d ? $", {d.ToString("d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture)}" : "")),
+            ("Memory", MemoryText),
+            ("Windows", WindowsText)
+        };
+        if (Displays.Count == 0) lines.Add(("Display", "Unknown"));
+        for (var i = 0; i < Displays.Count; i++) lines.Add((Displays.Count == 1 ? "Display" : $"Display {i + 1}", Displays[i]));
+        return lines;
+    }
+
+    /// <summary>"Copy as text": one "Label: value" line each.</summary>
+    public string Text() => string.Join(Environment.NewLine, Lines().Select(l => $"{l.Label}: {l.Value}"));
+
     private static string? ProcessorName()
     {
         try

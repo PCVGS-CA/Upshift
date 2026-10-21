@@ -32,7 +32,7 @@ public static class HelixSrGames
         {
             try
             {
-                return Release is { } r ? HelixSr.ForCard(AppServices.EffectiveGpu, r, AppServices.ShowHelixSrForTesting)
+                return Release is { } r ? HelixSr.ForCard(AppServices.EffectiveGpu, r, AppServices.ShowHelixSrForTesting, AppServices.OfficialFsr4)
                                         : new HelixSrCard(false, false, "Not available: this catalog has no HelixSR entry.");
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)

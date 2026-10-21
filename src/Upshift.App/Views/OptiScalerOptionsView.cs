@@ -344,25 +344,26 @@ public sealed class OptiScalerOptionsView : UserControl
         var fsrDll = OptiScalerOptions.FsrUpscalerPath(manifest);
         var amd = gpu.Vendor == GpuVendor.Amd;
         var rdna2 = amd && gpu.Generation.StartsWith("RDNA 2", StringComparison.OrdinalIgnoreCase);
+        // AMD's Adrenalin 26.10.1 runs FSR 4.1 on RX 6000 and Ryzen AI / Z2 graphics: then OptiScaler's own FSR 4 is the
+        // suggestion and the modified files are offered only while a game still uses one.
+        var official = AppServices.OfficialFsr4;
+        var filesOffered = amd && official != OfficialFsr4.Ready;
 
         var offered = new List<(Fsr4Source Source, string Label)> { (Fsr4Source.BuiltIn, "OptiScaler's built-in FSR 4") };
-        if (inUse == Fsr4Source.File411b || (amd && file411 is not null && fsrDll is not null))
+        if (inUse == Fsr4Source.File411b || (filesOffered && file411 is not null && fsrDll is not null))
             offered.Add((Fsr4Source.File411b, "Your 4.1.1b file" + (file411?.Version is { } v1 ? $" (v{v1})" : "")));
-        if (inUse == Fsr4Source.File402c || (amd && file402 is not null))
+        if (inUse == Fsr4Source.File402c || (filesOffered && file402 is not null))
             offered.Add((Fsr4Source.File402c, "Your 4.0.2c file" + (file402?.Version is { } v2 ? $" (v{v2})" : "")));
         bool Has(Fsr4Source s) => offered.Any(o => o.Source == s);
-        var preferred = rdna2 && Has(Fsr4Source.File411b) ? Fsr4Source.File411b
+        var preferred = official == OfficialFsr4.Ready ? Fsr4Source.BuiltIn
+            : rdna2 && Has(Fsr4Source.File411b) ? Fsr4Source.File411b
             : rdna2 && Has(Fsr4Source.File402c) ? Fsr4Source.File402c
             : Fsr4Source.BuiltIn;
 
         var toggle = new ToggleSwitch { Header = "FSR 4", IsOn = inUse != Fsr4Source.Off };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(toggle, "FSR 4");
 
-        var source = new ComboBox
-        {
-            Header = "Source", MinWidth = 280, HorizontalAlignment = HorizontalAlignment.Left,
-            Visibility = offered.Count > 1 ? Visibility.Visible : Visibility.Collapsed
-        };
+        var source = new ComboBox { Header = "Source", MinWidth = 280, HorizontalAlignment = HorizontalAlignment.Left };
         foreach (var (s, label) in offered) source.Items.Add(new ComboBoxItem { Content = label, Tag = s });
         var shown = inUse != Fsr4Source.Off ? inUse : preferred;
         source.SelectedItem = source.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (Fsr4Source)i.Tag == shown) ?? source.Items[0];
@@ -431,12 +432,24 @@ public sealed class OptiScalerOptionsView : UserControl
         return Group(
             toggle,
             helixActive ? Subtle("HelixSR is the upscaler now. Turning FSR 4 on switches the upscaler from HelixSR to FSR 4, because both use OptiScaler's FSR slot.") : null,
-            source,
+            // The modified files are the advanced choice: the picker sits under "Advanced", open while a file is in use.
+            offered.Count > 1
+                ? new Expander
+                {
+                    Header = "Advanced: modified FSR 4 files", Content = source, IsExpanded = inUse is Fsr4Source.File411b or Fsr4Source.File402c,
+                    HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left
+                }
+                : null,
             Subtle(Explain()),
             inUse != Fsr4Source.Off ? Subtle("In use: " + OptiScalerOptions.Fsr4Label(inUse, inUseVersion)!["FSR 4: ".Length..]) : null,
-            rdna2 && file411 is null && file402 is null
-                ? Subtle("RX 6000 cards run FSR 4 best with a modified file (4.1.1b, or the older 4.0.2c) - add one in Settings.")
-                : null,
+            official switch
+            {
+                OfficialFsr4.Ready => Subtle(AmdOfficialFsr4.ReadyLine),
+                OfficialFsr4.DriverTooOld or OfficialFsr4.DriverUnknown => Subtle(AmdOfficialFsr4.UpdateDriverLine + "."),
+                _ => amd && file411 is null && file402 is null && (gpu.Generation == "RDNA 1" || gpu.IsIntegrated)
+                    ? Subtle("Cards AMD's FSR 4.1 doesn't cover can use a modified file: add one in Settings, under Advanced.")
+                    : null
+            },
             amd && file411 is not null && fsrDll is null
                 ? Subtle("This OptiScaler has no amd_fidelityfx_upscaler_dx12.dll, so your 4.1.1b file can't be used here.")
                 : null,
@@ -741,11 +754,15 @@ public sealed class OptiScalerOptionsView : UserControl
         }
         panel.Children.Add(grid);
 
-        if (guide.CardNotes.FirstOrDefault(n => n.Matches(gpu?.Vendor, gpu?.Generation)) is { } note)
+        // With AMD's official FSR 4.1 (Adrenalin 26.10.1) the catalog's RX 6000 note (the 4.1.1b file, HelixSR) no longer applies.
+        var noteText = ReferenceEquals(guide, AppServices.Catalog.Guides.Upscaler) && AppServices.OfficialFsr4 == OfficialFsr4.Ready
+            ? "On your card, FSR 4 is the best choice: your AMD driver runs FSR 4.1 officially."
+            : guide.CardNotes.FirstOrDefault(n => n.Matches(gpu?.Vendor, gpu?.Generation))?.Text;
+        if (noteText is not null)
         {
             var line = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
             line.Children.Add(new FontIcon { Glyph = "\uE7F4", FontSize = 14, Foreground = Res("UpshiftAccentBrush"), VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 2, 0, 0) });
-            line.Children.Add(new TextBlock { Text = $"{gpu?.Name}: {fill(note.Text)}", TextWrapping = TextWrapping.Wrap, FontSize = 13, MaxWidth = 580 });
+            line.Children.Add(new TextBlock { Text = $"{gpu?.Name}: {fill(noteText)}", TextWrapping = TextWrapping.Wrap, FontSize = 13, MaxWidth = 580 });
             panel.Children.Add(line);
         }
         if (guide.Footer is { } footer) panel.Children.Add(new TextBlock { Text = fill(footer), FontSize = 12, TextWrapping = TextWrapping.Wrap, Foreground = Res("SubtleTextBrush") });

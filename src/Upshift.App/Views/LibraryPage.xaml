@@ -654,6 +654,8 @@
                     <helpers:ColumnsPanel x:Name="PerformanceColumns" Columns="2" MinColumnWidth="460" Spacing="16" Margin="24,16,24,24">
                         <!-- Measure performance: PresentMon, results, bottleneck details, comparison, sharing -->
                         <views:MeasureView x:Name="MeasurePanel" helpers:ColumnsPanel.Column="0" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
+                        <!-- SCSKiller: a companion tool for shader stutter (Upshift only starts it) -->
+                        <views:ScsKillerView helpers:ColumnsPanel.Column="1" />
                     </helpers:ColumnsPanel>
                 </ScrollViewer>
 

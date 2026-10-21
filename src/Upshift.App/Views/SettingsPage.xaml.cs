@@ -27,6 +27,8 @@ public sealed partial class SettingsPage : Page
                 ? string.IsNullOrWhiteSpace(AppServices.Settings.Current.CatalogUrl) ? "Using Upshift's online catalog." : "Using the catalog from this address."
                 : "Using the built-in catalog (the online one isn't newer or couldn't be reached).");
         BuildUserFileRows();
+        Helpers.Sections.Bind(AdvancedFilesExpander, "settings.advancedFiles");
+        ShowScsKiller();
 
         BuildHiddenRows();
         Helpers.Sections.Bind(HiddenExpander, "settings.hiddenGames");
@@ -121,6 +123,7 @@ public sealed partial class SettingsPage : Page
     private void BuildUserFileRows()
     {
         UserFileRows.Children.Clear();
+        AdvancedFileRows.Children.Clear();
         _resultPanels.Clear();
         foreach (var (kind, title, use) in UserFileKinds)
         {
@@ -208,7 +211,7 @@ public sealed partial class SettingsPage : Page
                 });
             }
             row.Children.Add(results);
-            UserFileRows.Children.Add(new Border
+            (kind == UserFileKind.DlssNr ? UserFileRows : AdvancedFileRows).Children.Add(new Border
             {
                 CornerRadius = new CornerRadius(8),
                 Padding = new Thickness(16, 12, 16, 12),
@@ -284,10 +287,11 @@ public sealed partial class SettingsPage : Page
     {
         var shift = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Shift)
             .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
-        if (!shift && AppServices.PretendGpu is null && !AppServices.ShowHelixSrForTesting) return;
+        if (!shift && AppServices.PretendGpu is null && !AppServices.ShowHelixSrForTesting && AppServices.PretendAmdDriver is null) return;
         DeveloperPanel.Visibility = Visibility.Visible;
         _building = true;
         ShowHelixSrSwitch.IsOn = AppServices.ShowHelixSrForTesting;
+        PretendAmdDriverBox.Text = AppServices.PretendAmdDriver ?? "";
         PretendGpuBox.Items.Clear();
         PretendGpuBox.Items.Add(new ComboBoxItem { Content = $"Off (this PC's card: {AppServices.Gpu?.Name ?? "not detected"})" });
         foreach (var gpu in AppServices.PretendGpus)
@@ -466,6 +470,47 @@ public sealed partial class SettingsPage : Page
     }
 
     // ---------------- Updates ----------------
+
+    // ---------------- SCSKiller (only started, never read or changed) ----------------
+
+    private void ShowScsKiller()
+    {
+        var picked = AppServices.Settings.Current.ScsKillerPath;
+        var found = ScsKiller.Find();
+        ScsKillerText.Text = found is null ? "Not found. Install it, or select SCSKiller.exe if it's somewhere else."
+            : picked is { Length: > 0 } && found == picked ? $"Using {picked}" : $"Found in {ScsKiller.DefaultFolder}";
+        ClearScsKillerButton.IsEnabled = picked is { Length: > 0 };
+    }
+
+    private async void SelectScsKiller_Click(object sender, RoutedEventArgs e)
+    {
+        var picker = new FileOpenPicker { SuggestedStartLocation = PickerLocationId.ComputerFolder };
+        picker.FileTypeFilter.Add(".exe");
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(App.MainAppWindow));
+        if (await picker.PickSingleFileAsync() is not { } file) return;
+        if (!string.Equals(Path.GetFileName(file.Path), ScsKiller.ExeName, StringComparison.OrdinalIgnoreCase))
+        {
+            ScsKillerText.Text = $"That's not {ScsKiller.ExeName}.";
+            return;
+        }
+        var settings = AppServices.Settings.Current;
+        settings.ScsKillerPath = file.Path;
+        AppServices.Settings.Save(settings);
+        ShowScsKiller();
+    }
+
+    private void ClearScsKiller_Click(object sender, RoutedEventArgs e)
+    {
+        var settings = AppServices.Settings.Current;
+        settings.ScsKillerPath = null;
+        AppServices.Settings.Save(settings);
+        ShowScsKiller();
+    }
+
+    private void PretendAmdDriver_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (PretendAmdDriverBox.Text.Trim() != (AppServices.PretendAmdDriver ?? "")) AppServices.SetPretendAmdDriver(PretendAmdDriverBox.Text);
+    }
 
     private void AutoCheck_Toggled(object sender, RoutedEventArgs e)
     {

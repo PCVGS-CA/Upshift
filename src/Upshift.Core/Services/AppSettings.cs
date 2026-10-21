@@ -52,6 +52,9 @@ public sealed class AppSettings
     /// <summary>How long a measurement runs, in seconds (the last value typed; 10 to 1800).</summary>
     public int MeasureSeconds { get; set; } = Measure.MeasureThresholds.MeasureSeconds;
 
+    /// <summary>Where SCSKiller.exe is, when the user pointed Upshift at it (Upshift only starts it).</summary>
+    public string? ScsKillerPath { get; set; }
+
 
     /// <summary>Collapsible sections the user left open (true) or closed (false), by a fixed key such as "game.changes".</summary>
     public Dictionary<string, bool> OpenSections { get; set; } = new();

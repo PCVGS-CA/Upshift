@@ -75,6 +75,27 @@
                 <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
                            Text="The app never downloads or bundles these. Point it at a copy you already have and it's copied into the app's own folder." />
                 <StackPanel x:Name="UserFileRows" Spacing="10" />
+                <!-- Modified FSR 4 files: for cards AMD's official FSR 4.1 (Adrenalin 26.10.1) doesn't cover -->
+                <Expander x:Name="AdvancedFilesExpander" Header="Advanced: modified FSR 4 files (RX 5000, Radeon 680M/780M, Ryzen Z1)"
+                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                          AutomationProperties.Name="Advanced: modified FSR 4 files">
+                    <StackPanel Spacing="10">
+                        <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
+                                   Text="RX 6000 and Ryzen AI / Z2 graphics get official FSR 4.1 with AMD driver 26.10.1 and don't need these." />
+                        <StackPanel x:Name="AdvancedFileRows" Spacing="10" />
+                    </StackPanel>
+                </Expander>
+            </StackPanel>
+
+            <StackPanel Spacing="8">
+                <TextBlock Text="SCSKiller" FontWeight="SemiBold" />
+                <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
+                           Text="A free, open-source tool for shader stutter. Upshift only starts it." />
+                <TextBlock x:Name="ScsKillerText" FontSize="12" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Button Content="Select SCSKiller.exe…" Click="SelectScsKiller_Click" AutomationProperties.Name="Select SCSKiller.exe" />
+                    <Button x:Name="ClearScsKillerButton" Content="Clear" Click="ClearScsKiller_Click" AutomationProperties.Name="Clear SCSKiller location" />
+                </StackPanel>
             </StackPanel>
 
             <!-- Developer options: shown only when Settings is opened with Shift held (or while a pretend card is set) -->
@@ -86,6 +107,8 @@
                           AutomationProperties.Name="Pretend this PC has" />
                 <ToggleSwitch x:Name="ShowHelixSrSwitch" Header="Show HelixSR on this card (testing)" Toggled="ShowHelixSr_Toggled"
                               AutomationProperties.Name="Show HelixSR on this card" />
+                <TextBox x:Name="PretendAmdDriverBox" Header="Pretend AMD driver (Adrenalin version)" PlaceholderText="26.10.1" Width="240"
+                         HorizontalAlignment="Left" LostFocus="PretendAmdDriver_LostFocus" AutomationProperties.Name="Pretend AMD driver" />
                 <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
                            Text="HelixSR (experimental) is normally offered only on RDNA 1 and RDNA 2 cards. This lets its whole flow (setup, the per-game option, removal) be tried on this PC's card. Off every time Upshift starts." />
             </StackPanel>

@@ -2,6 +2,22 @@
 
 All notable changes to Upshift. Each release's section becomes its GitHub release notes, so the heading must be `## [x.y.z]` with the same version as `Directory.Build.props` (a date after it is fine).
 
+## [1.4.0]
+
+Official FSR 4.1 on older AMD cards, a driver check, a "This PC" panel, and SCSKiller as a companion tool.
+
+### New
+
+- **Official FSR 4.1 on RX 6000 and Ryzen AI / Z2 graphics.** With AMD's Adrenalin 26.10.1 or newer, Upshift suggests OptiScaler's own FSR 4 on these cards and no longer suggests the modified 4.1.1b file or HelixSR. With an older driver it says "Update your AMD driver to 26.10.1 for official FSR 4.1". The modified FSR 4 files stay available under Advanced, for cards AMD doesn't cover (RX 5000, Radeon 680M/780M, Ryzen Z1).
+- **Driver check.** Once a day, Upshift compares your graphics driver with the newest from NVIDIA, AMD or Intel. When there's a newer one, the graphics card box says "Newer driver available" with a link to the maker's release notes. Upshift never downloads or installs drivers; if the lookup fails, nothing is shown.
+- **This PC.** Click the graphics card box for your processor, graphics card and driver (with its date), memory, Windows version and displays, with Copy as text. It never includes your Windows user name, PC name or folder paths.
+- **SCSKiller.** The Performance tab suggests SCSKiller (free, open source) for shader stutter on first play: "Get SCSKiller" opens its releases page, and once it's installed (or you point Upshift at SCSKiller.exe in Settings), "Open SCSKiller" starts it. Upshift never reads, changes or downloads SCSKiller's files.
+
+### Not tested yet
+
+- Official FSR 4.1: not yet tested on a real RX 6000 with the new driver (tried with pretend cards and driver versions only). Ryzen Z2 handhelds are recognised by the processor's name.
+- The driver check on AMD and Intel PCs: AMD's release notes pages answered from here; Intel's site refused the lookup, so Intel cards may never show the line.
+
 ## [1.3.0] - 2026-10-18
 
 A simpler game page, a new DLSS 5 build, uninstall that can undo Upshift's changes to games, HelixSR (experimental, still in testing), a warning for Capcom RE Engine games, and a more flexible Measure performance.

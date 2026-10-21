@@ -777,6 +777,35 @@ errors and no warnings.
     is **frozen at 1.2.0's content** for 1.1.0 and 1.2.0, which read it from main: never edit it. Catalog changes go in
     `catalog.v2.json` (bump its `updated`).
 
+- **1.4.0 (2026-10-20), test build 1.4.0-test.1, not released.** Branch `feature/1.4` (from feature/helixsr = main + nothing).
+  - **SCSKiller (companion tool):** `App/Services/ScsKiller.cs` (`Find`: `AppSettings.ScsKillerPath` when it exists, else
+    `%LOCALAPPDATA%\SCSKiller\SCSKiller.exe` when that folder exists; `Open`: shell start only), `Views/ScsKillerView.cs`
+    (Performance tab, column 1: "Get SCSKiller" → github.com/BlueHeisenberg/SCSKiller/releases, or "Open SCSKiller"),
+    Settings "SCSKiller" section (Select SCSKiller.exe… / Clear). Never read, change, bundle or download its files.
+  - **Official FSR 4.1 (AMD Adrenalin 26.10.1):** `Core/Hardware/AmdOfficialFsr4.cs` (covered: RDNA 2, RDNA 3.5
+    integrated, "Radeon integrated" with a "Ryzen AI" processor, Ryzen Z2 / Z2 Extreme by processor name; not Z2 Go, Z1,
+    RX 5000, 680M/780M), `Core/Hardware/DriverDetails.cs` (display class registry: DriverVersion, DriverDate,
+    RadeonSoftwareVersion; `PublishedVersion`, `CompareVersions`), `AppServices.OfficialFsr4`. Ready → FSR 4 section
+    prefers built-in, file sources only while in use, the upscaler guide note is replaced in code (not the catalog: 1.3.0
+    reads catalog.v2.json too), `HelixSr.ForCard(..., official)` says "Not needed". Too old/unknown → "Update your AMD
+    driver to 26.10.1 for official FSR 4.1". The source picker sits in an "Advanced: modified FSR 4 files" expander;
+    Settings moved the 4.0.2c/4.1.1b rows into an Advanced expander (`settings.advancedFiles`). Developer option
+    "Pretend AMD driver" (`AppServices.PretendAmdDriver`, session-only).
+  - **Driver check:** `Core/Hardware/DriverCheck.cs` + catalog `driverChecks` (NVIDIA: geforce.com AjaxDriverService JSON,
+    psid 127/pfid 1015; AMD: release notes pages `RN-RAD-WIN-{yy-m-p}.html`, probed from this month back; Intel: download
+    page + version pattern, **403 to scripts here**). Record `data\driver-check.json` (once a day, also after a failure),
+    log `logs\driver-check.log`. `App/Services/DriverUpdates.cs`; sidebar line "Newer driver available (version X)" +
+    "Release notes" (https only). Never downloads drivers.
+  - **This PC:** the sidebar's card box is a button → ContentDialog (`PcInfo.Lines()/Text()`, plus `DriverDate`,
+    `Displays`), Copy as text. `MeasureView.Pc()` now uses `DriverUpdates.ThisPc()` (AMD shows the Adrenalin version).
+  - Tested: harness 181 checks (section 19: coverage, driver compare, live NVIDIA 617.42 and AMD 26.10.1 lookups, Intel
+    403 logged, once-a-day record, failure path, This PC text without user/PC name or paths); the app on throwaway data:
+    sidebar line, This PC + Copy as text, Performance tab both button states (a stand-in exe started), Settings sections,
+    FSR 4 section on a throwaway game with a pretend RX 6600 at 26.9.1 and 26.10.1. Not tested: a real RX 6000 / Z2 with the
+    new driver, the Advanced source picker with a file added, Intel's lookup.
+  - Silent Hill 2 has no OptiScaler now (seen 2026-10-20; the user removed it). The harness falls back to its saved copy
+    (`helixtest\game0`).
+
 ## Next
 
 1. **DLSS 5 follow-ups:**

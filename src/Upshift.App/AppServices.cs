@@ -152,6 +152,42 @@ public static class AppServices
         EffectiveGpuChanged?.Invoke();
     }
 
+    /// <summary>
+    /// Developer option: an Adrenalin version to use instead of this PC's ("26.10.1"), so official FSR 4.1 can be tried
+    /// with a pretend AMD card. Session-only, never saved.
+    /// </summary>
+    public static string? PretendAmdDriver { get; private set; }
+
+    public static void SetPretendAmdDriver(string? version)
+    {
+        PretendAmdDriver = string.IsNullOrWhiteSpace(version) ? null : version.Trim();
+        EffectiveGpuChanged?.Invoke();
+    }
+
+    /// <summary>The processor's name (for Ryzen Z2 handhelds, whose graphics have no model name).</summary>
+    public static string? ProcessorName => _processor ??= PcInfo.Read(null, null).Processor ?? "";
+    private static string? _processor;
+
+    /// <summary>The effective card's driver details from the registry (a pretend card reads nothing).</summary>
+    public static DriverDetails EffectiveDriver => PretendGpu is not null ? DriverDetails.None
+        : _driver ??= DriverDetails.Read(Gpu);
+    private static DriverDetails? _driver;
+
+    /// <summary>AMD's official FSR 4.1 (Adrenalin 26.10.1) on the effective card. Never throws.</summary>
+    public static OfficialFsr4 OfficialFsr4
+    {
+        get
+        {
+            try
+            {
+                var gpu = EffectiveGpu;
+                var adrenalin = PretendAmdDriver ?? EffectiveDriver.AdrenalinVersion;
+                return AmdOfficialFsr4.For(gpu, PretendGpu is not null ? null : ProcessorName, adrenalin);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { return OfficialFsr4.NotCovered; }
+        }
+    }
+
     /// <summary>Raised when a setting that affects cover art changes, so the Library can look again.</summary>
     public static event Action? ArtworkSettingsChanged;
 

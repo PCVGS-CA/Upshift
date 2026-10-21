@@ -36,6 +36,9 @@ public sealed class UpscalerCatalog
     /// archive's hash, so a file the user picks can be checked against the archive they downloaded.
     /// </summary>
     public UserFileRelease? Fsr411bRelease { get; set; }
+
+    /// <summary>Where the newest NVIDIA, AMD and Intel drivers are looked up (read only; drivers are never downloaded).</summary>
+    public Hardware.DriverChecks? DriverChecks { get; set; }
 }
 
 /// <summary>

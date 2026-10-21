@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-10-14T16:00Z",
+  "updated": "2026-10-20T12:00Z",
   "notes": "Upshift's built-in catalog. Upshift will later download a newer version of this file from its GitHub repo, so new forks and GPU support can be added without releasing a new version. The userAgent values below are fallbacks; the app sends Upshift/<its version>.",
 
   "components": [
@@ -407,6 +407,20 @@
     }
   },
 
+  "driverChecks": {
+    "nvidia": {
+      "url": "https://gfwsl.geforce.com/services_toolkit/services/com/nvidia/services/AjaxDriverService.php?func=DriverManualLookup&psid=127&pfid=1015&osID=57&languageCode=1033&isWHQL=1&dch=1&sort1=0&numberOfResults=1",
+      "releaseNotesUrl": "https://www.nvidia.com/en-us/geforce/drivers/"
+    },
+    "amd": {
+      "url": "https://www.amd.com/en/resources/support-articles/release-notes/RN-RAD-WIN-{version}.html"
+    },
+    "intel": {
+      "url": "https://www.intel.com/content/www/us/en/download/785597/intel-arc-iris-xe-graphics-windows.html",
+      "versionPattern": "32\\.0\\.101\\.\\d{4,5}",
+      "releaseNotesUrl": "https://www.intel.com/content/www/us/en/download/785597/intel-arc-iris-xe-graphics-windows.html"
+    }
+  },
   "fsr411bRelease": {
     "notes": "Upshift never downloads this file: Settings only opens the release page. The release (published 2026-09-08 by the3rdparty1917) lists only the archive's SHA-256, so a picked amd_fidelityfx_upscaler_dx12.dll is checked against the user's own downloaded archive when it's found (Downloads, Desktop, or next to the file). Read on 2026-10-14.",
     "url": "https://github.com/the3rdparty1917/fsr4xyz/releases/tag/4.1.1b",

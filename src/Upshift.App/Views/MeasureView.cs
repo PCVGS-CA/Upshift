@@ -91,13 +91,8 @@ public sealed class MeasureView : UserControl
     // ---------------- Sharing a result ----------------
 
     /// <summary>The PC, for shared results (no user name, PC name or folder path).</summary>
-    private static Core.Services.PcInfo Pc()
-    {
-        var gpu = AppServices.Gpu;
-        // NVIDIA's own driver number (617.42) rather than Windows' (32.0.16.1742).
-        var driver = gpu?.Vendor == Core.Models.GpuVendor.Nvidia ? Core.Install.Dlss5.NvidiaDriver(gpu.DriverVersion) ?? gpu.DriverVersion : gpu?.DriverVersion;
-        return Core.Services.PcInfo.Read(gpu?.Name, driver);
-    }
+    /// <summary>The same data as the sidebar's "This PC" (NVIDIA's 617.42 and AMD's Adrenalin version, not Windows' numbers).</summary>
+    private static Core.Services.PcInfo Pc() => Services.DriverUpdates.ThisPc();
 
     /// <summary>
     /// "Note and share" for one run: a preview of the result as it's shared, the note box (resolution and in-game
