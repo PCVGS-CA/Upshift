@@ -347,8 +347,19 @@ public static partial class OptiScalerInstaller
         var installed = IniFile.Parse(installedText);
         var oldDefaults = oldDefaultsPath is not null && File.Exists(oldDefaultsPath) ? IniFile.Load(oldDefaultsPath) : null;
 
-        foreach (var (section, key, value) in installed.Entries())
+        foreach (var (installedSection, installedKey, installedValue) in installed.Entries())
         {
+            // A setting the new build names differently (FSR 4's INT8 switch in the v10 test builds) keeps its value.
+            var (section, key, value) = (installedSection, installedKey, installedValue);
+            if (!defaults.Has(section, key)
+                && OptiScalerOptions.ForIni(new[] { new IniSetting(section, key, value) }, defaults).FirstOrDefault() is { } renamed
+                && defaults.Has(renamed.Section, renamed.Key) && renamed.Value is "2" or "true")
+            {
+                var wasChanged = manifest.IniChanges.FirstOrDefault(c => c.Section.Equals(section, StringComparison.OrdinalIgnoreCase) && c.Key.Equals(key, StringComparison.OrdinalIgnoreCase));
+                (section, key, value) = (renamed.Section, renamed.Key, renamed.Value);
+                if (wasChanged is not null && !manifest.IniChanges.Any(c => c.Section == section && c.Key == key))
+                    manifest.IniChanges.Add(new IniChange { Section = section, Key = key, Original = defaults.Get(section, key), Current = value, ChangedUtc = wasChanged.ChangedUtc });
+            }
             if (!defaults.Has(section, key))
             {
                 record.DroppedIniOptions.Add($"[{section}] {key}");

@@ -57,7 +57,7 @@ public static class AppServices
     public static ComponentStore Components { get; } = new(DataDir, AppInfo.UserAgent);
 
     /// <summary>Release checks for every catalog component (GitHub, cached with ETags).</summary>
-    public static UpdateChecker Updates { get; } = new(Components, Settings, Catalog.Components);
+    public static UpdateChecker Updates { get; } = new(Components, Settings, Catalog.Components.Concat(Catalog.TestBuilds).ToList());
 
     /// <summary>The last line about the online catalog, for Settings and the Updates page (null when there's nothing to say).</summary>
     public static string? CatalogStatus { get; set; }

@@ -972,6 +972,7 @@ public static partial class OptiScalerInstaller
         if (plan.IniSettings.Count > 0)
         {
             var current = IniFile.Load(iniPath);
+            plan.IniSettings = OptiScalerOptions.ForIni(plan.IniSettings, current);   // the installed build's keys (v10 test builds)
             var unknown = plan.IniSettings.Where(s => s.Value is not null && !current.Has(s.Section, s.Key) && !IsAddableIniKey(s.Section, s.Key))
                 .Select(s => $"[{s.Section}] {s.Key}").ToList();
             if (unknown.Count > 0) return Refuse(log, $"OptiScaler.ini has no setting called {string.Join(", ", unknown)}.");
@@ -1173,7 +1174,7 @@ public static partial class OptiScalerInstaller
     {
         var iniPath = Path.Combine(target, "OptiScaler.ini");
         var ini = IniFile.Load(iniPath);
-        foreach (var setting in settings)
+        foreach (var setting in OptiScalerOptions.ForIni(settings, ini))
         {
             var change = manifest.IniChanges.FirstOrDefault(c =>
                 c.Section.Equals(setting.Section, StringComparison.OrdinalIgnoreCase) && c.Key.Equals(setting.Key, StringComparison.OrdinalIgnoreCase));

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-10-20T12:00Z",
+  "updated": "2026-10-23T12:00Z",
   "notes": "Upshift's built-in catalog. Upshift will later download a newer version of this file from its GitHub repo, so new forks and GPU support can be added without releasing a new version. The userAgent values below are fallbacks; the app sends Upshift/<its version>.",
 
   "components": [
@@ -407,6 +407,19 @@
     }
   },
 
+  "testBuilds": [
+    {
+      "id": "optiscaler-nightly",
+      "name": "OptiScaler test build",
+      "kind": "injector",
+      "description": "The official OptiScaler nightly builds: untested development builds that may crash games.",
+      "repo": "optiscaler/OptiScaler-nightly",
+      "assetPattern": "(?i)^OptiScaler_.*\\.7z$",
+      "installable": true,
+      "testBuildOf": "optiscaler",
+      "notes": "Checked 2026-10-23: the 'Nightly Builds' release in optiscaler/OptiScaler (tag nightly, no files) says nightly downloads are now in optiscaler/OptiScaler-nightly. One pre-release a day, tag nightly-yyyymmdd, one .7z with a SHA-256 digest (v10.0.0-pre1). v10 moves the bundled DLLs into an OptiScaler subfolder and replaces [FSR] Fsr4ForceEnableInt8/Fsr4Update with Fsr4GpuSupport, and adds Fsr4Model."
+    }
+  ],
   "driverChecks": {
     "nvidia": {
       "url": "https://gfwsl.geforce.com/services_toolkit/services/com/nvidia/services/AjaxDriverService.php?func=DriverManualLookup&psid=127&pfid=1015&osID=57&languageCode=1033&isWHQL=1&dch=1&sort1=0&numberOfResults=1",

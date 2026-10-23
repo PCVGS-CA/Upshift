@@ -8,6 +8,7 @@ using Upshift.App.Services;
 using Upshift.Core.Catalog;
 using Upshift.Core.Components;
 using Upshift.Core.Install;
+using Upshift.Core.Models;
 using Upshift.Core.Services;
 
 namespace Upshift.App.Views;
@@ -265,7 +266,7 @@ public sealed partial class UpdatesPage : Page
         {
             var box = new CheckBox
             {
-                Content = $"{c.Game.Name}: {c.Installed} → {c.Target}",
+                Content = $"{c.Game.Name}: {c.Text}",
                 IsChecked = !_unchecked.Contains(c.Game.Id),
                 IsEnabled = !_updatingGames
             };
@@ -317,7 +318,7 @@ public sealed partial class UpdatesPage : Page
         {
             foreach (var c in selected)
             {
-                _gamesMessage = string.Join("\n", lines.Append($"{c.Game.Name}: updating to {c.Target}…"));
+                _gamesMessage = string.Join("\n", lines.Append($"{c.Game.Name}: updating to {GameUpdates.VersionText(c.ComponentId, c.Target)}…"));
                 ShowProgress(_gamesStatus, _gamesMessage);
                 var result = await GameUpdates.UpdateAsync(c.Game, c.Target, new Progress<string>(s =>
                 {
@@ -587,6 +588,8 @@ public sealed partial class UpdatesPage : Page
         if (status.CheckedUtc is { } at)
             panel.Children.Add(Subtle($"GitHub checked {Checked(at.ToLocalTime().DateTime)}{(status.Status == FetchStatus.NotModified ? " (not modified)" : "")}."));
 
+        if (primary.Id == AppServices.OptiScaler.Id && TestBuildBlock() is { } testBuilds) panel.Children.Add(testBuilds);
+
         var channel = new ComboBox { Header = "Channel", MinWidth = 260 };
         state.Channel = channel;
         var stableKind = primary.PinnedVersion is null ? "newest full release" : "pinned";
@@ -675,6 +678,104 @@ public sealed partial class UpdatesPage : Page
             });
         }
         return panel;
+    }
+
+    private bool _testBusy;
+    private string? _testMessage;
+
+    /// <summary>
+    /// "OptiScaler test builds" (Settings, off by default): the newest official nightly build ("Test build (date)"),
+    /// installed into a chosen game like a normal update, and "Back to stable" for every game on one. Shown while the
+    /// setting is on, or while a game still uses a test build. Null otherwise.
+    /// </summary>
+    private FrameworkElement? TestBuildBlock()
+    {
+        if (GameUpdates.TestBuild is not { } test) return null;
+        var on = AppServices.Settings.Current.OptiScalerTestBuilds;
+        var onTest = GameUpdates.GamesOnTestBuild();
+        if (!on && onTest.Count == 0) return null;
+        var stable = AppServices.Updates.Status(AppServices.OptiScaler.Id).Stable?.Tag ?? AppServices.OptiScaler.PinnedVersion ?? "";
+        var stableText = stable.TrimStart('v');
+
+        var body = new StackPanel { Spacing = 8 };
+        body.Children.Add(new TextBlock { Text = "Test builds", FontWeight = FontWeights.SemiBold });
+        body.Children.Add(new TextBlock { Text = "Untested development builds. May crash games.", FontSize = 12, Foreground = Brush("SystemFillColorCautionBrush") });
+
+        if (on)
+        {
+            var newest = AppServices.Updates.Target(test);
+            var line = Subtle(newest is null
+                ? "No test build found yet. Press Check now."
+                : $"Newest: {V(test, newest.Tag)}");
+            ToolTipService.SetToolTip(line, $"From OptiScaler's official nightly builds on GitHub ({test.Repo}), never from anywhere else.");
+            body.Children.Add(line);
+            var games = GameUpdates.GamesForTestBuild();
+            if (newest is not null && games.Count > 0)
+            {
+                var pick = new ComboBox { Header = "Game", MinWidth = 260 };
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(pick, "Game for the test build");
+                foreach (var g in games) pick.Items.Add(new ComboBoxItem { Content = g.Name, Tag = g });
+                pick.SelectedIndex = 0;
+                var install = new Button { Content = $"Install {V(test, newest.Tag)}", VerticalAlignment = VerticalAlignment.Bottom, IsEnabled = !_testBusy };
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(install, "Install test build");
+                install.Click += async (_, _) =>
+                {
+                    if (pick.SelectedItem is ComboBoxItem { Tag: GameInfo game }) await RunTestAsync(game, $"{game.Name}: installing {V(test, newest.Tag)}…",
+                        () => GameUpdates.InstallTestBuildAsync(game, null));
+                };
+                body.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Children = { pick, install } });
+            }
+            else if (newest is not null && onTest.Count == 0) body.Children.Add(Subtle("Install OptiScaler in a game first; then it can move to a test build here."));
+        }
+
+        foreach (var game in onTest)
+        {
+            var manifest = game.TargetDir is { } dir ? OptiScalerInstaller.ReadManifest(dir) : null;
+            var back = new Button { Content = $"Back to stable {stableText}", IsEnabled = !_testBusy };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(back, $"Back to stable {stableText} for {game.Name}");
+            back.Click += async (_, _) => await RunTestAsync(game, $"{game.Name}: going back to {stableText}…", () => GameUpdates.BackToStableAsync(game, null));
+            body.Children.Add(new Grid
+            {
+                ColumnSpacing = 12,
+                ColumnDefinitions = { new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }, new ColumnDefinition { Width = GridLength.Auto } },
+                Children =
+                {
+                    new TextBlock { Text = $"{game.Name}: {GameUpdates.VersionText(manifest?.ComponentId, manifest?.Version)}", VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap },
+                    WithColumn(back, 1)
+                }
+            });
+        }
+        if (_testMessage is { } message) body.Children.Add(new TextBlock { Text = message, FontSize = 12, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true });
+
+        var border = new Border
+        {
+            Padding = new Thickness(14, 10, 14, 12), CornerRadius = new CornerRadius(6), BorderThickness = new Thickness(1),
+            BorderBrush = Brush("HairlineBrush"), Child = body
+        };
+        AutomationName(border, "Test builds");
+        return border;
+
+        static FrameworkElement WithColumn(FrameworkElement e, int column) { Grid.SetColumn(e, column); return e; }
+    }
+
+    private async Task RunTestAsync(GameInfo game, string busyText, Func<Task<InstallResult>> work)
+    {
+        if (_testBusy) return;
+        _testBusy = true;
+        _testMessage = busyText;
+        Rebuild();
+        try
+        {
+            var result = await work();
+            // "nightly-20261023" reads as "Test build (23 Oct 2026)".
+            _testMessage = $"{game.Name}: " + Regex.Replace(result.Message, @"nightly-\d{8}", m => OptiScalerOptions.TestBuildLabel(m.Value));
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { _testMessage = $"{game.Name}: {ex.Message}"; }
+        finally
+        {
+            _testBusy = false;
+            Rebuild();
+        }
     }
 
     /// <summary>
@@ -849,7 +950,8 @@ public sealed partial class UpdatesPage : Page
 
     /// <summary>A release tag as shown; NVIDIA DLSS tags get their marketing name, "v310.9.1 (DLSS 4.5)".</summary>
     private static string V(CatalogComponent component, string tag) =>
-        component.RepoFilePath is { } file ? Helpers.Ui.VersionLabel(tag, file) : tag;
+        component.TestBuildOf is not null ? Core.Install.OptiScalerOptions.TestBuildLabel(tag)
+        : component.RepoFilePath is { } file ? Helpers.Ui.VersionLabel(tag, file) : tag;
 
     private static Grid RowGrid(FrameworkElement name, FrameworkElement onPc, FrameworkElement latest, FrameworkElement action)
     {

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Upshift.Core.Detection;
 using Upshift.Core.Catalog;
 using Upshift.Core.Hardware;
@@ -274,6 +275,49 @@ public static class OptiScalerOptions
         new("FSR", "Fsr4Update", on ? "true" : null)
     };
 
+    /// <summary>
+    /// The FSR 4 models, as [FSR] Fsr4Model in the build's own OptiScaler.ini (first in the v10.0.0-pre1 nightly of
+    /// 2026-10-23): "0 = FP8 | 1 = INT8 | 2 = INT8 RDNA2 | 3 = INT8 Lite", default (auto) "the best one the GPU supports".
+    /// Auto (null) puts the file's own value back.
+    /// </summary>
+    public static readonly IReadOnlyList<(string Label, string? Value)> Fsr4Models = new (string, string?)[]
+    {
+        ("Auto", null), ("FP8", "0"), ("INT8", "1"), ("INT8 RDNA 2", "2"), ("INT8 Lite", "3")
+    };
+
+    /// <summary>True when the installed build's OptiScaler.ini has the FSR 4 model setting.</summary>
+    public static bool HasFsr4Model(IniFile ini) => ini.Has("FSR", "Fsr4Model");
+
+    public static List<IniSetting> Fsr4ModelSettings(string? value) => new() { new("FSR", "Fsr4Model", value) };
+
+    /// <summary>
+    /// Settings written in the shape the installed build's OptiScaler.ini has. The v10 test builds replaced
+    /// Fsr4ForceEnableInt8 ("true" = INT8 on every card) with Fsr4GpuSupport ("2 = INT8", per their ini) and have no
+    /// Fsr4Update, so those are translated (or left out) there, and back again for an ini that has the old keys.
+    /// </summary>
+    public static List<IniSetting> ForIni(IEnumerable<IniSetting> settings, IniFile ini)
+    {
+        var result = new List<IniSetting>();
+        foreach (var s in settings)
+        {
+            bool Is(string key) => s.Section.Equals("FSR", StringComparison.OrdinalIgnoreCase) && s.Key.Equals(key, StringComparison.OrdinalIgnoreCase);
+            if (ini.Has(s.Section, s.Key)) result.Add(s);
+            else if (Is("Fsr4ForceEnableInt8") && ini.Has("FSR", "Fsr4GpuSupport"))
+                result.Add(s with { Key = "Fsr4GpuSupport", Value = s.Value is null ? null : string.Equals(s.Value, "true", StringComparison.OrdinalIgnoreCase) ? "2" : "0" });
+            else if (Is("Fsr4GpuSupport") && ini.Has("FSR", "Fsr4ForceEnableInt8"))
+                result.Add(s with { Key = "Fsr4ForceEnableInt8", Value = s.Value is null ? null : s.Value == "2" ? "true" : "false" });
+            else if (Is("Fsr4Update") || Is("Fsr4Model")) { }   // nothing like it in this build
+            else result.Add(s);
+        }
+        return result;
+    }
+
+    /// <summary>"nightly-20261023" → "Test build (23 Oct 2026)"; other tags as they are.</summary>
+    public static string TestBuildLabel(string tag) =>
+        System.Text.RegularExpressions.Regex.Match(tag, @"(\d{8})") is { Success: true } m
+        && DateTime.TryParseExact(m.Value, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d)
+            ? $"Test build ({d.ToString("d MMM yyyy", CultureInfo.InvariantCulture)})" : $"Test build ({tag})";
+
     /// <summary>OptiScaler's on-screen FSR 4 watermark (Fsr4EnableWatermark). Off puts the original value back.</summary>
     public static List<IniSetting> WatermarkSettings(bool on) => new() { new("FSR", "Fsr4EnableWatermark", on ? "true" : null) };
 
@@ -342,7 +386,8 @@ public static class OptiScalerOptions
         if (manifest.Overrides?.FirstOrDefault(o => o.Kind == Fsr411bKind) is { } over) return (Fsr4Source.File411b, over.Version);
         if (manifest.Added.Concat(manifest.Replaced).Any(f => f.Path.Equals(communityName, StringComparison.OrdinalIgnoreCase)))
             return (Fsr4Source.File402c, FileVersions.Read(Path.Combine(targetDir, communityName)));
-        if (string.Equals(ini.Get("FSR", "Fsr4ForceEnableInt8"), "true", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(ini.Get("FSR", "Fsr4ForceEnableInt8"), "true", StringComparison.OrdinalIgnoreCase)
+            || ini.Get("FSR", "Fsr4GpuSupport") == "2")   // the v10 test builds' INT8 setting
             return (Fsr4Source.BuiltIn, FsrUpscalerPath(manifest) is { } dll ? FileVersions.Read(Path.Combine(targetDir, dll)) : null);
         return (Fsr4Source.Off, null);
     }

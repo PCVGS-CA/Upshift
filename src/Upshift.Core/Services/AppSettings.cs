@@ -12,6 +12,9 @@ public sealed class AppSettings
     /// <summary>Check GitHub for new releases at start-up (at most every 6 hours).</summary>
     public bool AutoCheckUpdates { get; set; } = true;
 
+    /// <summary>"OptiScaler test builds": offer the official nightly builds on the Updates page. Off by default.</summary>
+    public bool OptiScalerTestBuilds { get; set; }
+
     /// <summary>Optional address of another catalog.json. Empty means Upshift's online catalog (DefaultCatalogUrl).</summary>
     public string CatalogUrl { get; set; } = "";
 

@@ -825,6 +825,29 @@ errors and no warnings.
     `hooktest` 9 (Shift+F13 vs F13), the overlay via `--overlay-test` with a script writing a fake capture (top right and
     bottom left: exstyle 0x080800A8, never foreground, clicks pass through, live figures drawn), the Performance tab and
     saved settings on throwaway data. Not tested: a real measurement with the overlay, exclusive fullscreen, CapFrameX installed.
+- **1.5.0-test.2 (2026-10-23): OptiScaler test builds and the FSR 4 model.**
+  - **Source (checked 2026-10-23):** optiscaler/OptiScaler's "Nightly Builds" release (tag `nightly`) has no files; its text
+    says nightlies are at **optiscaler/OptiScaler-nightly** (same org): one pre-release a day, tag `nightly-yyyymmdd`, one
+    `OptiScaler_v10.0.0-pre1_<date>.7z` with a SHA-256 digest. v10: bundled DLLs under `OptiScaler\` (+ D3D12_OptiScaler,
+    Streamlined_fetcher_windows.bat), fakenvapi integrated, `[FSR] Fsr4ForceEnableInt8`/`Fsr4Update` gone, `Fsr4GpuSupport`
+    (0 none, 1 FP8, 2 INT8, 3 INT8-2, 4 INT8 Lite) and `Fsr4Model` (0 FP8, 1 INT8, 2 INT8 RDNA2, 3 INT8 Lite; auto = best;
+    "only for FSR 4.1.1 and newer"; RDNA2/Lite "only in the Vulkan driver FSR (amdvkffx64)") added. 0.9.4 has neither.
+  - Catalog `testBuilds` (not `components`, so 1.3/1.4 copies never show it): `optiscaler-nightly`, `testBuildOf`
+    "optiscaler". `UpdateChecker`: test builds' target = newest (Beta); their repo is only asked while
+    `AppSettings.OptiScalerTestBuilds` is on. `AppServices.Updates` gets Components + TestBuilds.
+  - `GameUpdates`: `ComponentFor` also finds test builds; `UpdateAsync(…, to:)` updates into another component;
+    `InstallTestBuildAsync`; `BackToStableAsync` = Undo when the last update came from the stable tag (exact), else an
+    update to it; `VersionText` ("Test build (23 Oct 2026)", `OptiScalerOptions.TestBuildLabel`). Updates page:
+    `TestBuildBlock` inside the OptiScaler row (game picker + Install, a Back-to-stable button per game on a test build).
+  - `OptiScalerOptions.ForIni`: settings in the installed ini's shape (Fsr4ForceEnableInt8 true ↔ Fsr4GpuSupport 2;
+    Fsr4Update/Fsr4Model dropped where absent), applied in Configure (before the unknown-key check) and ApplyIni; the
+    update's MergeIni carries a user's INT8 across the rename both ways and records it. `Fsr4InUse` also reads
+    Fsr4GpuSupport=2. FSR 4 model picker (`Fsr4ModelPicker`) only when the ini has `Fsr4Model`.
+  - Tested: harness 204 (section 21 with the real nightly: install 0.9.4 → INT8 → update to nightly (layout, settings,
+    INT8 → Fsr4GpuSupport=2) → model 2 → Auto → FSR 4 off/on → Undo exact → update path back (no leftovers, INT8 back as
+    Fsr4ForceEnableInt8) → nightly → uninstall leaves only the game's files); the app on throwaway data: switch, Updates
+    block, Install test build (real download), the model picker, Back to stable (exact undo). `helixtest extract <7z> <dir>`
+    unpacks archives. Not tested: AMD hardware, a real game on a test build.
 
 ## Next
 

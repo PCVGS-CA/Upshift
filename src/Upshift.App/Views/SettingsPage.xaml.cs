@@ -21,6 +21,9 @@ public sealed partial class SettingsPage : Page
         SteamGridDbKeyBox.Password = AppServices.Settings.Current.SteamGridDbKey ?? "";
         AutoCheckSwitch.IsOn = AppServices.Settings.Current.AutoCheckUpdates;
         AutoCheckSwitch.Toggled += AutoCheck_Toggled;
+        _loadingTestBuilds = true;
+        TestBuildsSwitch.IsOn = AppServices.Settings.Current.OptiScalerTestBuilds;
+        _loadingTestBuilds = false;
         CatalogUrlBox.Text = AppServices.Settings.Current.CatalogUrl;
         CatalogStatusText.Text = AppServices.CatalogStatus
             ?? (AppServices.UsingRemoteCatalog
@@ -510,6 +513,19 @@ public sealed partial class SettingsPage : Page
     private void PretendAmdDriver_LostFocus(object sender, RoutedEventArgs e)
     {
         if (PretendAmdDriverBox.Text.Trim() != (AppServices.PretendAmdDriver ?? "")) AppServices.SetPretendAmdDriver(PretendAmdDriverBox.Text);
+    }
+
+    private bool _loadingTestBuilds;
+
+    /// <summary>"OptiScaler test builds": on asks GitHub about the official nightly builds straight away.</summary>
+    private void TestBuilds_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_loadingTestBuilds) return;
+        var settings = AppServices.Settings.Current;
+        settings.OptiScalerTestBuilds = TestBuildsSwitch.IsOn;
+        AppServices.Settings.Save(settings);
+        if (TestBuildsSwitch.IsOn) _ = Task.Run(() => AppServices.Updates.CheckAsync(CancellationToken.None));
+        else AppServices.Updates.NotifyChanged();
     }
 
     private void AutoCheck_Toggled(object sender, RoutedEventArgs e)

@@ -66,7 +66,8 @@ public sealed class UpdateChecker
 
     /// <summary>The release the user's channel points at for this component.</summary>
     public ReleaseInfo? Target(CatalogComponent component) =>
-        Status(component.Id).For(_settings.Current.For(PreferenceId(component)).Channel);
+        component.TestBuildOf is not null ? Status(component.Id).Beta   // a test build: its newest
+            : Status(component.Id).For(_settings.Current.For(PreferenceId(component)).Channel);
 
     /// <summary>Components shown on another's card (AMD-NR's runtime) share that card's channel and "Keep updated".</summary>
     public static string PreferenceId(CatalogComponent component) => component.GroupWith ?? component.Id;
@@ -92,7 +93,9 @@ public sealed class UpdateChecker
         {
             int downloaded = 0, notModified = 0, failed = 0;
             string? problem = null;
-            foreach (var repo in _components.Select(c => c.Repo).Distinct(StringComparer.OrdinalIgnoreCase))
+            // Test builds are only asked about while "OptiScaler test builds" is on.
+            foreach (var repo in _components.Where(c => c.TestBuildOf is null || _settings.Current.OptiScalerTestBuilds)
+                         .Select(c => c.Repo).Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 var list = await _store.GitHub.GetReleasesAsync(repo, ct);
                 switch (list.Status)

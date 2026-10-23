@@ -11,11 +11,15 @@ A live overlay while measuring, for any game, and CapFrameX as a companion tool.
 - **Overlay while measuring.** Turn on "Show overlay while measuring" next to Measure this game, for any game, with or without OptiScaler. A small box in a corner of the game's screen shows the live frame rate, the 1% low so far, the frame time and a recording dot with the time left. Pick the corner; Shift+F10 (Shift with your measuring key) hides and shows it. It's Upshift's own see-through window, fed by the same PresentMon capture: nothing is injected into the game. A game in exclusive fullscreen can't show it, and Upshift says once: "Overlay needs borderless or windowed mode in the game's settings." Measuring still works.
 - **CapFrameX.** The Performance tab suggests CapFrameX (free, open source) for deeper frame-time analysis: "Get CapFrameX" opens its releases page, and "Open CapFrameX" starts it when it's installed. Upshift never bundles, downloads or changes it.
 - The Performance tab says that Measure works in any game, with or without OptiScaler.
+- **OptiScaler test builds (opt-in).** Settings has "OptiScaler test builds", off by default: untested development builds that may crash games. When it's on, the OptiScaler row on the Updates page offers the newest official nightly build as "Test build (date)", from OptiScaler's own nightly builds on GitHub (the Nightly Builds release points there) and nowhere else. Installing one works like a normal update and keeps your settings; "Back to stable 0.9.4" is one click away.
+- **FSR 4 model.** With an OptiScaler build that has the setting (the current test builds; 0.9.4 doesn't), FSR 4's options have "FSR 4 model": Auto, FP8, INT8, INT8 RDNA 2 or INT8 Lite. Auto picks the best model for your card. INT8 RDNA 2 is for RX 6000. The values come from that build's own OptiScaler.ini. The FSR 4 switch also works with the test builds, whose INT8 setting has a new name.
 
 ### Not tested yet
 
 - The overlay during a real measurement in a real game (tested with a stand-in capture, not with PresentMon and a game), and over an exclusive fullscreen game.
 - "Open CapFrameX" with CapFrameX installed.
+- The FSR 4 model picker: not yet tested on AMD hardware. OptiScaler's own notes say INT8 RDNA 2 and INT8 Lite exist only in AMD's Vulkan driver FSR.
+- Test builds in a real game (tested on a stand-in game folder with the real 23 Oct 2026 build: install, settings kept, back to stable exactly, uninstall).
 
 ## [1.4.0] - 2026-10-20
 

@@ -6,7 +6,11 @@ using Upshift.Core.Models;
 namespace Upshift.App.Services;
 
 /// <summary>A game with an OptiScaler from this app that a newer release on the user's channel can replace.</summary>
-public sealed record GameUpdateCandidate(GameInfo Game, string Installed, string Target);
+public sealed record GameUpdateCandidate(GameInfo Game, string Installed, string Target, string? ComponentId = null)
+{
+    /// <summary>"v0.9.3 → v0.9.4", or test build dates.</summary>
+    public string Text => $"{GameUpdates.VersionText(ComponentId, Installed)} → {GameUpdates.VersionText(ComponentId, Target)}";
+}
 
 /// <summary>
 /// Updating, undoing and repairing OptiScaler in games, shared by the Library and the Updates page, plus the
@@ -30,7 +34,49 @@ public static class GameUpdates
 
     /// <summary>The catalog component installed in a game: regular OptiScaler, or a DLSS 5 build.</summary>
     public static CatalogComponent ComponentFor(string? componentId) =>
-        AppServices.Catalog.Components.FirstOrDefault(c => c.Id == componentId) ?? AppServices.OptiScaler;
+        AppServices.Catalog.Components.Concat(AppServices.Catalog.TestBuilds).FirstOrDefault(c => c.Id == componentId) ?? AppServices.OptiScaler;
+
+    /// <summary>The OptiScaler test build component (the official nightly builds), or null when the catalog has none.</summary>
+    public static CatalogComponent? TestBuild => AppServices.Catalog.TestBuilds.FirstOrDefault(c => c.TestBuildOf == AppServices.OptiScaler.Id);
+
+    /// <summary>"v0.9.4", or "Test build (23 Oct 2026)" for a nightly.</summary>
+    public static string VersionText(string? componentId, string? version) =>
+        version is null ? "" : ComponentFor(componentId).TestBuildOf is not null ? OptiScalerOptions.TestBuildLabel(version) : version;
+
+    /// <summary>Games whose OptiScaler is a test build.</summary>
+    public static List<GameInfo> GamesOnTestBuild() => TestBuild is { } t ? GamesOnComponent(t.Id) : new();
+
+    /// <summary>
+    /// Games that can move to the test build: regular OptiScaler installed by Upshift (not a DLSS 5 build), no anti-cheat.
+    /// </summary>
+    public static List<GameInfo> GamesForTestBuild() =>
+        AppServices.Library.Current
+            .Where(g => !g.HasAntiCheat && g.TargetDir is not null
+                        && OptiScalerInstaller.ReadManifest(g.TargetDir) is { Removed: false, Switch: null } m && m.ComponentId == AppServices.OptiScaler.Id)
+            .OrderBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+
+    /// <summary>Moves a game to the newest test build: a normal update (settings kept, "Undo last update" possible).</summary>
+    public static Task<InstallResult> InstallTestBuildAsync(GameInfo game, IProgress<string>? progress)
+    {
+        if (TestBuild is not { } test || AppServices.Updates.Target(test) is not { } newest)
+            return Task.FromResult(Fail("No test build is known yet. Press Check now on the Updates page."));
+        return UpdateAsync(game, newest.Tag, progress, to: test);
+    }
+
+    /// <summary>
+    /// Back to the stable release from a test build: "Undo last update" when the last update came from it (exact),
+    /// otherwise an update to it that keeps the settings.
+    /// </summary>
+    public static async Task<InstallResult> BackToStableAsync(GameInfo game, IProgress<string>? progress)
+    {
+        var stable = AppServices.Updates.Status(AppServices.OptiScaler.Id).Stable?.Tag ?? AppServices.OptiScaler.PinnedVersion;
+        if (stable is null) return Fail("The stable OptiScaler version isn't known.");
+        if (game.TargetDir is { } dir && OptiScalerInstaller.ReadManifest(dir) is { LastUpdate: { FromVersion: { } from, UndoFolder: { } undo } }
+            && from == stable && Directory.Exists(Path.Combine(dir, undo)))
+            return await UndoAsync(game, progress);
+        return await UpdateAsync(game, stable, progress, to: AppServices.OptiScaler);
+    }
 
     /// <summary>
     /// The release to update an install to: the user's channel (Stable or Beta) for the build that's installed
@@ -51,7 +97,7 @@ public static class GameUpdates
             .Select(g => (Game: g, Manifest: OptiScalerInstaller.ReadManifest(g.TargetDir!)))
             .Where(x => x.Manifest is { Removed: false } m && ComponentFor(m.ComponentId).Installable)
             .Select(x => TargetFor(x.Manifest!.Version, x.Manifest.ComponentId) is { } target
-                ? new GameUpdateCandidate(x.Game, x.Manifest!.Version ?? "unknown", target) : null)
+                ? new GameUpdateCandidate(x.Game, x.Manifest!.Version ?? "unknown", target, x.Manifest.ComponentId) : null)
             .OfType<GameUpdateCandidate>()
             .OrderBy(c => c.Game.Name, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
@@ -72,14 +118,15 @@ public static class GameUpdates
     }
 
     /// <summary>Downloads the release (and the installed one, whose OptiScaler.ini gives the old defaults), then updates.</summary>
-    public static Task<InstallResult> UpdateAsync(GameInfo game, string version, IProgress<string>? progress) =>
+    public static Task<InstallResult> UpdateAsync(GameInfo game, string version, IProgress<string>? progress, CatalogComponent? to = null) =>
         RunAsync(game, progress, async manifest =>
         {
             if (game.HasAntiCheat) return Fail("Installs are blocked for games with anti-cheat.");
             var component = ComponentFor(manifest.ComponentId);
+            var into = to ?? component;   // a test build, or back from one, is an update to another component
             var installed = manifest.Version;
-            var target = await AppServices.Components.EnsureAsync(component, version, progress, CancellationToken.None,
-                keep: installed is null ? null : new[] { installed });
+            var target = await AppServices.Components.EnsureAsync(into, version, progress, CancellationToken.None,
+                keep: installed is null || into != component ? null : new[] { installed });
 
             CachedComponent? old = null;
             if (installed is not null)
@@ -87,9 +134,9 @@ public static class GameUpdates
                 try { old = await AppServices.Components.EnsureAsync(component, installed, progress, CancellationToken.None, keep: new[] { version }); }
                 catch (ComponentDownloadException) { /* the ini merge then carries over only this app's recorded changes */ }
             }
-            var runtime = await RuntimeForAsync(component, version, progress);
+            var runtime = await RuntimeForAsync(into, version, progress);
 
-            progress?.Report($"Updating {component.Name} in {game.Name} to {version}…");
+            progress?.Report($"Updating {component.Name} in {game.Name} to {VersionText(into.Id, version)}…");
             return await InstallRunner.RunAsync(new InstallPlan
             {
                 Operation = InstallOperation.Update,
@@ -99,8 +146,8 @@ public static class GameUpdates
                 SourceDir = target.Folder,
                 OldSourceDir = old?.Folder,
                 ExtraSourceDir = runtime?.Folder,
-                ComponentId = component.Id,
-                ComponentName = component.Name,
+                ComponentId = into.Id,
+                ComponentName = into.Name,
                 Version = version
             });
         });

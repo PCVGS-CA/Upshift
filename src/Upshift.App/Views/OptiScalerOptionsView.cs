@@ -417,7 +417,7 @@ public sealed class OptiScalerOptionsView : UserControl
         {
             Fsr4Source.File411b => $"Your modified 4.1.1b file takes the place of OptiScaler's {fsrDll}, which is kept and comes back when you turn this off or uninstall. Sets Fsr4ForceEnableInt8 and Fsr4Update to true.",
             Fsr4Source.File402c => $"Copies your 4.0.2c file in next to the game as {communityName} (the game's own copy, if any, is backed up). OptiScaler.ini isn't changed.",
-            _ => "Uses OptiScaler's built-in FSR 4 (Fsr4ForceEnableInt8). No extra file needed; cards without INT8 support still won't run it."
+            _ => "Uses OptiScaler's built-in FSR 4 (its INT8 setting). No extra file needed; cards without INT8 support still won't run it."
         };
 
         var watermarkOn = string.Equals(ini.Get("FSR", "Fsr4EnableWatermark"), "true", StringComparison.OrdinalIgnoreCase);
@@ -454,8 +454,41 @@ public sealed class OptiScalerOptionsView : UserControl
                 ? Subtle("This OptiScaler has no amd_fidelityfx_upscaler_dx12.dll, so your 4.1.1b file can't be used here.")
                 : null,
             Subtle("With it on, pick FSR 4 as the upscaler above."),
+            Fsr4ModelPicker(card, ini),
             watermark,
             Subtle("Takes effect after restarting the game. The watermark shows whether FSR 4 or the FSR 3 fallback is really running."));
+    }
+
+    /// <summary>
+    /// "FSR 4 model" ([FSR] Fsr4Model), only when the installed build's own OptiScaler.ini has that setting (the v10 test
+    /// builds; 0.9.4 doesn't). Values and notes are that ini's. Not yet tested on AMD hardware.
+    /// </summary>
+    private FrameworkElement? Fsr4ModelPicker(GameCardViewModel card, IniFile ini)
+    {
+        if (!OptiScalerOptions.HasFsr4Model(ini)) return null;
+        var current = ini.Get("FSR", "Fsr4Model")?.Trim();
+        var box = new ComboBox { Header = "FSR 4 model", MinWidth = 200, HorizontalAlignment = HorizontalAlignment.Left };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(box, "FSR 4 model");
+        ToolTipService.SetToolTip(box, "From this OptiScaler build's own notes: needs FSR 4.1.1 or newer. FP8 needs an RX 9000. " +
+                                       "INT8 RDNA 2 and INT8 Lite are only in AMD's Vulkan driver FSR. It can also be changed in OptiScaler's menu in game.");
+        foreach (var (label, value) in OptiScalerOptions.Fsr4Models) box.Items.Add(new ComboBoxItem { Content = label, Tag = value });
+        box.SelectedItem = box.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string?)i.Tag == current) ?? box.Items[0];
+        box.SelectionChanged += async (_, _) =>
+        {
+            if (_building || box.SelectedItem is not ComboBoxItem item) return;
+            await Save(card, OptiScalerOptions.Fsr4ModelSettings((string?)item.Tag));
+        };
+        return new StackPanel
+        {
+            Spacing = 2,
+            Children =
+            {
+                box,
+                // Two short sentences, kept whole (not shortened to a tooltip).
+                new TextBlock { Text = "Auto picks the best model for your card. INT8 RDNA 2 is for RX 6000.", FontSize = 12, TextWrapping = TextWrapping.Wrap,
+                                Foreground = Res("SubtleTextBrush") }
+            }
+        };
     }
 
     /// <summary>

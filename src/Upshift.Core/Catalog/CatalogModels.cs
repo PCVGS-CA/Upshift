@@ -39,6 +39,12 @@ public sealed class UpscalerCatalog
 
     /// <summary>Where the newest NVIDIA, AMD and Intel drivers are looked up (read only; drivers are never downloaded).</summary>
     public Hardware.DriverChecks? DriverChecks { get; set; }
+
+    /// <summary>
+    /// Opt-in test builds (Settings > "OptiScaler test builds"): the official nightly builds. Kept out of Components so
+    /// copies that don't know them never show them.
+    /// </summary>
+    public List<CatalogComponent> TestBuilds { get; set; } = new();
 }
 
 /// <summary>
@@ -153,6 +159,9 @@ public sealed class CatalogComponent
     public string? RepoFilePath { get; set; }
     public string? PinnedVersion { get; set; }
     public string? VerifyBeforeRelease { get; set; }
+
+    /// <summary>For a test build: the component it's a test build of ("optiscaler"). Its newest release is its target.</summary>
+    public string? TestBuildOf { get; set; }
 
     /// <summary>True when the app can install this component into games (only OptiScaler so far).</summary>
     public bool Installable { get; set; }
