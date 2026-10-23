@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 namespace Upshift.App.Services;
 
 /// <summary>
-/// One system-wide key (no modifiers) that works while a game has the focus, watched only while a measurement is
+/// One system-wide key (alone, or with Shift) that works while a game has the focus, watched only while a measurement is
 /// armed. Two ways, because games differ: a hotkey registered with Windows, and a low-level keyboard hook that sees
 /// the key even when the game turns hotkeys off (raw input with RIDEV_NOHOTKEYS) or reads the keyboard itself. The
 /// hook only watches; every key still goes to the game. Both run on a background thread with its own message loop,
@@ -13,10 +13,13 @@ public sealed class GlobalHotkey : IDisposable
 {
     private const int WmHotkey = 0x0312, WmQuit = 0x0012, WmHookPressed = 0x8000 + 0x5551, HotkeyId = 0x5550;
     private const int WhKeyboardLl = 13, WmKeyDown = 0x0100, WmKeyUp = 0x0101, WmSysKeyDown = 0x0104, WmSysKeyUp = 0x0105;
-    private const uint ModNoRepeat = 0x4000;
+    private const uint ModNoRepeat = 0x4000, ModShift = 0x0004;
+    private const int VkShift = 0x10;
     /// <summary>A press seen by both ways arrives twice within a few milliseconds; presses closer than this count once.</summary>
     private const long SamePressMs = 400;
     private readonly int _virtualKey;
+    /// <summary>True: Shift must be held (the overlay's key). False: the key without Shift (Shift+key is the overlay's).</summary>
+    private readonly bool _shift;
     private readonly Thread _thread;
     private readonly ManualResetEventSlim _ready = new();
     private uint _threadId;
@@ -29,13 +32,14 @@ public sealed class GlobalHotkey : IDisposable
 
     public event Action? Pressed;
 
-    private GlobalHotkey(int virtualKey)
+    private GlobalHotkey(int virtualKey, bool shift)
     {
         _virtualKey = virtualKey;
+        _shift = shift;
         _thread = new Thread(() =>
         {
             _threadId = GetCurrentThreadId();
-            _registered = RegisterHotKey(IntPtr.Zero, HotkeyId, ModNoRepeat, (uint)virtualKey);
+            _registered = RegisterHotKey(IntPtr.Zero, HotkeyId, ModNoRepeat | (shift ? ModShift : 0), (uint)virtualKey);
             _hookProc = OnKeyboard;
             _hook = SetWindowsHookEx(WhKeyboardLl, _hookProc, GetModuleHandle(null), 0);
             _running = _registered || _hook != IntPtr.Zero;
@@ -51,9 +55,9 @@ public sealed class GlobalHotkey : IDisposable
     }
 
     /// <summary>Starts watching the key; null when neither way could be set up.</summary>
-    public static GlobalHotkey? TryRegister(int virtualKey)
+    public static GlobalHotkey? TryRegister(int virtualKey, bool shift = false)
     {
-        var hotkey = new GlobalHotkey(virtualKey);
+        var hotkey = new GlobalHotkey(virtualKey, shift);
         return hotkey._running ? hotkey : null;
     }
 
@@ -77,9 +81,10 @@ public sealed class GlobalHotkey : IDisposable
             if (vk == _virtualKey)
             {
                 var kind = (int)message;
+                var shiftDown = (GetAsyncKeyState(VkShift) & 0x8000) != 0;
                 if (kind is WmKeyDown or WmSysKeyDown)
                 {
-                    if (!_down) PostThreadMessage(_threadId, WmHookPressed, IntPtr.Zero, IntPtr.Zero);
+                    if (!_down && shiftDown == _shift) PostThreadMessage(_threadId, WmHookPressed, IntPtr.Zero, IntPtr.Zero);
                     _down = true;
                 }
                 else if (kind is WmKeyUp or WmSysKeyUp) _down = false;
@@ -125,4 +130,5 @@ public sealed class GlobalHotkey : IDisposable
     [DllImport("user32.dll")] private static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr message, IntPtr data);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr GetModuleHandle(string? name);
     [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int vk);
 }

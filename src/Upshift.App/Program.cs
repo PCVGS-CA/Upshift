@@ -35,6 +35,15 @@ public static class Program
             AfterUninstall();
             return;
         }
+#if DEBUG
+        // Debug builds only: the measuring overlay fed by a made-up capture, to check it without a game or a UAC prompt.
+        // Upshift.exe --overlay-test <corner> <csv path> [seconds]
+        if (args.Length >= 3 && args[0] == "--overlay-test")
+        {
+            OverlayTest(args[1], args[2], args.Length > 3 ? int.Parse(args[3]) : 12);
+            return;
+        }
+#endif
 
         // The elevated one-job helpers (Upshift.exe --apply plan.json, --measure job.json) skip Velopack: it must never apply an app
         // update or run a hook, only the install plan it was given.
@@ -186,6 +195,31 @@ public static class Program
 #endif
         return DataMigration.NewDataDir;
     }
+
+#if DEBUG
+    /// <summary>
+    /// The overlay as Measure drives it, reading a CSV another program (a test script) is writing, for this process
+    /// (process id 4242 in the made-up capture) on the main screen.
+    /// </summary>
+    private static void OverlayTest(string corner, string csv, int seconds)
+    {
+        var overlay = Services.MeasureOverlay.Show(IntPtr.Zero, Services.MeasureOverlay.ParseCorner(corner));
+        if (overlay is null) return;
+        var live = new Core.Measure.LiveFrames(csv, 4242);
+        var since = DateTime.UtcNow;
+        while ((DateTime.UtcNow - since).TotalSeconds < seconds)
+        {
+            var snap = live.Poll();
+            var left = Math.Max(0, seconds - (int)(DateTime.UtcNow - since).TotalSeconds);
+            overlay.Update($"{left / 60}:{left % 60:00} left",
+                snap.Fps is { } fps ? $"FPS {Math.Round(fps)}" + (snap.LowFps is { } low ? $"  ·  1% low {Math.Round(low)}" : "") : "FPS –",
+                snap.FrameMs is { } ms ? $"Frame time {ms:0.0} ms" : "Waiting for frames…");
+            Thread.Sleep(250);
+        }
+        overlay.Dispose();
+        Thread.Sleep(300);
+    }
+#endif
 
     /// <summary>Deletes the %TEMP% copy a few seconds after it has closed (a running program can't delete itself).</summary>
     private static void DeleteThisCopyLater()

@@ -806,6 +806,26 @@ errors and no warnings.
   - Silent Hill 2 has no OptiScaler now (seen 2026-10-20; the user removed it). The harness falls back to its saved copy
     (`helixtest\game0`).
 
+- **1.4.0 released (2026-10-20)** as the stable release at the user's request (tag v1.4.0, main = 5fecb11).
+- **1.5.0 (2026-10-22), test build 1.5.0-test.1, not released.** Branch `feature/1.4` continued.
+  - **Overlay while measuring:** `Core/Measure/LiveFrames.cs` (tails PresentMon's CSV with FileShare.ReadWrite, keeps an
+    unfinished line, the game's busiest swap chain only; last-second FPS, 1% low from a 0.1 ms histogram (matches
+    `PresentMonCsv.Read`), last-10-frames frame time, `IsExclusive` = PresentMode "Hardware: Legacy …"),
+    `App/Services/MeasureOverlay.cs` (Win32 layered popup on its own thread: WS_EX_LAYERED|TRANSPARENT|TOPMOST|TOOLWINDOW|
+    NOACTIVATE, alpha 220, HTTRANSPARENT, GDI text, per-monitor DPI, on the game window's monitor; `ExclusiveFullscreenNow`
+    = SHQueryUserNotificationState 3). `Measurement.StartOverlay/StopOverlay` (250 ms loop; exclusive → no overlay and
+    `NoticeOnce` per game via `AppSettings.OverlayNoticeShown`). `GlobalHotkey.TryRegister(vk, shift)`: the hook compares
+    GetAsyncKeyState(Shift), so F10 and Shift+F10 never trigger each other. Settings `MeasureOverlay` (on by default),
+    `OverlayCorner` (TopRight). MeasureView: switch + corner under the Measure button, "Works in any game, with or without
+    OptiScaler." Debug-only `Upshift.exe --overlay-test <corner> <csv> [seconds]` (pid 4242 in the CSV).
+  - **CapFrameX:** `App/Services/CapFrameX.cs` (uninstall entries HKLM/HKCU incl. WOW6432Node → InstallLocation or
+    DisplayIcon, else Program Files\CapFrameX; shell start only). `Views/CompanionToolView.cs` (was ScsKillerView; `Tool`
+    = "SCSKiller" | "CapFrameX"), both on the Performance tab's right column.
+  - Tested: harness 189 (section 20: cut lines, pid/swap-chain filter, FPS, 1% low vs the saved result, exclusive modes),
+    `hooktest` 9 (Shift+F13 vs F13), the overlay via `--overlay-test` with a script writing a fake capture (top right and
+    bottom left: exstyle 0x080800A8, never foreground, clicks pass through, live figures drawn), the Performance tab and
+    saved settings on throwaway data. Not tested: a real measurement with the overlay, exclusive fullscreen, CapFrameX installed.
+
 ## Next
 
 1. **DLSS 5 follow-ups:**

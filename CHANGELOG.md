@@ -2,6 +2,21 @@
 
 All notable changes to Upshift. Each release's section becomes its GitHub release notes, so the heading must be `## [x.y.z]` with the same version as `Directory.Build.props` (a date after it is fine).
 
+## [1.5.0]
+
+A live overlay while measuring, for any game, and CapFrameX as a companion tool.
+
+### New
+
+- **Overlay while measuring.** Turn on "Show overlay while measuring" next to Measure this game, for any game, with or without OptiScaler. A small box in a corner of the game's screen shows the live frame rate, the 1% low so far, the frame time and a recording dot with the time left. Pick the corner; Shift+F10 (Shift with your measuring key) hides and shows it. It's Upshift's own see-through window, fed by the same PresentMon capture: nothing is injected into the game. A game in exclusive fullscreen can't show it, and Upshift says once: "Overlay needs borderless or windowed mode in the game's settings." Measuring still works.
+- **CapFrameX.** The Performance tab suggests CapFrameX (free, open source) for deeper frame-time analysis: "Get CapFrameX" opens its releases page, and "Open CapFrameX" starts it when it's installed. Upshift never bundles, downloads or changes it.
+- The Performance tab says that Measure works in any game, with or without OptiScaler.
+
+### Not tested yet
+
+- The overlay during a real measurement in a real game (tested with a stand-in capture, not with PresentMon and a game), and over an exclusive fullscreen game.
+- "Open CapFrameX" with CapFrameX installed.
+
 ## [1.4.0] - 2026-10-20
 
 Official FSR 4.1 on older AMD cards, a driver check, a "This PC" panel, and SCSKiller as a companion tool.

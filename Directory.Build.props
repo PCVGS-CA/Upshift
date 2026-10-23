@@ -6,7 +6,7 @@
     "## [x.y.z]" notes and is published as a pre-release in the "beta" update channel.
   -->
   <PropertyGroup>
-    <Version>1.4.0</Version>
+    <Version>1.5.0</Version>
     <!-- Keeps the version in About as "1.0.0" rather than "1.0.0+<commit>". -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>

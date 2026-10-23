@@ -52,6 +52,15 @@ public sealed class AppSettings
     /// <summary>How long a measurement runs, in seconds (the last value typed; 10 to 1800).</summary>
     public int MeasureSeconds { get; set; } = Measure.MeasureThresholds.MeasureSeconds;
 
+    /// <summary>"Show overlay while measuring": Upshift's own corner window with live FPS while a measurement runs.</summary>
+    public bool MeasureOverlay { get; set; } = true;
+
+    /// <summary>The overlay's corner: TopLeft, TopRight, BottomLeft or BottomRight.</summary>
+    public string OverlayCorner { get; set; } = "TopRight";
+
+    /// <summary>Games already told that exclusive fullscreen keeps the overlay from showing (said once per game).</summary>
+    public List<string> OverlayNoticeShown { get; set; } = new();
+
     /// <summary>Where SCSKiller.exe is, when the user pointed Upshift at it (Upshift only starts it).</summary>
     public string? ScsKillerPath { get; set; }
 

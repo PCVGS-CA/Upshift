@@ -60,6 +60,7 @@ public sealed class MeasureView : UserControl
         });
 
         var body = new StackPanel { Spacing = 12 };
+        body.Children.Add(Subtle("Works in any game, with or without OptiScaler."));
         body.Children.Add(Subtle("Records the game's frame rate with PresentMon. Nothing leaves this PC. " +
                                  "PresentMon is Intel's free frame-timing tool, downloaded from its GitHub page the first time."));
         body.Children.Add(Controls(card));
@@ -240,6 +241,43 @@ public sealed class MeasureView : UserControl
 
     // ---------------- Measure this game ----------------
 
+    /// <summary>
+    /// "Show overlay while measuring" and its corner. The overlay is Upshift's own small window over the game (nothing is
+    /// injected), for every game; Shift + the measuring key hides and shows it.
+    /// </summary>
+    private static FrameworkElement OverlayRow()
+    {
+        var settings = AppServices.Settings.Current;
+        var toggle = new ToggleSwitch { Header = "Show overlay while measuring", IsOn = settings.MeasureOverlay };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(toggle, "Show overlay while measuring");
+        var corner = new ComboBox { Header = "Corner", MinWidth = 150, IsEnabled = settings.MeasureOverlay };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(corner, "Overlay corner");
+        foreach (var (value, label) in new[] { ("TopLeft", "Top left"), ("TopRight", "Top right"), ("BottomLeft", "Bottom left"), ("BottomRight", "Bottom right") })
+            corner.Items.Add(new ComboBoxItem { Content = label, Tag = value });
+        var current = MeasureOverlay.ParseCorner(settings.OverlayCorner).ToString();
+        corner.SelectedItem = corner.Items.OfType<ComboBoxItem>().First(i => (string)i.Tag == current);
+        toggle.Toggled += (_, _) =>
+        {
+            var s = AppServices.Settings.Current;
+            s.MeasureOverlay = toggle.IsOn;
+            AppServices.Settings.Save(s);
+            corner.IsEnabled = toggle.IsOn;
+        };
+        corner.SelectionChanged += (_, _) =>
+        {
+            if (corner.SelectedItem is not ComboBoxItem { Tag: string tag }) return;
+            var s = AppServices.Settings.Current;
+            s.OverlayCorner = tag;
+            AppServices.Settings.Save(s);
+        };
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 16, Children = { toggle, corner } };
+        return new StackPanel
+        {
+            Spacing = 2,
+            Children = { row, Subtle($"Live FPS in a corner of the game. {Measurement.OverlayKeyName} hides it.") }
+        };
+    }
+
     private FrameworkElement Controls(GameCardViewModel card)
     {
         var panel = new StackPanel { Spacing = 8 };
@@ -306,6 +344,9 @@ public sealed class MeasureView : UserControl
                 panel.Children.Add(Subtle("A measurement is armed for another game; this replaces it."));
         }
         panel.Children.Add(buttons);
+        panel.Children.Add(OverlayRow());
+        if (Measurement.OverlayNoticeGameId == card.Info.Id && Measurement.OverlayNotice is { } notice)
+            panel.Children.Add(new InfoBar { IsOpen = true, IsClosable = true, Severity = InfoBarSeverity.Warning, Message = notice });
 
         if (Measurement.MessageGameId == card.Info.Id && Measurement.Message.Length > 0)
             panel.Children.Add(new InfoBar

@@ -33,6 +33,10 @@ public static class Measurement
     private static CancellationTokenSource? _armCts;
     /// <summary>Stops a direct (no helper) run early, keeping its frames.</summary>
     private static CancellationTokenSource? _stopCts;
+    /// <summary>The overlay while measuring, its Shift+key, and the loop that feeds it.</summary>
+    private static MeasureOverlay? _overlay;
+    private static GlobalHotkey? _overlayKey;
+    private static CancellationTokenSource? _overlayCts;
     /// <summary>This measurement's length in seconds (the user's choice, 10 to 1800).</summary>
     private static int _seconds = MeasureThresholds.MeasureSeconds;
 
@@ -61,6 +65,14 @@ public static class Measurement
     public static event Action? Changed;
 
     public static string HotkeyName => GlobalHotkey.KeyName(AppServices.Settings.Current.MeasureHotkey);
+
+    /// <summary>The key that hides and shows the overlay: Shift + the measuring key.</summary>
+    public static string OverlayKeyName => "Shift+" + HotkeyName;
+
+    /// <summary>Said once per game, when its exclusive fullscreen keeps the overlay from showing; null otherwise.</summary>
+    public static string? OverlayNotice { get; private set; }
+    public static string? OverlayNoticeGameId { get; private set; }
+    public const string ExclusiveFullscreenText = "Overlay needs borderless or windowed mode in the game's settings.";
 
     /// <summary>The sentence shown before Windows' prompt.</summary>
     public static string PermissionExplanation =>
@@ -203,6 +215,7 @@ public static class Measurement
     /// <summary>Stops waiting (or a measurement in progress). The helper sees the cancel signal and quits.</summary>
     public static void Cancel(bool silent = false)
     {
+        StopOverlay();
         _armCts?.Cancel();
         CountdownUntilUtc = null;
         _hotkey?.Dispose();
@@ -242,6 +255,7 @@ public static class Measurement
         // The same key now stops the run early.
         _hotkey = GlobalHotkey.TryRegister(AppServices.Settings.Current.MeasureHotkey);
         if (_hotkey is not null) _hotkey.Pressed += () => _ui?.TryEnqueue(StopEarly);
+        StartOverlay(game, process, job.CsvFile, _seconds);
 
         // Windows' own counters (GPU and CPU usage, video memory) for the same stretch. A missing counter only means a dash.
         using var sampler = SystemSampler.Start();
@@ -261,6 +275,7 @@ public static class Measurement
         }
         _hotkey?.Dispose();
         _hotkey = null;
+        StopOverlay();
         MeasuringSinceUtc = null;
         var gpu = AppServices.Gpu;
         var load = sampler.Stop(gpu is null ? null : VideoMemory.TotalBytes(gpu.VendorId, gpu.DeviceId));
@@ -381,8 +396,80 @@ public static class Measurement
         }
     }
 
+    // ---------------- The overlay ----------------
+
+    /// <summary>
+    /// Shows the overlay on the game's screen, when "Show overlay while measuring" is on, and updates it four times a
+    /// second from the CSV PresentMon is writing. A game in exclusive fullscreen gets no overlay (it couldn't show), and
+    /// that's said once per game; measuring goes on either way.
+    /// </summary>
+    private static void StartOverlay(GameInfo game, Process process, string csv, int seconds)
+    {
+        StopOverlay();
+        var settings = AppServices.Settings.Current;
+        if (!settings.MeasureOverlay) return;
+        var cts = _overlayCts = new CancellationTokenSource();
+        IntPtr window;
+        try { window = process.MainWindowHandle; } catch (Exception ex) when (ex is InvalidOperationException or Win32Exception) { window = IntPtr.Zero; }
+        var corner = MeasureOverlay.ParseCorner(settings.OverlayCorner);
+        _overlayKey = GlobalHotkey.TryRegister(settings.MeasureHotkey, shift: true);
+        if (_overlayKey is not null) _overlayKey.Pressed += () => { if (_overlay is { } o) o.Visible = !o.Visible; };
+        var since = DateTime.UtcNow;
+        _ = Task.Run(async () =>
+        {
+            var live = new LiveFrames(csv, process.Id);
+            var exclusive = MeasureOverlay.ExclusiveFullscreenNow();
+            var overlay = exclusive ? null : MeasureOverlay.Show(window, corner);
+            _overlay = overlay;
+            try
+            {
+                while (!cts.IsCancellationRequested)
+                {
+                    var snap = live.Poll();
+                    if (!exclusive && (snap.ExclusiveFullscreen || MeasureOverlay.ExclusiveFullscreenNow()))
+                    {
+                        exclusive = true;
+                        overlay?.Dispose();
+                        _overlay = overlay = null;
+                    }
+                    if (exclusive) NoticeOnce(game);
+                    var left = Math.Max(0, seconds - (int)(DateTime.UtcNow - since).TotalSeconds);
+                    overlay?.Update(State == MeasureState.Measuring && Message.StartsWith("Stopping", StringComparison.Ordinal) ? "Stopping…" : $"{left / 60}:{left % 60:00} left",
+                        snap.Fps is { } fps ? $"FPS {Math.Round(fps)}" + (snap.LowFps is { } low ? $"  ·  1% low {Math.Round(low)}" : "") : "FPS –",
+                        snap.FrameMs is { } ms ? $"Frame time {ms:0.0} ms" : "Waiting for frames…");
+                    await Task.Delay(250, cts.Token);
+                }
+            }
+            catch (OperationCanceledException) { }
+            finally { overlay?.Dispose(); }
+        });
+    }
+
+    private static void StopOverlay()
+    {
+        _overlayCts?.Cancel();
+        _overlayCts = null;
+        _overlayKey?.Dispose();
+        _overlayKey = null;
+        _overlay?.Dispose();
+        _overlay = null;
+    }
+
+    /// <summary>The exclusive-fullscreen sentence, once per game (remembered in settings.json).</summary>
+    private static void NoticeOnce(GameInfo game)
+    {
+        var settings = AppServices.Settings.Current;
+        if (settings.OverlayNoticeShown.Contains(game.Id)) return;
+        settings.OverlayNoticeShown.Add(game.Id);
+        AppServices.Settings.Save(settings);
+        OverlayNotice = ExclusiveFullscreenText;
+        OverlayNoticeGameId = game.Id;
+        _ui?.TryEnqueue(() => Changed?.Invoke());
+    }
+
     private static void Finish(string message, bool problem)
     {
+        StopOverlay();
         _hotkey?.Dispose();
         _hotkey = null;
         MeasuringSinceUtc = null;
