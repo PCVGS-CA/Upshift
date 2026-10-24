@@ -2,7 +2,7 @@
 
 All notable changes to Upshift. Each release's section becomes its GitHub release notes, so the heading must be `## [x.y.z]` with the same version as `Directory.Build.props` (a date after it is fine).
 
-## [1.5.0]
+## [1.5.0] - 2026-10-23
 
 A live overlay while measuring, for any game, and CapFrameX as a companion tool.
 
