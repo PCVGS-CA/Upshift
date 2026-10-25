@@ -1,3 +1,4 @@
+using Upshift.Core.Hardware;
 using Upshift.Core.Install;
 using Upshift.Core.Models;
 
@@ -93,6 +94,19 @@ public static class RemoveFromGames
             {
                 everyGameDone = false;
                 summary.Skipped.Add((game.Name, ex.Message));
+            }
+        }
+
+        // "Allow AMD's FSR 4 upgrade": take every game Upshift added back off AMD's driver list (only those it added).
+        foreach (var record in AmdFsr4Upgrade.Records(dataDir))
+        {
+            progress?.Report($"{record.GameName}: AMD's FSR 4 upgrade…");
+            if (await Task.Run(() => AmdFsr4Upgrade.Remove(dataDir, record)) is { } problem)
+                summary.Skipped.Add((record.GameName, $"AMD's FSR 4 upgrade wasn't turned off: {problem}"));
+            else
+            {
+                summary.Done.Add((record.GameName, "AMD's FSR 4 upgrade turned off (taken off AMD's driver list)."));
+                AppServices.History.Add(record.GameId, "AMD's FSR 4 upgrade turned off", $"{record.FileName} taken off AMD's driver list (removing Upshift's changes).");
             }
         }
 

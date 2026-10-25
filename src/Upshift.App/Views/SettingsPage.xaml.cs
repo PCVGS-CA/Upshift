@@ -592,7 +592,8 @@ public sealed partial class SettingsPage : Page
         var games = AppServices.Library.Current.ToList();
         var targets = await Task.Run(() => Core.Install.GameCleanup.Find(games));
         var cacheBackup = Core.Install.ShaderLeftovers.Pending(AppServices.DataDir);
-        if (targets.Count == 0 && !cacheBackup)
+        var fsr4Upgrades = AmdFsr4Upgrade.Records(AppServices.DataDir);
+        if (targets.Count == 0 && !cacheBackup && fsr4Upgrades.Count == 0)
         {
             RemoveFromGamesText.Text = "No game has changes from Upshift.";
             return;
@@ -600,6 +601,7 @@ public sealed partial class SettingsPage : Page
 
         var list = targets.Select(t => "• " + t.Name).ToList();
         if (cacheBackup) list.Add("• What Pre-build shaders left (its data and moved-aside driver caches)");
+        list.AddRange(fsr4Upgrades.Select(r => $"• {r.GameName}: AMD's FSR 4 upgrade (taken off AMD's driver list)"));
         var answer = await ShowDialogAsync(new ContentDialog
         {
             XamlRoot = XamlRoot,

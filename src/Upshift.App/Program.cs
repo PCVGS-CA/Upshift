@@ -167,11 +167,13 @@ public static class Program
         var games = AppServices.Library.LoadCachedAsync().GetAwaiter().GetResult();
         var targets = Core.Install.GameCleanup.Find(games);
         var cacheBackup = Core.Install.ShaderLeftovers.Pending(AppServices.DataDir);
-        if (targets.Count == 0 && !cacheBackup) return;
+        var fsr4Upgrades = Core.Hardware.AmdFsr4Upgrade.Records(AppServices.DataDir);
+        if (targets.Count == 0 && !cacheBackup && fsr4Upgrades.Count == 0) return;
 
         var names = targets.Take(8).Select(t => "  • " + t.Name).ToList();
         if (targets.Count > 8) names.Add($"  • and {targets.Count - 8} more");
         if (cacheBackup) names.Add("  • what Pre-build shaders left (its data and moved-aside driver caches)");
+        names.AddRange(fsr4Upgrades.Select(r => $"  • {r.GameName}: AMD's FSR 4 upgrade (taken off AMD's driver list)"));
         var answer = MessageBoxTimeoutW(IntPtr.Zero,
             "Also remove OptiScaler and Upshift's changes from your games?\n\n" + string.Join("\n", names) + "\n\n" +
             "Yes removes OptiScaler and everything Upshift added, and puts back the game's own DLSS, FSR and XeSS files that " +

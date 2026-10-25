@@ -15,6 +15,8 @@ The overlay without measuring, with a frame-time graph.
 
 - **Updates for this game.** The Upscaling tab now lists every newer DLSS, FSR and XeSS file for the game, each with its own button, plus Update all, in place of the DLSS-only banner (FSR and XeSS updates had only been in Files, under Advanced). The order follows your card: FSR first on AMD, XeSS first on Intel, DLSS first on NVIDIA. On AMD and Intel cards DLSS is marked "Only used through OptiScaler", and on AMD the FSR line says it lets AMD's driver upgrade the game to FSR 4.
 
+- **Allow AMD's FSR 4 upgrade.** A switch per game on the Upscaling tab, for DirectX 12 games with their own FSR 3.1 or newer: it adds the game to AMD's driver list, so AMD's driver can upgrade the game's FSR to FSR 4. Then turn on FSR 4 in AMD Adrenalin for the game and pick FSR in the game's menu. Shown on RX 9000; on RX 7000 and RX 6000 it needs Adrenalin 26.10.1 or newer and is marked "testing". No game files are changed. Turning it on or off goes into the game's change history, and "Remove Upshift from all games" (and the uninstaller) takes back what Upshift added. A game AMD's driver already lists is shown as allowed and left alone.
+
 ### Fixed
 
 - The overlay could stay on screen after a measurement ended, until Upshift was closed.
@@ -28,6 +30,7 @@ The overlay without measuring, with a frame-time graph.
 
 - Show overlay and the handover with the real PresentMon and a real game: tested with a stand-in capture program and a stand-in game process. The first time, Windows asks for permission, as for measuring.
 - Exclusive fullscreen with Show overlay (the "Overlay needs borderless or windowed mode" notice is the same as while measuring).
+- AMD's FSR 4 upgrade in a real game: adding and removing a game on AMD's driver list was tested on an RX 9070 XT with Adrenalin 26.10.1, but not a game actually running with FSR 4 afterwards, and not on RX 7000 or RX 6000.
 
 ## [1.5.0] - 2026-10-23
 

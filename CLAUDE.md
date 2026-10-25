@@ -900,6 +900,28 @@ errors and no warnings.
   page on throwaway data with the real RX 9070 XT and pretend RTX 4070 / Arc B580 (orders and notes); the buttons were not
   pressed on that (non-test) game; they use the same update path as the Files tab's.
 
+- **1.6.0-test.3 (2026-10-25): "Allow AMD's FSR 4 upgrade".**
+  - From AMD's ADL SDK docs (GPUOpen display-library `Public-Documents/html/group__APPPROFILESAPI.html`, fetched
+    2026-10-25): `Core/Hardware/AdlProfiles.cs` loads the driver's `atiadlxx.dll` (NativeLibrary, nothing bundled):
+    `ADL2_Main_Control_Create(malloc, 1, out ctx)`, `ProfileApplicationX2_Assign(ctx, file, path, version "", title, area,
+    profile)` (docs: "If area exists, then override use record, otherwise create a new use record"), `RemoveApplication(ctx,
+    file, path, "", area)`, `ProfileOfAnApplicationX2_Search` (read: does the exe have an area record), `Profile_Exist`,
+    `System_Reload` after writes. Works unelevated here.
+  - `Core/Hardware/AmdFsr4Upgrade.cs`: area `FSROVR`, profile `FsrOvrWhitelistProfile` (exists in Adrenalin 26.10.1 on this
+    PC). Offer: RDNA 4 always; RDNA 3 / RDNA 2 (not integrated) with Adrenalin ≥ 26.10.1 (testing), else NeedsDriver; only
+    D3D12 games with their own `amd_fidelityfx_dx12.dll` / `amd_fidelityfx_upscaler_dx12.dll` (OptiScaler's added copies
+    excluded). Record `data\amd-fsr4-upgrade.json` (game, exe file name + folder); `Allow`/`Remove` only remove what
+    Upshift added.
+  - `Views/AmdFsr4UpgradeView.cs` on the Upscaling tab (after GameUpdatesView): switch "(testing)" on RX 6000/7000, driver
+    line, anti-cheat (`UpscalerFiles.AntiCheatNote`) / Battle.net warning, the hint, "Already allowed in AMD's driver."
+    when the driver lists the exe and Upshift didn't (shown on, disabled; Silent Hill 2's exe is in that state here),
+    pretend card = preview only. History entries via `AppServices.History`. `RemoveFromGames.RunAsync` takes every
+    recorded game off the list; the uninstaller's question and Settings' removal list them too.
+  - Tested: harness 221 (section 23: offers, records, ADL read-only), `helixtest adlwrite` with the user's OK (a made-up
+    `C:\UpshiftAdlTest\UpshiftAdlTest.exe`: not listed → Allow → listed + recorded → Remove → not listed, no record; SH2's
+    entry untouched), the app on throwaway data (RE Requiem: off, offered; SH2: already allowed). Not tested: FSR 4 actually
+    running in a game afterwards, RX 7000/6000.
+
 ## Next
 
 1. **DLSS 5 follow-ups:**

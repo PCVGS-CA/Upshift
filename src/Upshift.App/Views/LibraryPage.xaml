@@ -433,6 +433,8 @@
                         <views:GameNoticesView x:Name="NoticesPanel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
                         <!-- Newer DLSS, FSR and XeSS files for this game, one line each, ordered for this PC's card -->
                         <views:GameUpdatesView x:Name="GameUpdatesPanel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
+                        <!-- AMD cards: let the driver upgrade the game's own FSR 3.1 to FSR 4 (a driver list entry, no game files) -->
+                        <views:AmdFsr4UpgradeView Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
                         <!-- Upscaler, frame generation and frame cap; the rest goes into More options below -->
                         <views:OptiScalerOptionsView x:Name="OptionsPanel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
                         <TextBlock Visibility="{x:Bind ViewModel.Selected.IsNotInstalledByUs, Mode=OneWay}" TextWrapping="Wrap"
