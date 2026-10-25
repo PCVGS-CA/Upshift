@@ -17,8 +17,8 @@ namespace Upshift.App.Views;
 /// </summary>
 public sealed class AmdFsr4UpgradeView : CardPart
 {
-    public const string Hint = "Then turn on FSR 4 in AMD Adrenalin for this game and pick FSR in the game's menu. " +
-                               "For games without FSR 3.1, use OptiScaler's FSR 4 instead.";
+    public const string Hint = "Then pick FSR in the game's graphics menu. This needs 'AMD FSR Upscaling' turned on in AMD Adrenalin > " +
+                               "Gaming > Graphics (it's on by default). For games without FSR 3.1, use OptiScaler's FSR 4 instead.";
 
     private bool _busy;
     private string? _message;
