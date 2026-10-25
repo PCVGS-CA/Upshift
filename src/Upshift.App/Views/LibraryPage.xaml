@@ -431,15 +431,8 @@
                         </InfoBar>
                         <!-- Capcom RE Engine games without REFramework, and Battle.net games -->
                         <views:GameNoticesView x:Name="NoticesPanel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
-                        <!-- A newer DLSS file for this game: "DLSS 4.5 (310.9.1) is ready for this game. It has 3.1.1 (DLSS 3)…" -->
-                        <InfoBar IsOpen="{x:Bind ViewModel.Selected.HasDlssBar, Mode=OneWay}" IsClosable="False" Severity="Informational"
-                                 Title="DLSS update" Message="{x:Bind ViewModel.Selected.DlssBarText, Mode=OneWay}"
-                                 Visibility="{x:Bind ViewModel.Selected.HasDlssBar, Mode=OneWay}" AutomationProperties.Name="DLSS update">
-                            <InfoBar.ActionButton>
-                                <Button Content="Update DLSS" Style="{StaticResource AccentButtonStyle}" Click="UpdateDlss_Click"
-                                        IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}" />
-                            </InfoBar.ActionButton>
-                        </InfoBar>
+                        <!-- Newer DLSS, FSR and XeSS files for this game, one line each, ordered for this PC's card -->
+                        <views:GameUpdatesView x:Name="GameUpdatesPanel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
                         <!-- Upscaler, frame generation and frame cap; the rest goes into More options below -->
                         <views:OptiScalerOptionsView x:Name="OptionsPanel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
                         <TextBlock Visibility="{x:Bind ViewModel.Selected.IsNotInstalledByUs, Mode=OneWay}" TextWrapping="Wrap"

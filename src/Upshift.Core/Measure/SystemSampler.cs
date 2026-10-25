@@ -8,7 +8,7 @@ namespace Upshift.Core.Measure;
 /// PC (a missing counter never fails a measurement).
 /// </summary>
 /// <param name="GpuPercent">Average GPU usage: per sample, the busiest engine type (3D, compute, copy…) summed over all
-/// processes, as Task Manager shows it, on the graphics card that was busiest over the run.</param>
+/// processes, as Task Manager shows it, on the game's graphics card (see <see cref="SystemSampler.Stop"/>).</param>
 /// <param name="CpuPercent">Average usage of the whole processor.</param>
 /// <param name="BusiestCorePercent">Average, over the samples, of the busiest single core at that moment: a game whose
 /// main thread holds it back keeps one core near 100% while the total stays low.</param>
@@ -29,14 +29,17 @@ public sealed class SystemSampler : IDisposable
     private Timer? _timer;
     private bool _stopped;
     private int _samples;
+    private string? _gamePrefix;
     private readonly List<double> _cpu = new(), _busiestCore = new();
     private readonly Dictionary<string, List<double>> _gpuByAdapter = new();
     private readonly Dictionary<string, long> _peakVramByAdapter = new();
+    private readonly Dictionary<string, double> _gameByAdapter = new();
 
-    /// <summary>Starts sampling; returns a sampler that records nothing when PDH isn't usable.</summary>
-    public static SystemSampler Start()
+    /// <summary>Starts sampling; returns a sampler that records nothing when PDH isn't usable. With
+    /// <paramref name="gameProcessId"/>, the card that process uses is the one reported.</summary>
+    public static SystemSampler Start(int? gameProcessId = null)
     {
-        var sampler = new SystemSampler();
+        var sampler = new SystemSampler { _gamePrefix = gameProcessId is { } pid ? $"pid_{pid}_" : null };
         try
         {
             if (Pdh.PdhOpenQueryW(null, IntPtr.Zero, out sampler._query) != 0) { sampler._query = IntPtr.Zero; return sampler; }
@@ -68,11 +71,17 @@ public sealed class SystemSampler : IDisposable
                 if (cores.Count > 0) _busiestCore.Add(Math.Clamp(cores.Max(c => c.Value), 0, 100));
 
                 // GPU: per card (luid), the busiest engine type, each engine type summed over every process.
-                var perAdapter = Instances(_gpuEngine)
+                var engines = Instances(_gpuEngine);
+                var perAdapter = engines
                     .Select(i => (Adapter: Luid(i.Name), Engine: EngineType(i.Name), i.Value))
                     .Where(i => i.Adapter is not null && i.Engine is not null)
                     .GroupBy(i => i.Adapter!)
                     .ToDictionary(g => g.Key, g => g.GroupBy(i => i.Engine).Max(e => e.Sum(x => x.Value)));
+                // The game's own engine use per card, added up over the run: it shows which card the game runs on.
+                if (_gamePrefix is not null)
+                    foreach (var item in engines)
+                        if (item.Name.StartsWith(_gamePrefix, StringComparison.OrdinalIgnoreCase) && Luid(item.Name) is { } used)
+                            _gameByAdapter[used] = _gameByAdapter.GetValueOrDefault(used) + item.Value;
                 foreach (var (adapter, value) in perAdapter)
                 {
                     if (!_gpuByAdapter.TryGetValue(adapter, out var list)) _gpuByAdapter[adapter] = list = new();
@@ -86,18 +95,25 @@ public sealed class SystemSampler : IDisposable
         }
     }
 
-    /// <summary>Stops sampling and sums up. <paramref name="totalVramBytes"/> is the card's memory, from <see cref="VideoMemory"/>.</summary>
-    public SystemLoad Stop(long? totalVramBytes)
+    /// <summary>Stops sampling and sums up. <paramref name="totalVramBytes"/> is the card's memory, from <see cref="VideoMemory"/>;
+    /// <paramref name="vendorId"/>/<paramref name="deviceId"/> name that card (the one Upshift detected for games).</summary>
+    /// <remarks>The card reported is the one the game's process used most; else the detected card; else the busiest card
+    /// over the run. "Busiest" alone isn't enough: on a PC whose monitors are on the integrated GPU, that one is the busiest
+    /// whenever the game's card idles or the game wasn't seen, and it has no dedicated memory in use (found with an RX 9070
+    /// XT beside an Intel UHD 730).</remarks>
+    public SystemLoad Stop(long? totalVramBytes, int vendorId = 0, int deviceId = 0)
     {
+        var detected = vendorId != 0 ? AdapterLuid(vendorId, deviceId) : null;   // outside the lock: DXGI can take a moment
         lock (_sync)
         {
             _stopped = true;
             _timer?.Dispose();
             _timer = null;
-            // The card the game ran on: the one busiest over the run (an integrated GPU idles beside a discrete one).
-            var busiest = _gpuByAdapter.Where(a => a.Value.Count > 0).OrderByDescending(a => a.Value.Average()).Select(a => a.Key).FirstOrDefault();
-            double? gpu = busiest is null ? null : _gpuByAdapter[busiest].Average();
-            long? peak = busiest is not null && _peakVramByAdapter.TryGetValue(busiest, out var p) ? p
+            var card = _gameByAdapter.Where(a => a.Value > 0).OrderByDescending(a => a.Value).Select(a => a.Key).FirstOrDefault()
+                    ?? (detected is not null && _gpuByAdapter.ContainsKey(detected) ? detected : null)
+                    ?? _gpuByAdapter.Where(a => a.Value.Count > 0).OrderByDescending(a => a.Value.Average()).Select(a => a.Key).FirstOrDefault();
+            double? gpu = card is not null && _gpuByAdapter.TryGetValue(card, out var g) && g.Count > 0 ? g.Average() : null;
+            long? peak = card is not null && _peakVramByAdapter.TryGetValue(card, out var p) ? p
                        : _peakVramByAdapter.Count > 0 ? _peakVramByAdapter.Values.Max() : null;
             if (peak is <= 0) peak = null;
             return new SystemLoad(gpu, _cpu.Count > 0 ? _cpu.Average() : null, _busiestCore.Count > 0 ? _busiestCore.Average() : null,
@@ -123,6 +139,31 @@ public sealed class SystemSampler : IDisposable
         if (i < 0) return null;
         var parts = instance[i..].Split('_');
         return parts.Length >= 3 ? $"{parts[0]}_{parts[1]}_{parts[2]}".ToLowerInvariant() : null;
+    }
+
+    /// <summary>The counters' "luid_0x…_0x…" for the graphics card with this PCI vendor and device id (DXGI), or null.</summary>
+    public static string? AdapterLuid(int vendorId, int deviceId)
+    {
+        try
+        {
+            var iid = typeof(IDXGIFactory1).GUID;
+            if (CreateDXGIFactory1(ref iid, out var factory) != 0) return null;
+            try
+            {
+                for (uint n = 0; factory.EnumAdapters1(n, out var adapter) == 0; n++)
+                {
+                    try
+                    {
+                        if (adapter.GetDesc1(out var desc) == 0 && desc.VendorId == vendorId && desc.DeviceId == deviceId)
+                            return $"luid_0x{desc.LuidHigh:x8}_0x{desc.LuidLow:x8}";
+                    }
+                    finally { Marshal.ReleaseComObject(adapter); }
+                }
+            }
+            finally { Marshal.ReleaseComObject(factory); }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { }
+        return null;
     }
 
     /// <summary>"3D", "Compute_0", "Copy"… from a GPU Engine instance name, or null.</summary>
@@ -160,6 +201,35 @@ public sealed class SystemSampler : IDisposable
         }
         finally { Marshal.FreeHGlobal(buffer); }
         return result;
+    }
+
+    [DllImport("dxgi.dll")] private static extern int CreateDXGIFactory1(ref Guid riid, out IDXGIFactory1 factory);
+
+    // Only EnumAdapters1 and GetDesc1 are called; the other methods keep the vtable order.
+    [ComImport, Guid("770aae78-f26f-4dba-a829-253c83d1b387"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IDXGIFactory1
+    {
+        void SetPrivateData(); void SetPrivateDataInterface(); void GetPrivateData(); void GetParent();
+        void EnumAdapters(); void MakeWindowAssociation(); void GetWindowAssociation(); void CreateSwapChain(); void CreateSoftwareAdapter();
+        [PreserveSig] int EnumAdapters1(uint index, out IDXGIAdapter1 adapter);
+    }
+
+    [ComImport, Guid("29038f61-3839-4626-91fd-086879011a05"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IDXGIAdapter1
+    {
+        void SetPrivateData(); void SetPrivateDataInterface(); void GetPrivateData(); void GetParent();
+        void EnumOutputs(); void GetDesc(); void CheckInterfaceSupport();
+        [PreserveSig] int GetDesc1(out AdapterDesc1 desc);
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct AdapterDesc1
+    {
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string Description;
+        public uint VendorId, DeviceId, SubSysId, Revision;
+        public nuint DedicatedVideoMemory, DedicatedSystemMemory, SharedSystemMemory;
+        public uint LuidLow; public int LuidHigh;
+        public uint Flags;
     }
 
     private static class Pdh

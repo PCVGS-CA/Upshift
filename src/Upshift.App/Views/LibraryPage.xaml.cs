@@ -39,6 +39,7 @@ public sealed partial class LibraryPage : Page
 
         // The game page's code-built parts act through the page.
         NoticesPanel.RemoveOptiScaler = UninstallAsync;
+        GameUpdatesPanel.UpdateFiles = (card, paths, failTitle) => ReportAsync(ViewModel.UpdateUpscalerFilesAsync(card, paths), failTitle);
 
         // Back from playing: read OptiScaler's log again for the selected game.
         AppServices.WindowActivated += () => DispatcherQueue.TryEnqueue(() => ViewModel.Selected?.RefreshLoadStatus());
@@ -722,12 +723,7 @@ public sealed partial class LibraryPage : Page
         await ReportAsync(ViewModel.UpdateUpscalerFilesAsync(card, card.UpdatablePaths), "The files weren't updated");
     }
 
-    /// <summary>The DLSS bar's "Update DLSS" (and the same action from the DLSS model dropdown).</summary>
-    private async void UpdateDlss_Click(object sender, RoutedEventArgs e)
-    {
-        if (ViewModel.Selected is { HasDlssBar: true } card) await UpdateDlssAsync(card);
-    }
-
+    /// <summary>"Update DLSS to unlock" in the DLSS model dropdown.</summary>
     private Task UpdateDlssAsync(GameCardViewModel card) => ReportAsync(ViewModel.UpdateDlssAsync(card), "DLSS wasn't updated");
 
     private async void Reapply_Click(object sender, RoutedEventArgs e)

@@ -878,8 +878,27 @@ errors and no warnings.
     PresentMon, dot + time left, result saved, back to Live); switch off / game closed / Upshift closed → overlay and
     PresentMon gone; a plain measurement's overlay gone afterwards. Not tested: real PresentMon (UAC) and a real game,
     exclusive fullscreen.
-  - **This PC now has an AMD Radeon RX 9070 XT** (Adrenalin 26.10.1; seen 2026-10-24) plus Intel UHD 730. The harness's
-    "live counters … video memory" check fails on it: dedicated-memory peak reads 0 MB (Measure's VRAM figure on AMD).
+  - **This PC now has an AMD Radeon RX 9070 XT** (Adrenalin 26.10.1; seen 2026-10-24) plus Intel UHD 730.
+  - **Measure's card choice (fixed 2026-10-24):** the VRAM peak read 0 MB because `SystemSampler.Stop` reported the
+    *busiest* adapter, and here the monitors/desktop run on the Intel UHD 730 (LUID `c81a`, DWM's engine use), which has
+    no dedicated memory in use; the RX 9070 XT (`cd30`) idled. AMD's counters were fine (its Dedicated Usage reads
+    normally). Now `SystemSampler.Start(gameProcessId)` adds up the game's own `pid_N_` engine use per LUID, and
+    `Stop(total, vendorId, deviceId)` picks: the adapter the game used most → the detected card's adapter
+    (`SystemSampler.AdapterLuid`, DXGI EnumAdapters1/GetDesc1 by PCI ids) → the busiest (old rule). GPU % follows the same
+    card. Single-card PCs (the RTX 4070) behave as before. Tested: scratchpad `vramtest` (D3D11 load on the RX 9070 XT:
+    1,104 MB peak, 34% GPU; idle: 64 MB on the detected card; a pid on the iGPU reports the iGPU), harness 212/212.
+    Not tested: a real game measurement on the AMD card.
+
+- **1.6.0-test.2 (2026-10-24): "Updates for this game".** Cause of the "DLSS-only" game page: since the simplification,
+  FSR/XeSS (per-file) updates were only in the collapsed "Upscaler files (advanced)" expander on the Files tab (behind
+  Advanced); the Upscaling tab kept only the DLSS InfoBar. Detection was fine. `Views/GameUpdatesView.cs` (CardPart)
+  replaces that InfoBar: one line per family with updatable files (`GameCardViewModel.FileItems`, `CanUpdate`), "Update
+  <family>" and "Update all" → `LibraryViewModel.UpdateUpscalerFilesAsync`. Order `OrderFor(vendor)`: AMD FSR/XeSS/DLSS,
+  Intel XeSS/FSR/DLSS, else DLSS/XeSS/FSR, by `AppServices.EffectiveGpu` (rebuilt on EffectiveGpuChanged and on Loaded).
+  DLSS on AMD/Intel: "Only used through OptiScaler"; on NVIDIA `UpscalerFileText.DlssUnlockLine`. FSR on AMD: "Lets AMD's
+  driver upgrade this game to FSR 4." `HasDlssBar`/`DlssBarText`/`DlssBar()`/`UpdateDlss_Click` removed. Tested: RE Requiem
+  page on throwaway data with the real RX 9070 XT and pretend RTX 4070 / Arc B580 (orders and notes); the buttons were not
+  pressed on that (non-test) game; they use the same update path as the Files tab's.
 
 ## Next
 

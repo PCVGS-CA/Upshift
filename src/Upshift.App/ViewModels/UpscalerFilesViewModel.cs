@@ -104,22 +104,9 @@ public static class UpscalerFileText
         };
     }
 
-    /// <summary>
-    /// The DLSS bar: "DLSS 4.5 (310.9.1) is ready for this game. It has 3.1.1 (DLSS 3). Updating unlocks the DLSS 4 and
-    /// 4.5 models."
-    /// </summary>
-    public static string DlssBar(string current, string target, bool onThisPc = true)
-    {
-        var table = AppServices.Catalog.DlssVersionNames;
-        var targetName = DlssNames.Name(table, target) ?? "A newer DLSS";
-        var text = onThisPc
-            ? $"{targetName} ({target}) is ready for this game. It has {Ui.DlssLabel(current)}."
-            : $"{targetName} ({target}) is available for this game (downloads when you update). It has {Ui.DlssLabel(current)}.";
-        var unlocked = UnlockedModelNames(current, target);
-        if (unlocked.Count > 0)
-            text += $" Updating unlocks the {JoinNames(unlocked)} models.";
-        return text;
-    }
+    /// <summary>"Unlocks the DLSS 4 and 4.5 models." for an update from current to target, or null when it unlocks none.</summary>
+    public static string? DlssUnlockLine(string? current, string target) =>
+        current is not null && UnlockedModelNames(current, target) is { Count: > 0 } unlocked ? $"Unlocks the {JoinNames(unlocked)} models." : null;
 
     /// <summary>The DLSS names ("DLSS 4", "DLSS 4.5") of the models a game gets by going from current to target.</summary>
     public static List<string> UnlockedModelNames(string current, string target)

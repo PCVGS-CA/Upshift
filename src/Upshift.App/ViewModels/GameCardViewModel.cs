@@ -94,11 +94,6 @@ public sealed partial class GameCardViewModel : ObservableObject
         AntiCheatFilesWarning = info.HasAntiCheat && _fileItems.Count > 0 ? Core.Install.UpscalerFiles.AntiCheatNote(info) : "";
         UpdatableFileCount = _fileItems.Count(i => i.CanUpdate);
         CanRestoreFiles = Core.Install.UpscalerFiles.ReadRecord(info.InstallDir) is { Files.Count: > 0 };
-        if (Services.UpscalerUpdates.DlssUpdate(info) is { } dlss && dlss.CurrentVersion is { } dlssNow)
-        {
-            HasDlssBar = true;
-            DlssBarText = UpscalerFileText.DlssBar(dlssNow, dlss.Target!.Version, Services.UpscalerUpdates.IsOnThisPc(dlss.Target));
-        }
         var restored = _fileItems.Where(i => i.State == UpscalerFileState.GameRestoredOld).ToList();
         if (restored.Count > 0)
         {
@@ -293,6 +288,9 @@ public sealed partial class GameCardViewModel : ObservableObject
     // ---------------- Upscaler files ----------------
 
     private readonly List<UpscalerFileItem> _fileItems;
+
+    /// <summary>Each DLSS, FSR and XeSS file of the game and its state (for the "Updates for this game" card).</summary>
+    public IReadOnlyList<UpscalerFileItem> FileItems => _fileItems;
     private readonly List<string> _restoredPaths = new();
 
     public List<UpscalerFileRowViewModel> UpscalerFiles { get; }
@@ -345,9 +343,6 @@ public sealed partial class GameCardViewModel : ObservableObject
         }
     }
 
-    /// <summary>The bar above "Upscalers in this game" when a newer DLSS file is on offer.</summary>
-    public bool HasDlssBar { get; }
-    public string DlssBarText { get; } = "";
 
     /// <summary>The game put its own old file back over Upshift's update.</summary>
     public bool HasRestoredByGame { get; }

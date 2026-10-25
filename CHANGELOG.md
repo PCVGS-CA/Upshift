@@ -13,9 +13,12 @@ The overlay without measuring, with a frame-time graph.
 - **Measuring with the overlay on** takes over the overlay's capture instead of starting a second PresentMon, and with no extra permission prompt.
 - **Recording it.** The overlay isn't hidden from screen recorders. To get it in a video, use borderless or windowed mode and your recorder's screen or display capture; game-only capture (OBS Game Capture, Xbox Game Bar) won't include it.
 
+- **Updates for this game.** The Upscaling tab now lists every newer DLSS, FSR and XeSS file for the game, each with its own button, plus Update all, in place of the DLSS-only banner (FSR and XeSS updates had only been in Files, under Advanced). The order follows your card: FSR first on AMD, XeSS first on Intel, DLSS first on NVIDIA. On AMD and Intel cards DLSS is marked "Only used through OptiScaler", and on AMD the FSR line says it lets AMD's driver upgrade the game to FSR 4.
+
 ### Fixed
 
 - The overlay could stay on screen after a measurement ended, until Upshift was closed.
+- Measure's video memory and GPU figures on PCs with two graphics adapters: they could come from the one running the desktop (e.g. Intel graphics next to a Radeon) instead of the card the game uses.
 
 ### Removed
 

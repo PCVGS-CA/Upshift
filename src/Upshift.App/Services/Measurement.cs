@@ -309,7 +309,7 @@ public static class Measurement
         if (!_viaLive) StartOverlay(game, process, job.CsvFile, _seconds);
 
         // Windows' own counters (GPU and CPU usage, video memory) for the same stretch. A missing counter only means a dash.
-        using var sampler = SystemSampler.Start();
+        using var sampler = SystemSampler.Start(process.Id);
 
         MeasureRunResult? result;
         var seconds = _seconds;
@@ -338,7 +338,7 @@ public static class Measurement
         StopOverlay();
         MeasuringSinceUtc = null;
         var gpu = AppServices.Gpu;
-        var load = sampler.Stop(gpu is null ? null : VideoMemory.TotalBytes(gpu.VendorId, gpu.DeviceId));
+        var load = gpu is null ? sampler.Stop(null) : sampler.Stop(VideoMemory.TotalBytes(gpu.VendorId, gpu.DeviceId), gpu.VendorId, gpu.DeviceId);
         _ = Task.Run(() => { Beep(1320, 120); Beep(880, 120); Beep(660, 220); });
 
         var gameClosed = process.HasExited;
