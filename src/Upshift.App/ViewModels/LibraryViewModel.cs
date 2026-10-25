@@ -207,7 +207,7 @@ public sealed partial class LibraryViewModel : ObservableObject
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            StatusText = $"Couldn't hide {card.Name}: {ex.Message}";
+            StatusText = $"Couldn't hide {card.Name}: {Helpers.ScreenText.Clean(ex.Message)}";
             return;
         }
         if (Selected == card) Selected = null;
@@ -302,7 +302,7 @@ public sealed partial class LibraryViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            StatusText = $"Couldn't add that folder: {ex.Message}";
+            StatusText = $"Couldn't add that folder: {Helpers.ScreenText.Clean(ex.Message)}";
         }
         finally
         {
@@ -332,7 +332,7 @@ public sealed partial class LibraryViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            StatusText = $"The scan stopped with an error: {ex.Message}";
+            StatusText = $"The scan stopped with an error: {Helpers.ScreenText.Clean(ex.Message)}";
         }
         finally
         {
@@ -351,7 +351,7 @@ public sealed partial class LibraryViewModel : ObservableObject
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            StatusText = $"Couldn't use that picture: {ex.Message}";
+            StatusText = $"Couldn't use that picture: {Helpers.ScreenText.Clean(ex.Message)}";
         }
     }
 
@@ -382,12 +382,12 @@ public sealed partial class LibraryViewModel : ObservableObject
         }
         catch (ComponentDownloadException ex)
         {
-            StatusText = ex.Message;
+            StatusText = Helpers.ScreenText.Clean(ex.Message);
             return null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
-            StatusText = $"Couldn't get OptiScaler: {ex.Message}";
+            StatusText = $"Couldn't get OptiScaler: {Helpers.ScreenText.Clean(ex.Message)}";
             return null;
         }
         finally
@@ -490,7 +490,7 @@ public sealed partial class LibraryViewModel : ObservableObject
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            StatusText = $"Couldn't save the launch options: {ex.Message}";
+            StatusText = $"Couldn't save the launch options: {Helpers.ScreenText.Clean(ex.Message)}";
         }
     }
 
@@ -621,7 +621,7 @@ public sealed partial class LibraryViewModel : ObservableObject
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            StatusText = $"Couldn't save that choice: {ex.Message}";
+            StatusText = $"Couldn't save that choice: {Helpers.ScreenText.Clean(ex.Message)}";
         }
         finally
         {

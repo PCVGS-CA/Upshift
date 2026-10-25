@@ -37,7 +37,7 @@ public static class HelixSrGames
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                return new HelixSrCard(false, false, $"Not available: {ex.Message}");
+                return new HelixSrCard(false, false, $"Not available: {Helpers.ScreenText.Clean(ex.Message)}");
             }
         }
     }
@@ -109,7 +109,7 @@ public static class HelixSrGames
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            return $"{game.Name} is set to HelixSR, but {why}, and switching it back failed: {ex.Message} Choose another upscaler in its OptiScaler options.";
+            return $"{game.Name} is set to HelixSR, but {why}, and switching it back failed: {Helpers.ScreenText.Clean(ex.Message)} Choose another upscaler in its OptiScaler options.";
         }
     }
 
@@ -125,7 +125,7 @@ public static class HelixSrGames
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            messages.Add($"Upshift couldn't check the games set to HelixSR: {ex.Message}");
+            messages.Add($"Upshift couldn't check the games set to HelixSR: {Helpers.ScreenText.Clean(ex.Message)}");
         }
         return messages;
     }
@@ -188,7 +188,7 @@ public static class HelixSrGames
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            messages.Add($"Upshift couldn't switch HelixSR off after the last session ended badly: {ex.Message}");
+            messages.Add($"Upshift couldn't switch HelixSR off after the last session ended badly: {Helpers.ScreenText.Clean(ex.Message)}");
         }
         return messages;
     }
@@ -221,7 +221,7 @@ public static class HelixSrGames
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            messages.Add($"HelixSR couldn't be turned back on: {ex.Message}");
+            messages.Add($"HelixSR couldn't be turned back on: {Helpers.ScreenText.Clean(ex.Message)}");
         }
         ClearPaused();
         return messages;

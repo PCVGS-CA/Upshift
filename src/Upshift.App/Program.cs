@@ -154,7 +154,7 @@ public static class Program
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             Services.CrashLog.Write(ex, "Removing Upshift from games after the uninstall failed");
-            MessageBoxW(IntPtr.Zero, $"Removing Upshift's changes from your games stopped: {ex.Message}", "Uninstall Upshift", MbOk | MbIconWarning | MbTopmost);
+            MessageBoxW(IntPtr.Zero, $"Removing Upshift's changes from your games stopped: {Helpers.ScreenText.Clean(ex.Message)}", "Uninstall Upshift", MbOk | MbIconWarning | MbTopmost);
         }
         finally
         {
@@ -273,7 +273,7 @@ public static class Program
         try { Directory.Delete(dataDir, recursive: true); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            MessageBoxW(IntPtr.Zero, $"Some of Upshift's data couldn't be deleted:\n\n{ex.Message}\n\nYou can delete {dataDir} yourself.",
+            MessageBoxW(IntPtr.Zero, $"Some of Upshift's data couldn't be deleted:\n\n{Helpers.ScreenText.Clean(ex.Message)}\n\nYou can delete {Helpers.ScreenText.Clean(dataDir)} yourself.",
                 "Uninstall Upshift", MbOk | MbIconWarning | MbTopmost);
         }
     }

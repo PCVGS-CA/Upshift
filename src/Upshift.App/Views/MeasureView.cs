@@ -34,8 +34,8 @@ public sealed class MeasureView : UserControl
 
     public MeasureView()
     {
-        Loaded += (_, _) => { Measurement.Changed += Build; LiveOverlay.Changed += Build; };
-        Unloaded += (_, _) => { Measurement.Changed -= Build; LiveOverlay.Changed -= Build; };
+        Loaded += (_, _) => Measurement.Changed += Build;
+        Unloaded += (_, _) => Measurement.Changed -= Build;
     }
 
     private void Build()
@@ -229,7 +229,7 @@ public sealed class MeasureView : UserControl
                 await File.WriteAllTextAsync(file.Path, ResultSharing.Csv(rows, Pc()), new System.Text.UTF8Encoding(true));
                 message = $"{rows.Count} result{(rows.Count == 1 ? "" : "s")} exported to {file.Name}.";
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException) { message = $"The results weren't exported: {ex.Message}"; }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { message = $"The results weren't exported: {Helpers.ScreenText.Clean(ex.Message)}"; }
         }
         if (ShowDialog is not null)
             await ShowDialog(new ContentDialog
@@ -242,23 +242,13 @@ public sealed class MeasureView : UserControl
     // ---------------- Measure this game ----------------
 
     /// <summary>
-    /// "Show overlay" (any time, without measuring), "Show overlay while measuring" and the corner. The overlay is Upshift's
-    /// own small window over the game (nothing is injected), for every game; Shift + the measuring key hides and shows it.
-    /// It isn't hidden from screen capture, so a recorder that captures the screen includes it.
+    /// "Show overlay while measuring" and the corner. The overlay is Upshift's own small window over the game (nothing is
+    /// injected), for every game; Shift + the measuring key hides and shows it. It isn't hidden from screen capture, so a
+    /// recorder that captures the screen includes it.
     /// </summary>
-    private static FrameworkElement OverlayRow(GameCardViewModel card)
+    private static FrameworkElement OverlayRow()
     {
         var settings = AppServices.Settings.Current;
-        var gameId = card.Info.Id;
-        var always = new ToggleSwitch { Header = "Show overlay", IsOn = LiveOverlay.ActiveFor(gameId) };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(always, "Show overlay");
-        ToolTipService.SetToolTip(always, "Live FPS, 1% low and frame times over the game, without measuring. Nothing is saved.");
-        always.Toggled += async (_, _) =>
-        {
-            if (always.IsOn == LiveOverlay.ActiveFor(gameId)) return;
-            if (always.IsOn) await LiveOverlay.StartAsync(card.Info);
-            else LiveOverlay.Stop();
-        };
         var toggle = new ToggleSwitch { Header = "Show overlay while measuring", IsOn = settings.MeasureOverlay };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(toggle, "Show overlay while measuring");
         var corner = new ComboBox { Header = "Corner", MinWidth = 150 };
@@ -280,10 +270,8 @@ public sealed class MeasureView : UserControl
             s.OverlayCorner = tag;
             AppServices.Settings.Save(s);
         };
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 16, Children = { always, toggle, corner } };
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 16, Children = { toggle, corner } };
         var panel = new StackPanel { Spacing = 2, Children = { row, Subtle($"Live FPS in a corner of the game. {Measurement.OverlayKeyName} hides it.") } };
-        if (LiveOverlay.MessageGameId == gameId && LiveOverlay.Message.Length > 0)
-            panel.Children.Add(new TextBlock { Text = LiveOverlay.Message, FontSize = 12, TextWrapping = TextWrapping.Wrap });
         // Said in full (not shortened to a tooltip): it answers "why isn't it in my video?".
         panel.Children.Add(new TextBlock
         {
@@ -360,7 +348,7 @@ public sealed class MeasureView : UserControl
                 panel.Children.Add(Subtle("A measurement is armed for another game; this replaces it."));
         }
         panel.Children.Add(buttons);
-        panel.Children.Add(OverlayRow(card));
+        panel.Children.Add(OverlayRow());
         if (Measurement.OverlayNoticeGameId == card.Info.Id && Measurement.OverlayNotice is { } notice)
             panel.Children.Add(new InfoBar { IsOpen = true, IsClosable = true, Severity = InfoBarSeverity.Warning, Message = notice });
 

@@ -257,11 +257,6 @@ public sealed class MeasureOverlay : IDisposable
         _hwnd = IntPtr.Zero;
     }
 
-    /// <summary>
-    /// True while a program runs Direct3D in exclusive fullscreen (Windows' "QUNS_RUNNING_D3D_FULL_SCREEN"), where no
-    /// other window can show on top.
-    /// </summary>
-    public static bool ExclusiveFullscreenNow() => SHQueryUserNotificationState(out var state) == 0 && state == 3;
 
     // ---------------- Win32 ----------------
 
@@ -329,5 +324,4 @@ public sealed class MeasureOverlay : IDisposable
     private static extern IntPtr CreateFont(int height, int width, int escapement, int orientation, int weight, uint italic, uint underline, uint strike,
         uint charset, uint outPrecision, uint clipPrecision, uint quality, uint pitchAndFamily, string face);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr GetModuleHandle(string? name);
-    [DllImport("shell32.dll")] private static extern int SHQueryUserNotificationState(out int state);
 }

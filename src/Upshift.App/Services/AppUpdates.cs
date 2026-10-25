@@ -173,6 +173,6 @@ public static class AppUpdates
         HttpRequestException { StatusCode: HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests } =>
             "GitHub's limit on requests was reached. Try again in an hour.",
         HttpRequestException or TaskCanceledException => "Check your internet connection and try again.",
-        _ => ex.Message
+        _ => Helpers.ScreenText.Clean(ex.Message)
     };
 }

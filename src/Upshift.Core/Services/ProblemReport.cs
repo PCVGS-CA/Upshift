@@ -40,6 +40,17 @@ public static class ProblemReport
     }
 
     /// <summary>
+    /// For text shown in Upshift's window (error messages): a quoted full path ('C:\…\frames.csv', as .NET's file errors
+    /// write it) becomes just its file name, and anything left is <see cref="Scrub"/>bed, so no path with the Windows user
+    /// name is shown.
+    /// </summary>
+    public static string HidePaths(string text, string userProfile, string userName)
+    {
+        text = Regex.Replace(text, @"(['""])(?:[A-Za-z]:|\\\\)[\\/][^'""\r\n]*?([^\\/'""\r\n]+)\1", "$1$2$1");
+        return Scrub(text, userProfile, userName, Array.Empty<string?>());
+    }
+
+    /// <summary>
     /// Today's Upshift log, cut to this game: each entry starts with a line like "… UNINSTALL &lt;game&gt; | …" followed by
     /// indented lines; only entries naming this game (or its folder) are kept.
     /// </summary>

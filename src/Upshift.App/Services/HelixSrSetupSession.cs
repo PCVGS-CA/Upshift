@@ -65,7 +65,7 @@ public static class HelixSrSetupSession
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            result = new HelixSrSetupResult(false, $"The HelixSR setup failed unexpectedly: {ex.Message}");
+            result = new HelixSrSetupResult(false, $"The HelixSR setup failed unexpectedly: {Helpers.ScreenText.Clean(ex.Message)}");
         }
         Post(() =>
         {

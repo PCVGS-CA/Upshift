@@ -849,7 +849,8 @@ errors and no warnings.
     unpacks archives. Not tested: AMD hardware, a real game on a test build.
 
 - **1.5.0 released (2026-10-23)** as the stable release at the user's request (tag v1.5.0, main = dd79ddc).
-- **1.6.0 (2026-10-24), test build 1.6.0-test.1, not released: "Show overlay".**
+- **1.6.0 (2026-10-24), test build 1.6.0-test.1, not released: "Show overlay".** The separate switch, `LiveOverlay` and the
+  take-over were **removed in test.5** (see below); what follows about them is history only. The graph and the overlay fix stay.
   - `App/Services/LiveOverlay.cs` (states Off / Preparing / WaitingForGame / Running): `Measurement.PresentMonAsync` (shared
     download + Intel signature), `Measurement.StartHelperAsync` (shared UAC helper start), `MeasureJob.Live` (helper and
     `PresentMonRunner.Run(…, live: true)`: no `--timed`, `--terminate_on_proc_exit`, session `UpshiftOverlay` so measuring's
@@ -921,6 +922,30 @@ errors and no warnings.
     `C:\UpshiftAdlTest\UpshiftAdlTest.exe`: not listed → Allow → listed + recorded → Remove → not listed, no record; SH2's
     entry untouched), the app on throwaway data (RE Requiem: off, offered; SH2: already allowed). Not tested: FSR 4 actually
     running in a game afterwards, RX 7000/6000.
+  - test.4: the hint is "Then pick FSR in the game's graphics menu. This needs 'AMD FSR Upscaling' turned on in AMD Adrenalin >
+    Gaming > Graphics…" (`AmdFsr4UpgradeView.Hint`).
+
+- **1.6.0-test.5 (2026-10-25): the overlay fixed from the user's SH2 run (RX 9070 XT, borderless).**
+  - **Cause of "Waiting for frames…"** (also in released 1.5.0): real PresentMon opens `--output_file` with no read sharing
+    (checked: "being used by another process" while it writes), so `LiveFrames` saw nothing and the take-over's slice
+    failed. `PresentMonRunner.Run` now passes `--output_stdout` and writes `frames.csv` itself (FileShare.ReadWrite|Delete,
+    each line flushed; after exit `WaitForExit()` drains the last lines). PresentMon 2.6.0 sends stdout in batches about
+    every 250 ms; its warnings go to stderr only (ErrorText). The stand-in `fakepm` now locks an `--output_file` like the
+    real one, writes `--output_stdout`, and puts its args in `fakepm.args` in the working folder.
+  - **False "Overlay needs borderless…"**: `SHQueryUserNotificationState` (QUNS 3) is no longer used (it fires in
+    borderless). Only PresentMon's PresentMode counts: `LiveFrames.ExclusiveFrames` (30) "Hardware: Legacy …" frames in a row.
+  - **One switch**: "Show overlay while measuring". `LiveOverlay`, `MeasureJob.Live`, the `UpshiftOverlay` session,
+    `LiveFrames.Slice`/`startAt` and the take-over are removed. `Measurement.CleanLeftovers` (start-up) keeps removing
+    `data\measure\*` folders unwritten for an hour.
+  - **Paths in messages**: `ProblemReport.HidePaths` (a quoted full path → its file name, then `Scrub`) via
+    `Helpers.ScreenText.Clean`, on every `ex.Message` shown in the window and on all of Measurement's messages (log lines
+    keep full text).
+  - **This account is in Performance Log Users**, so PresentMon runs here without the UAC helper. Real stand-in game:
+    scratchpad `present\FrameLabGame.exe` (D3D11 window, vsync, `<seconds>` argument).
+  - Tested: harness 228 (section 22 with the stand-in; section 24 with the real PresentMon: FPS read while it writes, the
+    file opens for reading, an early stop keeps a complete file, the file deletes right after); the app on throwaway data
+    with the real PresentMon and FrameLabGame: overlay with live FPS/1% low/graph, 20 s result saved, no fullscreen notice,
+    overlay, PresentMon and work folder gone afterwards. Not tested: a real game, the UAC helper route, exclusive fullscreen.
 
 ## Next
 

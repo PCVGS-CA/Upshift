@@ -21,7 +21,7 @@ public static class ImageExport
             (width, height) = (target.PixelWidth, target.PixelHeight);
             if (width == 0 || height == 0) return "The image couldn't be made: the result card wasn't on screen.";
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { return $"The image couldn't be made: {ex.Message}"; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return $"The image couldn't be made: {Helpers.ScreenText.Clean(ex.Message)}"; }
 
         Windows.Storage.StorageFile? file = null;
         try
@@ -46,7 +46,7 @@ public static class ImageExport
         {
             // The save dialog makes an empty file; don't leave it behind.
             try { if (file is not null && new FileInfo(file.Path).Length == 0) File.Delete(file.Path); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
-            return $"The image wasn't saved: {ex.Message}";
+            return $"The image wasn't saved: {Helpers.ScreenText.Clean(ex.Message)}";
         }
     }
 

@@ -36,6 +36,6 @@ public static class ScsKiller
             Process.Start(new ProcessStartInfo(exe) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(exe)! })?.Dispose();
             return null;
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { return $"SCSKiller couldn't be started: {ex.Message}"; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return $"SCSKiller couldn't be started: {Helpers.ScreenText.Clean(ex.Message)}"; }
     }
 }

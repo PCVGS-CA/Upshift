@@ -464,7 +464,7 @@ public sealed partial class SettingsPage : Page
                 await new ContentDialog
                 {
                     XamlRoot = XamlRoot, Title = "That file wasn't added",
-                    Content = new TextBlock { Text = ex.Message, TextWrapping = TextWrapping.Wrap }, CloseButtonText = "OK"
+                    Content = new TextBlock { Text = Helpers.ScreenText.Clean(ex.Message), TextWrapping = TextWrapping.Wrap }, CloseButtonText = "OK"
                 }.ShowAsync();
             }
             finally { _dialogOpen = false; }
@@ -563,7 +563,7 @@ public sealed partial class SettingsPage : Page
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            SteamGridDbStatusText.Text = $"Couldn't save: {ex.Message}";
+            SteamGridDbStatusText.Text = $"Couldn't save: {Helpers.ScreenText.Clean(ex.Message)}";
             return;
         }
 
@@ -643,7 +643,7 @@ public sealed partial class SettingsPage : Page
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            RemoveFromGamesText.Text = $"Stopped: {ex.Message}";
+            RemoveFromGamesText.Text = $"Stopped: {Helpers.ScreenText.Clean(ex.Message)}";
         }
         finally
         {

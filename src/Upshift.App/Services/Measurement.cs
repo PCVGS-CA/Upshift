@@ -28,8 +28,6 @@ public static class Measurement
     private static GlobalHotkey? _hotkey;
     private static MeasureJob? _job;
     private static string? _directWorkDir;
-    /// <summary>This measurement takes over the overlay's capture (the same game was already shown with "Show overlay").</summary>
-    private static bool _viaLive;
     private static GameInfo? _game;
     private static Func<MeasuredSettings>? _snapshot;
     private static CancellationTokenSource? _armCts;
@@ -108,18 +106,6 @@ public static class Measurement
             return;
         }
 
-        // The overlay already captures this game: measuring takes over its PresentMon (no second capture, no prompt).
-        if (LiveOverlay.ActiveFor(game.Id))
-        {
-            _viaLive = true;
-            var slice = Path.Combine(AppServices.DataDir, "measure", Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(slice);
-            _job = new MeasureJob { WorkDir = slice, Seconds = _seconds };
-            RegisterStartKey(game);
-            return;
-        }
-        if (LiveOverlay.State != OverlayState.Off) LiveOverlay.Stop();   // another game's overlay: one capture at a time
-
         var (presentMon, problem) = await PresentMonAsync(s => Set(MeasureState.Preparing, $"Getting PresentMon: {s}", false), ct);
         if (presentMon is null)
         {
@@ -177,7 +163,7 @@ public static class Measurement
         catch (OperationCanceledException) { return (null, null); }
         catch (Exception ex) when (ex is Core.Components.ComponentDownloadException or IOException or UnauthorizedAccessException or InvalidOperationException or HttpRequestException)
         {
-            return (null, $"PresentMon couldn't be downloaded: {ex.Message}");
+            return (null, $"PresentMon couldn't be downloaded: {Helpers.ScreenText.Clean(ex.Message)}");
         }
     }
 
@@ -258,7 +244,7 @@ public static class Measurement
         if (State != MeasureState.Measuring || _job is not { } job) return;
         _hotkey?.Dispose();
         _hotkey = null;
-        if (_directWorkDir is not null || _viaLive) _stopCts?.Cancel();
+        if (_directWorkDir is not null) _stopCts?.Cancel();
         else try { File.WriteAllText(job.StopFile, "stop"); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         Set(MeasureState.Measuring, "Stopping and keeping what was recorded…", false);
     }
@@ -306,23 +292,14 @@ public static class Measurement
         // The same key now stops the run early.
         _hotkey = GlobalHotkey.TryRegister(AppServices.Settings.Current.MeasureHotkey);
         if (_hotkey is not null) _hotkey.Pressed += () => _ui?.TryEnqueue(StopEarly);
-        if (!_viaLive) StartOverlay(game, process, job.CsvFile, _seconds);
+        StartOverlay(game, process, job.CsvFile, _seconds);
 
         // Windows' own counters (GPU and CPU usage, video memory) for the same stretch. A missing counter only means a dash.
         using var sampler = SystemSampler.Start(process.Id);
 
         MeasureRunResult? result;
         var seconds = _seconds;
-        var viaLive = _viaLive;
-        var livePid = LiveOverlay.ProcessId;
-        if (viaLive)
-        {
-            // The overlay's PresentMon keeps running; this measurement is the stretch of its capture between now and the
-            // end (or the early stop), cut out into this measurement's own CSV.
-            _stopCts = new CancellationTokenSource();
-            result = await RecordFromLiveAsync(game, process, job, seconds, _stopCts.Token);
-        }
-        else if (_directWorkDir is not null)
+        if (_directWorkDir is not null)
         {
             _stopCts = new CancellationTokenSource();
             var stop = _stopCts.Token;
@@ -342,7 +319,7 @@ public static class Measurement
         _ = Task.Run(() => { Beep(1320, 120); Beep(880, 120); Beep(660, 220); });
 
         var gameClosed = process.HasExited;
-        var stats = await Task.Run(() => PresentMonCsv.Read(job.CsvFile, viaLive ? livePid ?? process.Id : process.Id));
+        var stats = await Task.Run(() => PresentMonCsv.Read(job.CsvFile, process.Id));
         DeleteWorkDir(TakeWorkDir());   // PresentMon has quit; its CSV and the job files go
 
         if (stats is null)
@@ -369,29 +346,6 @@ public static class Measurement
                (verdict is { } b ? $" {b.Title}{(b.LessCertain ? " (less certain)" : "")}." : "") +
                (stoppedEarly ? $" You stopped it early (of {Length(seconds)})." : "") +
                (gameClosed && !stoppedEarly ? $" The game closed before the end, so this covers less than {Length(seconds)}." : ""), problem: false);
-    }
-
-    /// <summary>The overlay's capture from now until the time is up, the early stop, the game closing or the overlay stopping.</summary>
-    private static async Task<MeasureRunResult?> RecordFromLiveAsync(GameInfo game, Process process, MeasureJob job, int seconds, CancellationToken stop)
-    {
-        if (LiveOverlay.BeginRecording(game.Id, seconds) is not { } from)
-            return new MeasureRunResult { Problem = $"The overlay isn't showing {game.Name} any more, so nothing was recorded." };
-        var until = DateTime.UtcNow.AddSeconds(seconds);
-        var stoppedEarly = false;
-        while (DateTime.UtcNow < until)
-        {
-            if (stop.IsCancellationRequested) { stoppedEarly = true; break; }
-            if (process.HasExited || !LiveOverlay.RunningFor(game.Id)) break;
-            await Task.Delay(200);
-        }
-        await Task.Delay(300);   // PresentMon writes in batches: let the last frames of the stretch land
-        var to = LiveOverlay.EndRecording();
-        try { await Task.Run(() => LiveFrames.Slice(from.Csv, from.Offset, to ?? long.MaxValue, job.CsvFile)); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return new MeasureRunResult { Problem = $"The overlay's capture couldn't be read: {ex.Message}" };
-        }
-        return new MeasureRunResult { Started = true, StoppedEarly = stoppedEarly };
     }
 
     /// <summary>Upshift's frame cap from the recorded settings ("60 fps"), or null for "No cap".</summary>
@@ -466,8 +420,24 @@ public static class Measurement
         var dir = _job?.WorkDir;
         _job = null;
         _directWorkDir = null;
-        _viaLive = false;
         return dir;
+    }
+
+    /// <summary>At start-up: measurement folders left by an earlier session (unwritten for an hour) are removed.</summary>
+    public static void CleanLeftovers()
+    {
+        try
+        {
+            var root = Path.Combine(AppServices.DataDir, "measure");
+            if (!Directory.Exists(root)) return;
+            foreach (var dir in Directory.EnumerateDirectories(root))
+            {
+                var newest = Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories).Select(File.GetLastWriteTimeUtc)
+                    .Append(Directory.GetLastWriteTimeUtc(dir)).Max();
+                if (DateTime.UtcNow - newest > TimeSpan.FromHours(1)) DeleteWorkDir(dir);
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { }
     }
 
     private static void DeleteWorkDir(string? dir)
@@ -484,8 +454,10 @@ public static class Measurement
 
     /// <summary>
     /// Shows the overlay on the game's screen, when "Show overlay while measuring" is on, and updates it four times a
-    /// second from the CSV PresentMon is writing. A game in exclusive fullscreen gets no overlay (it couldn't show), and
-    /// that's said once per game; measuring goes on either way.
+    /// second from the CSV being written (PresentMon's output, copied by Upshift into a file it can read meanwhile). Only
+    /// when PresentMon reports the game in exclusive fullscreen, where nothing can show on top, is the overlay taken
+    /// down and that said once per game; measuring goes on either way. (Windows' "full screen" notification state isn't
+    /// used: it's also set for borderless games, where the overlay shows fine.)
     /// </summary>
     private static void StartOverlay(GameInfo game, Process process, string csv, int seconds)
     {
@@ -502,15 +474,15 @@ public static class Measurement
         _ = Task.Run(async () =>
         {
             var live = new LiveFrames(csv, process.Id);
-            var exclusive = MeasureOverlay.ExclusiveFullscreenNow();
-            var overlay = exclusive ? null : MeasureOverlay.Show(window, corner);
+            var exclusive = false;
+            var overlay = MeasureOverlay.Show(window, corner);
             _overlay = overlay;
             try
             {
                 while (!cts.IsCancellationRequested)
                 {
                     var snap = live.Poll();
-                    if (!exclusive && (snap.ExclusiveFullscreen || MeasureOverlay.ExclusiveFullscreenNow()))
+                    if (!exclusive && snap.ExclusiveFullscreen)
                     {
                         exclusive = true;
                         overlay?.Dispose();
@@ -540,7 +512,7 @@ public static class Measurement
     }
 
     /// <summary>The exclusive-fullscreen sentence, once per game (remembered in settings.json).</summary>
-    public static void NoticeOnce(GameInfo game)
+    private static void NoticeOnce(GameInfo game)
     {
         var settings = AppServices.Settings.Current;
         if (settings.OverlayNoticeShown.Contains(game.Id)) return;
@@ -548,7 +520,7 @@ public static class Measurement
         AppServices.Settings.Save(settings);
         OverlayNotice = ExclusiveFullscreenText;
         OverlayNoticeGameId = game.Id;
-        (_ui ?? LiveOverlay.Ui)?.TryEnqueue(() => Changed?.Invoke());
+        _ui?.TryEnqueue(() => Changed?.Invoke());
     }
 
     private static void Finish(string message, bool problem)
@@ -565,7 +537,7 @@ public static class Measurement
     private static void Set(MeasureState state, string message, bool problem)
     {
         State = state;
-        Message = message;
+        Message = Helpers.ScreenText.Clean(message);
         MessageGameId = _game?.Id ?? MessageGameId;
         MessageIsProblem = problem;
         if (_ui is { } ui && !ui.HasThreadAccess) ui.TryEnqueue(() => Changed?.Invoke());

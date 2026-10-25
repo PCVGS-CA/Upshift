@@ -93,7 +93,7 @@ public static class RemoveFromGames
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 everyGameDone = false;
-                summary.Skipped.Add((game.Name, ex.Message));
+                summary.Skipped.Add((game.Name, Helpers.ScreenText.Clean(ex.Message)));
             }
         }
 

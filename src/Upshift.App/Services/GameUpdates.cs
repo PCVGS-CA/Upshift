@@ -333,10 +333,10 @@ public static class GameUpdates
         {
             InstallResult result;
             try { result = await work(); }
-            catch (ComponentDownloadException ex) { result = Fail(ex.Message); }
+            catch (ComponentDownloadException ex) { result = Fail(Helpers.ScreenText.Clean(ex.Message)); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
             {
-                result = Fail(ex.Message);
+                result = Fail(Helpers.ScreenText.Clean(ex.Message));
             }
             await AppServices.Library.ReanalyzeAsync(game.Id);
             LibraryChanged?.Invoke(game.Id);

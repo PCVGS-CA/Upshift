@@ -35,25 +35,24 @@ public sealed class LiveFrames
         public readonly Queue<double> Recent = new();
         public readonly Queue<double> Graph = new();
         public double GraphMs;
-        public string? Mode;
+        /// <summary>Frames in a row PresentMon reported in exclusive fullscreen (see <see cref="IsExclusive"/>).</summary>
+        public int ExclusiveRun;
     }
 
     /// <summary>Graph length: about this many milliseconds of frames.</summary>
     public const double GraphWindowMs = 5000;
 
-    /// <param name="startAt">
-    /// Count only frames written after this point of the file (a measurement taken over from the live overlay); the header
-    /// is still read from the start, and a line cut at that point is skipped.
-    /// </param>
-    public LiveFrames(string csvPath, int processId, long startAt = 0)
+    /// <summary>
+    /// Exclusive fullscreen only counts after this many frames in a row: a game switching modes, or a single odd frame,
+    /// never takes the overlay down.
+    /// </summary>
+    public const int ExclusiveFrames = 30;
+
+    public LiveFrames(string csvPath, int processId)
     {
         _csv = csvPath;
         _processId = processId;
-        _startAt = startAt;
     }
-
-    private readonly long _startAt;
-    private bool _skipToLineEnd;
 
     /// <summary>Reads what was added since the last call and returns the current figures.</summary>
     public LiveSnapshot Poll()
@@ -63,7 +62,7 @@ public sealed class LiveFrames
         var chain = _chains.Values.OrderByDescending(c => c.Frames).FirstOrDefault();
         if (chain is null || chain.Frames == 0) return new LiveSnapshot(0, null, null, null, false);
         double? fps = chain.LastSecondMs > 0 ? chain.LastSecond.Count * 1000.0 / chain.LastSecondMs : null;
-        return new LiveSnapshot(chain.Frames, fps, LowFps(chain), chain.Recent.Count == 0 ? null : chain.Recent.Average(), IsExclusive(chain.Mode))
+        return new LiveSnapshot(chain.Frames, fps, LowFps(chain), chain.Recent.Count == 0 ? null : chain.Recent.Average(), chain.ExclusiveRun >= ExclusiveFrames)
             { Graph = chain.Graph.ToArray() };
     }
 
@@ -80,14 +79,6 @@ public sealed class LiveFrames
         if (!File.Exists(_csv)) return;
         using var stream = new FileStream(_csv, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         if (stream.Length < _position) { _position = 0; _partial.Clear(); }   // a new file
-        if (_columns is null && _startAt > 0 && _position == 0)
-        {
-            // The header first, then on to where counting starts.
-            using (var reader = new StreamReader(stream, Encoding.UTF8, true, 4096, leaveOpen: true))
-                if (reader.ReadLine() is { } header) Header(header); else return;
-            _position = _startAt;
-            _skipToLineEnd = true;
-        }
         if (stream.Length <= _position) return;
         stream.Seek(_position, SeekOrigin.Begin);
         var buffer = new byte[Math.Min(stream.Length - _position, 4 * 1024 * 1024)];
@@ -95,14 +86,6 @@ public sealed class LiveFrames
         _position += read;
         _partial.Append(Encoding.UTF8.GetString(buffer, 0, read));
         var text = _partial.ToString();
-        if (_skipToLineEnd)
-        {
-            var end = text.IndexOf('\n');
-            if (end < 0) { _partial.Clear(); return; }
-            text = text[(end + 1)..];
-            _partial.Clear().Append(text);
-            _skipToLineEnd = false;
-        }
         var lastBreak = text.LastIndexOf('\n');
         if (lastBreak < 0) return;
         _partial.Clear().Append(text[(lastBreak + 1)..]);   // an unfinished line waits for the rest
@@ -146,29 +129,7 @@ public sealed class LiveFrames
         chain.Graph.Enqueue(ms);
         chain.GraphMs += ms;
         while (chain.GraphMs > GraphWindowMs && chain.Graph.Count > 1) chain.GraphMs -= chain.Graph.Dequeue();
-        if (_modeCol >= 0 && _modeCol < cells.Length) chain.Mode = cells[_modeCol].Trim();
-    }
-
-    /// <summary>
-    /// A measurement taken from the live overlay's capture: the header plus the whole lines written between two points
-    /// of the file, as a CSV of its own (for <see cref="PresentMonCsv.Read"/>). Lines cut at either point are left out.
-    /// </summary>
-    public static void Slice(string csv, long from, long to, string output)
-    {
-        using var stream = new FileStream(csv, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        using var reader = new StreamReader(stream, Encoding.UTF8, true, 65536, leaveOpen: true);
-        var header = reader.ReadLine() ?? "";
-        to = Math.Min(to, stream.Length);
-        if (to <= from) { File.WriteAllText(output, header + "\r\n"); return; }
-        stream.Seek(from, SeekOrigin.Begin);
-        var buffer = new byte[to - from];
-        stream.ReadExactly(buffer);
-        var text = Encoding.UTF8.GetString(buffer);
-        var first = from == 0 ? 0 : text.IndexOf('\n') + 1;
-        var last = text.LastIndexOf('\n');
-        var body = first > 0 && last >= first ? text[first..(last + 1)] : first == 0 && last >= 0 ? text[..(last + 1)] : "";
-        if (from == 0) body = body[(body.IndexOf('\n') + 1)..];   // the header is already written
-        File.WriteAllText(output, header + "\r\n" + body);
+        chain.ExclusiveRun = _modeCol >= 0 && _modeCol < cells.Length && IsExclusive(cells[_modeCol].Trim()) ? chain.ExclusiveRun + 1 : 0;
     }
 
     /// <summary>The slowest 1% of frames so far (at least one), averaged, as a frame rate: the same rule as the saved result.</summary>

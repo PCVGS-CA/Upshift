@@ -97,7 +97,7 @@ public static class InstallRunner
         }
         catch (Exception ex)
         {
-            result = new InstallResult { Message = $"The admin helper failed: {ex.Message}" };
+            result = new InstallResult { Message = $"The admin helper failed: {Helpers.ScreenText.Clean(ex.Message)}" };
         }
 
         if (!result.Success) log.Write("  admin helper: " + result.Message);

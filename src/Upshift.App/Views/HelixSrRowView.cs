@@ -66,7 +66,7 @@ public sealed class HelixSrRowView : UserControl
         {
             _body.Children.Clear();
             _body.Children.Add(new TextBlock { Text = $"{HelixSr.RowName} ({HelixSr.Experimental}, {StillInTesting.ToLowerInvariant()}): Not set up", FontWeight = FontWeights.SemiBold });
-            _body.Children.Add(Line($"Upshift couldn't show HelixSR's state: {ex.Message}"));
+            _body.Children.Add(Line($"Upshift couldn't show HelixSR's state: {Helpers.ScreenText.Clean(ex.Message)}"));
         }
     }
 
@@ -335,7 +335,7 @@ public sealed class HelixSrRowView : UserControl
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             _removeFailed = true;
-            _removeMessage = $"Something went wrong: {ex.Message} No game was changed by it.";
+            _removeMessage = $"Something went wrong: {Helpers.ScreenText.Clean(ex.Message)} No game was changed by it.";
             Refresh();
         }
     }

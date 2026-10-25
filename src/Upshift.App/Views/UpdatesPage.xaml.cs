@@ -647,7 +647,7 @@ public sealed partial class UpdatesPage : Page
             foreach (var m in members)
             {
                 try { store.Remove(m, picked!.Tag); }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { state.Message = $"Couldn't remove it: {ex.Message}"; }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { state.Message = $"Couldn't remove it: {Helpers.ScreenText.Clean(ex.Message)}"; }
             }
             state.Message ??= $"Removed the downloaded copy of {picked!.Tag}. Games it's installed in are not affected.";
             RefreshRowInPlace(primary, members, state);
@@ -770,7 +770,7 @@ public sealed partial class UpdatesPage : Page
             // "nightly-20261023" reads as "Test build (23 Oct 2026)".
             _testMessage = $"{game.Name}: " + Regex.Replace(result.Message, @"nightly-\d{8}", m => OptiScalerOptions.TestBuildLabel(m.Value));
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { _testMessage = $"{game.Name}: {ex.Message}"; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { _testMessage = $"{game.Name}: {Helpers.ScreenText.Clean(ex.Message)}"; }
         finally
         {
             _testBusy = false;
@@ -890,7 +890,7 @@ public sealed partial class UpdatesPage : Page
                 foreach (var copy in AppServices.Components.Downloaded(primary))
                 {
                     try { AppServices.Components.Remove(primary, copy.Version); }
-                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { state.Message = $"Couldn't remove it: {ex.Message}"; }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { state.Message = $"Couldn't remove it: {Helpers.ScreenText.Clean(ex.Message)}"; }
                 }
                 state.Message ??= "Removed. Only the single files games use are kept.";
                 Rebuild();
@@ -932,11 +932,11 @@ public sealed partial class UpdatesPage : Page
         }
         catch (ComponentDownloadException ex)
         {
-            state.Message = ex.Message;
+            state.Message = Helpers.ScreenText.Clean(ex.Message);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or HttpRequestException)
         {
-            state.Message = $"The download failed: {ex.Message}";
+            state.Message = $"The download failed: {Helpers.ScreenText.Clean(ex.Message)}";
         }
         finally
         {
@@ -1008,11 +1008,11 @@ public sealed partial class UpdatesPage : Page
         }
         catch (ComponentDownloadException ex)
         {
-            state.Message = ex.Message;
+            state.Message = Helpers.ScreenText.Clean(ex.Message);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
-            state.Message = $"The download failed: {ex.Message}";
+            state.Message = $"The download failed: {Helpers.ScreenText.Clean(ex.Message)}";
         }
         finally
         {

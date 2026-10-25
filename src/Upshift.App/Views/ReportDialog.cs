@@ -43,7 +43,7 @@ public static class ReportDialog
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            await show(new ContentDialog { XamlRoot = root, Title = "The report wasn't saved", Content = Text(ex.Message), CloseButtonText = "OK" });
+            await show(new ContentDialog { XamlRoot = root, Title = "The report wasn't saved", Content = Text(Helpers.ScreenText.Clean(ex.Message)), CloseButtonText = "OK" });
             return;
         }
         try { Process.Start("explorer.exe", $"/select,\"{path}\"")?.Dispose(); } catch (Exception) { }
