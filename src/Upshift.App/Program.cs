@@ -213,7 +213,7 @@ public static class Program
             var left = Math.Max(0, seconds - (int)(DateTime.UtcNow - since).TotalSeconds);
             overlay.Update($"{left / 60}:{left % 60:00} left",
                 snap.Fps is { } fps ? $"FPS {Math.Round(fps)}" + (snap.LowFps is { } low ? $"  ·  1% low {Math.Round(low)}" : "") : "FPS –",
-                snap.FrameMs is { } ms ? $"Frame time {ms:0.0} ms" : "Waiting for frames…");
+                snap.FrameMs is { } ms ? $"Frame time {ms:0.0} ms" : "Waiting for frames…", snap.Graph);
             Thread.Sleep(250);
         }
         overlay.Dispose();

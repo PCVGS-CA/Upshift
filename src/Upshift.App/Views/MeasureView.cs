@@ -34,8 +34,8 @@ public sealed class MeasureView : UserControl
 
     public MeasureView()
     {
-        Loaded += (_, _) => Measurement.Changed += Build;
-        Unloaded += (_, _) => Measurement.Changed -= Build;
+        Loaded += (_, _) => { Measurement.Changed += Build; LiveOverlay.Changed += Build; };
+        Unloaded += (_, _) => { Measurement.Changed -= Build; LiveOverlay.Changed -= Build; };
     }
 
     private void Build()
@@ -242,15 +242,26 @@ public sealed class MeasureView : UserControl
     // ---------------- Measure this game ----------------
 
     /// <summary>
-    /// "Show overlay while measuring" and its corner. The overlay is Upshift's own small window over the game (nothing is
-    /// injected), for every game; Shift + the measuring key hides and shows it.
+    /// "Show overlay" (any time, without measuring), "Show overlay while measuring" and the corner. The overlay is Upshift's
+    /// own small window over the game (nothing is injected), for every game; Shift + the measuring key hides and shows it.
+    /// It isn't hidden from screen capture, so a recorder that captures the screen includes it.
     /// </summary>
-    private static FrameworkElement OverlayRow()
+    private static FrameworkElement OverlayRow(GameCardViewModel card)
     {
         var settings = AppServices.Settings.Current;
+        var gameId = card.Info.Id;
+        var always = new ToggleSwitch { Header = "Show overlay", IsOn = LiveOverlay.ActiveFor(gameId) };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(always, "Show overlay");
+        ToolTipService.SetToolTip(always, "Live FPS, 1% low and frame times over the game, without measuring. Nothing is saved.");
+        always.Toggled += async (_, _) =>
+        {
+            if (always.IsOn == LiveOverlay.ActiveFor(gameId)) return;
+            if (always.IsOn) await LiveOverlay.StartAsync(card.Info);
+            else LiveOverlay.Stop();
+        };
         var toggle = new ToggleSwitch { Header = "Show overlay while measuring", IsOn = settings.MeasureOverlay };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(toggle, "Show overlay while measuring");
-        var corner = new ComboBox { Header = "Corner", MinWidth = 150, IsEnabled = settings.MeasureOverlay };
+        var corner = new ComboBox { Header = "Corner", MinWidth = 150 };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(corner, "Overlay corner");
         foreach (var (value, label) in new[] { ("TopLeft", "Top left"), ("TopRight", "Top right"), ("BottomLeft", "Bottom left"), ("BottomRight", "Bottom right") })
             corner.Items.Add(new ComboBoxItem { Content = label, Tag = value });
@@ -261,7 +272,6 @@ public sealed class MeasureView : UserControl
             var s = AppServices.Settings.Current;
             s.MeasureOverlay = toggle.IsOn;
             AppServices.Settings.Save(s);
-            corner.IsEnabled = toggle.IsOn;
         };
         corner.SelectionChanged += (_, _) =>
         {
@@ -270,12 +280,18 @@ public sealed class MeasureView : UserControl
             s.OverlayCorner = tag;
             AppServices.Settings.Save(s);
         };
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 16, Children = { toggle, corner } };
-        return new StackPanel
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 16, Children = { always, toggle, corner } };
+        var panel = new StackPanel { Spacing = 2, Children = { row, Subtle($"Live FPS in a corner of the game. {Measurement.OverlayKeyName} hides it.") } };
+        if (LiveOverlay.MessageGameId == gameId && LiveOverlay.Message.Length > 0)
+            panel.Children.Add(new TextBlock { Text = LiveOverlay.Message, FontSize = 12, TextWrapping = TextWrapping.Wrap });
+        // Said in full (not shortened to a tooltip): it answers "why isn't it in my video?".
+        panel.Children.Add(new TextBlock
         {
-            Spacing = 2,
-            Children = { row, Subtle($"Live FPS in a corner of the game. {Measurement.OverlayKeyName} hides it.") }
-        };
+            FontSize = 12, TextWrapping = TextWrapping.Wrap, Foreground = Res("SubtleTextBrush"), Margin = new Thickness(0, 2, 0, 0),
+            Text = "To record it in a video, use borderless or windowed mode and your recorder's screen or display capture. " +
+                   "Game-only capture (OBS Game Capture, Xbox Game Bar) won't include it."
+        });
+        return panel;
     }
 
     private FrameworkElement Controls(GameCardViewModel card)
@@ -344,7 +360,7 @@ public sealed class MeasureView : UserControl
                 panel.Children.Add(Subtle("A measurement is armed for another game; this replaces it."));
         }
         panel.Children.Add(buttons);
-        panel.Children.Add(OverlayRow());
+        panel.Children.Add(OverlayRow(card));
         if (Measurement.OverlayNoticeGameId == card.Info.Id && Measurement.OverlayNotice is { } notice)
             panel.Children.Add(new InfoBar { IsOpen = true, IsClosable = true, Severity = InfoBarSeverity.Warning, Message = notice });
 

@@ -16,6 +16,11 @@ public sealed class MeasureJob
     /// <summary>The folder for this measurement (start signal, cancel signal, CSV, result).</summary>
     public string WorkDir { get; set; } = "";
     public int Seconds { get; set; } = MeasureThresholds.MeasureSeconds;
+    /// <summary>
+    /// "Show overlay": PresentMon runs untimed until it's stopped or the game exits; nothing is saved (the folder goes
+    /// afterwards). Seconds is ignored.
+    /// </summary>
+    public bool Live { get; set; }
     /// <summary>The main Upshift window's process: the helper quits when it's gone.</summary>
     public int ParentProcessId { get; set; }
     /// <summary>The helper gives up waiting after this.</summary>
@@ -46,6 +51,8 @@ public static class PresentMonRunner
 {
     public static readonly string[] IntelSigners = { "Intel Corporation" };
     private const string SessionName = "UpshiftMeasure";
+    /// <summary>The live overlay's own trace session, so a measurement never stops it and the other way round.</summary>
+    public const string LiveSessionName = "UpshiftOverlay";
 
     /// <summary>
     /// PresentMon can read frame timings without a prompt when Upshift already runs elevated or the user is in the
@@ -69,8 +76,10 @@ public static class PresentMonRunner
     /// isn't wanted); <paramref name="stop"/> stops early and keeps what was recorded: PresentMon's trace session is
     /// ended, so PresentMon finishes its file and quits by itself (it's only killed if it hasn't after 8 seconds).
     /// </summary>
-    public static MeasureRunResult Run(string presentMon, int processId, string csv, int seconds, CancellationToken ct, CancellationToken stop = default)
+    public static MeasureRunResult Run(string presentMon, int processId, string csv, int seconds, CancellationToken ct, CancellationToken stop = default,
+        bool live = false)
     {
+        var session = live ? LiveSessionName : SessionName;
         var result = new MeasureRunResult();
         var info = new ProcessStartInfo
         {
@@ -79,11 +88,12 @@ public static class PresentMonRunner
             RedirectStandardError = true, RedirectStandardOutput = true,
             WorkingDirectory = Path.GetDirectoryName(csv)!
         };
-        foreach (var arg in new[]
+        // Live (the overlay): no time limit; PresentMon ends with the game (or when it's stopped).
+        var timing = live ? new[] { "--terminate_on_proc_exit" } : new[] { "--timed", seconds.ToString(), "--terminate_after_timed" };
+        foreach (var arg in new[] { "--process_id", processId.ToString(), "--output_file", csv }.Concat(timing).Concat(new[]
                  {
-                     "--process_id", processId.ToString(), "--output_file", csv, "--timed", seconds.ToString(), "--terminate_after_timed",
-                     "--no_console_stats", "--track_frame_type", "--session_name", SessionName, "--stop_existing_session"
-                 })
+                     "--no_console_stats", "--track_frame_type", "--session_name", session, "--stop_existing_session"
+                 }))
             info.ArgumentList.Add(arg);
 
         using var process = Process.Start(info);
@@ -96,7 +106,7 @@ public static class PresentMonRunner
         process.BeginOutputReadLine();
 
         var exited = process.WaitForExitAsync();
-        var deadline = Task.Delay(TimeSpan.FromSeconds(seconds + 20));
+        var deadline = live ? Task.Delay(Timeout.Infinite) : Task.Delay(TimeSpan.FromSeconds(seconds + 20));
         var cancelled = Task.Delay(Timeout.Infinite, ct);
         var stopped = Task.Delay(Timeout.Infinite, stop);
         var first = Task.WhenAny(exited, deadline, cancelled, stopped).GetAwaiter().GetResult();
@@ -104,7 +114,7 @@ public static class PresentMonRunner
         {
             // Stop early, keeping the frames: end the trace session; PresentMon writes the rest and quits.
             result.StoppedEarly = true;
-            StopSession(presentMon);
+            StopSession(presentMon, session);
             if (!exited.Wait(TimeSpan.FromSeconds(8)))
                 try { process.Kill(entireProcessTree: true); } catch (Exception) { }
         }
@@ -112,7 +122,7 @@ public static class PresentMonRunner
         {
             result.TimedOut = first == deadline;
             try { process.Kill(entireProcessTree: true); } catch (Exception) { }
-            StopSession(presentMon);
+            StopSession(presentMon, session);
         }
         process.WaitForExit(5000);
         result.ExitCode = process.HasExited ? process.ExitCode : -1;
@@ -120,15 +130,18 @@ public static class PresentMonRunner
         return result;
     }
 
+    /// <summary>Ends the live overlay's trace session, so its PresentMon finishes and quits (Upshift closing, the switch off).</summary>
+    public static void StopLiveSession(string presentMon) => StopSession(presentMon, LiveSessionName);
+
     /// <summary>Ends Upshift's PresentMon trace session if one is still open (after a forced stop).</summary>
-    private static void StopSession(string presentMon)
+    private static void StopSession(string presentMon, string session)
     {
         try
         {
             using var stop = Process.Start(new ProcessStartInfo(presentMon)
             {
                 UseShellExecute = false, CreateNoWindow = true,
-                ArgumentList = { "--terminate_existing_session", "--session_name", SessionName }
+                ArgumentList = { "--terminate_existing_session", "--session_name", session }
             });
             stop?.WaitForExit(5000);
         }
@@ -147,7 +160,7 @@ public static class PresentMonRunner
         if (!File.Exists(jobPath) || OptiScalerInstaller.Sha256(jobPath) != expectedHash) return 2;
         var job = JsonSerializer.Deserialize<MeasureJob>(File.ReadAllText(jobPath));
         if (job is null) return 2;
-        if (job.Seconds is < MeasureThresholds.MinSeconds or > MeasureThresholds.MaxSeconds) return 2;
+        if (!job.Live && job.Seconds is < MeasureThresholds.MinSeconds or > MeasureThresholds.MaxSeconds) return 2;
         var result = new MeasureRunResult();
         try
         {
@@ -178,7 +191,7 @@ public static class PresentMonRunner
                                 await Task.Delay(250);
                             }
                         });
-                        result = Run(job.PresentMonPath, pid, job.CsvFile, job.Seconds, cancel.Token, stop.Token);
+                        result = Run(job.PresentMonPath, pid, job.CsvFile, job.Seconds, cancel.Token, stop.Token, job.Live);
                         done.Cancel();
                         break;
                     }

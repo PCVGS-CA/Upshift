@@ -818,9 +818,8 @@ errors and no warnings.
     GetAsyncKeyState(Shift), so F10 and Shift+F10 never trigger each other. Settings `MeasureOverlay` (on by default),
     `OverlayCorner` (TopRight). MeasureView: switch + corner under the Measure button, "Works in any game, with or without
     OptiScaler." Debug-only `Upshift.exe --overlay-test <corner> <csv> [seconds]` (pid 4242 in the CSV).
-  - **CapFrameX:** `App/Services/CapFrameX.cs` (uninstall entries HKLM/HKCU incl. WOW6432Node → InstallLocation or
-    DisplayIcon, else Program Files\CapFrameX; shell start only). `Views/CompanionToolView.cs` (was ScsKillerView; `Tool`
-    = "SCSKiller" | "CapFrameX"), both on the Performance tab's right column.
+  - **CapFrameX:** added in 1.5.0, **removed in 1.6.0** (the user's call): `Services/CapFrameX.cs` deleted,
+    `Views/CompanionToolView.cs` is SCSKiller only again.
   - Tested: harness 189 (section 20: cut lines, pid/swap-chain filter, FPS, 1% low vs the saved result, exclusive modes),
     `hooktest` 9 (Shift+F13 vs F13), the overlay via `--overlay-test` with a script writing a fake capture (top right and
     bottom left: exstyle 0x080800A8, never foreground, clicks pass through, live figures drawn), the Performance tab and
@@ -848,6 +847,39 @@ errors and no warnings.
     Fsr4ForceEnableInt8) → nightly → uninstall leaves only the game's files); the app on throwaway data: switch, Updates
     block, Install test build (real download), the model picker, Back to stable (exact undo). `helixtest extract <7z> <dir>`
     unpacks archives. Not tested: AMD hardware, a real game on a test build.
+
+- **1.5.0 released (2026-10-23)** as the stable release at the user's request (tag v1.5.0, main = dd79ddc).
+- **1.6.0 (2026-10-24), test build 1.6.0-test.1, not released: "Show overlay".**
+  - `App/Services/LiveOverlay.cs` (states Off / Preparing / WaitingForGame / Running): `Measurement.PresentMonAsync` (shared
+    download + Intel signature), `Measurement.StartHelperAsync` (shared UAC helper start), `MeasureJob.Live` (helper and
+    `PresentMonRunner.Run(…, live: true)`: no `--timed`, `--terminate_on_proc_exit`, session `UpshiftOverlay` so measuring's
+    `UpshiftMeasure --stop_existing_session` never kills it). Waits for `Measurement.FindGame`, then captures; ends when the
+    switch goes off, the game exits, or Upshift closes (`MainWindow.Closed` → `Stop` → `PresentMonRunner.StopLiveSession`
+    for direct captures; the helper sees cancel/parent gone). Its folder is deleted; `LiveOverlay.CleanLeftovers` (start-up)
+    removes `data\measure\*` folders unwritten for an hour. A game without ExePath/LaunchExePath gets a message instead of
+    waiting forever. Measuring another game stops it first.
+  - **Handover:** `Measurement.ArmAsync` with `LiveOverlay.ActiveFor(game)` → `_viaLive` (no PresentMon, no prompt);
+    `RecordFromLiveAsync` = `LiveOverlay.BeginRecording` (file offset; the overlay shows the dot, time left and a
+    `LiveFrames(csv, pid, startAt)` for the recording only) … `EndRecording` → `LiveFrames.Slice(csv, from, to, job.CsvFile)`
+    (header + whole lines between) → the usual `PresentMonCsv.Read`.
+  - Overlay: `MeasureOverlay` is 118 px high with a frame-time graph (`LiveSnapshot.Graph` = last ~5 s; x = time, top =
+    max(33 ms, 2× median, max×1.1), median line), `Update(…, graph, recording)` (no dot when live), `Follow(window)`.
+    **Fix (also in 1.5.0):** Dispose cleared `_hwnd` before the window thread's `DestroyWindow(_hwnd)`, so the measuring
+    overlay stayed on screen until Upshift closed; now `DestroyWindow(msg.hwnd)`.
+  - Not hidden from capture (no SetWindowDisplayAffinity). Windows' `Process.MainWindowHandle` for Upshift can be the
+    overlay while it shows (UI scripts: find `WinUIDesktopWin32WindowClass` and post WM_CLOSE to it; `ui2.ps1` does now).
+  - MeasureView: "Show overlay" switch (session-only) + "Show overlay while measuring" + corner (always enabled), the
+    overlay's message, and the recording hint in full.
+  - **Debug-only `UPSHIFT_TEST_PRESENTMON`**: a stand-in PresentMon (scratchpad `fakepm`, writes rows for `--process_id`,
+    honours `--timed`, `--terminate_on_proc_exit`, `--terminate_existing_session`), used directly (no helper, no prompt).
+    The scan skips exes named like "overlay" (GameOverlayUI): stand-in games need another name (`Frame Lab`).
+  - Tested: harness 211 (section 22: graph window, take-over offset mid-line, slices, live/measuring args and stops with the
+    stand-in); the app on throwaway data with the stand-ins: switch → waits → overlay with graph; measuring takes over (one
+    PresentMon, dot + time left, result saved, back to Live); switch off / game closed / Upshift closed → overlay and
+    PresentMon gone; a plain measurement's overlay gone afterwards. Not tested: real PresentMon (UAC) and a real game,
+    exclusive fullscreen.
+  - **This PC now has an AMD Radeon RX 9070 XT** (Adrenalin 26.10.1; seen 2026-10-24) plus Intel UHD 730. The harness's
+    "live counters … video memory" check fails on it: dedicated-memory peak reads 0 MB (Measure's VRAM figure on AMD).
 
 ## Next
 

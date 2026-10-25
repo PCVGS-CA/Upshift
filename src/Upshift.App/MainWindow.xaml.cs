@@ -47,6 +47,10 @@ public sealed partial class MainWindow : Window
         AppUpdateBar.Closed += (_, _) => _appUpdateBarDismissed = true;
         _ = Task.Run(Services.AppUpdates.StartupAsync);
 
+        // "Show overlay": its capture never outlives the window; leftovers of an earlier session are removed.
+        Closed += (_, _) => Services.LiveOverlay.Stop(silent: true);
+        _ = Task.Run(Services.LiveOverlay.CleanLeftovers);
+
         // A newer graphics driver (one lookup a day; a failed one shows nothing).
         Services.DriverUpdates.Changed += () => DispatcherQueue.TryEnqueue(ShowDriverUpdate);
         _ = Task.Run(Services.DriverUpdates.StartupAsync);

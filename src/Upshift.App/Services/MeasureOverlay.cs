@@ -20,7 +20,9 @@ public sealed class MeasureOverlay : IDisposable
     private const uint SwpNoActivate = 0x0010, SwpShowWindow = 0x0040, SwpHideWindow = 0x0080;
     private const uint LwaAlpha = 0x2;
     private static readonly IntPtr HwndTopmost = new(-1);
-    private const int Width = 230, Height = 76, Margin = 16;
+    private const int Width = 230, Height = 118, Margin = 16;
+    /// <summary>The frame-time graph's box inside the window (unscaled pixels).</summary>
+    private const int GraphLeft = 12, GraphTop = 74, GraphRight = Width - 12, GraphBottom = Height - 10;
 
     private static readonly WndProc Proc = WindowProc;   // kept alive while Windows calls it
     private static readonly Dictionary<IntPtr, MeasureOverlay> Windows = new();
@@ -30,13 +32,15 @@ public sealed class MeasureOverlay : IDisposable
     private readonly ManualResetEventSlim _ready = new();
     private readonly object _sync = new();
     private IntPtr _hwnd;
-    private readonly IntPtr _gameWindow;
+    private IntPtr _gameWindow;
     private Corner _corner;
 
     // What to draw (set under _sync).
     private string _status = "REC";
     private string _line1 = "FPS –";
     private string _line2 = "";
+    private double[] _graph = Array.Empty<double>();
+    private bool _recording = true;
     private bool _visible = true;
 
     private MeasureOverlay(IntPtr gameWindow, Corner corner)
@@ -60,10 +64,18 @@ public sealed class MeasureOverlay : IDisposable
     public static Corner ParseCorner(string? text) => Enum.TryParse<Corner>(text, true, out var c) ? c : Corner.TopRight;
 
     /// <summary>"0:42 left", "FPS 143 · 1% low 98", "Frame time 7.0 ms".</summary>
-    public void Update(string status, string line1, string line2)
+    /// <param name="graph">The last ~5 seconds of frame times (ms), oldest first.</param>
+    /// <param name="recording">The red dot: on while a measurement records, off for the plain overlay.</param>
+    public void Update(string status, string line1, string line2, IReadOnlyList<double>? graph = null, bool recording = true)
     {
-        lock (_sync) { (_status, _line1, _line2) = (status, line1, line2); }
+        lock (_sync) { (_status, _line1, _line2, _graph, _recording) = (status, line1, line2, graph?.ToArray() ?? Array.Empty<double>(), recording); }
         Post();
+    }
+
+    /// <summary>The game's window once it has one (a game can start without a window): the overlay moves to its screen.</summary>
+    public void Follow(IntPtr gameWindow)
+    {
+        if (gameWindow != IntPtr.Zero) lock (_sync) _gameWindow = gameWindow;
     }
 
     /// <summary>Shift + the measuring key: hidden and shown again; measuring goes on either way.</summary>
@@ -106,7 +118,8 @@ public sealed class MeasureOverlay : IDisposable
 
         while (GetMessage(out var msg, IntPtr.Zero, 0, 0) > 0)
         {
-            if (msg.message == WmQuitLoop) { DestroyWindow(_hwnd); continue; }
+            // The message's own window: Dispose has already cleared _hwnd by the time this arrives.
+            if (msg.message == WmQuitLoop) { DestroyWindow(msg.hwnd); continue; }
             TranslateMessage(ref msg);
             DispatchMessage(ref msg);
         }
@@ -155,7 +168,9 @@ public sealed class MeasureOverlay : IDisposable
     private void Paint(IntPtr hwnd)
     {
         string status, line1, line2;
-        lock (_sync) (status, line1, line2) = (_status, _line1, _line2);
+        double[] graph;
+        bool recording;
+        lock (_sync) (status, line1, line2, graph, recording) = (_status, _line1, _line2, _graph, _recording);
         var dc = BeginPaint(hwnd, out var ps);
         try
         {
@@ -166,22 +181,26 @@ public sealed class MeasureOverlay : IDisposable
             FillRect(dc, ref rect, back);
             DeleteObject(back);
 
-            // The recording dot.
-            var red = CreateSolidBrush(0x003C3CE8);    // #E83C3C
-            var oldBrush = SelectObject(dc, red);
-            var nullPen = GetStockObject(8 /* NULL_PEN */);
-            var oldPen = SelectObject(dc, nullPen);
-            Ellipse(dc, S(12), S(10), S(23), S(21));
-            SelectObject(dc, oldPen);
-            SelectObject(dc, oldBrush);
-            DeleteObject(red);
+            // The recording dot (only while a measurement records).
+            if (recording)
+            {
+                var red = CreateSolidBrush(0x003C3CE8);    // #E83C3C
+                var oldBrush = SelectObject(dc, red);
+                var nullPen = GetStockObject(8 /* NULL_PEN */);
+                var oldPen = SelectObject(dc, nullPen);
+                Ellipse(dc, S(12), S(10), S(23), S(21));
+                SelectObject(dc, oldPen);
+                SelectObject(dc, oldBrush);
+                DeleteObject(red);
+            }
+            DrawGraph(dc, graph, S);
 
             SetBkMode(dc, 1 /* TRANSPARENT */);
             var bold = CreateFont(-S(15), 0, 0, 0, 600, 0, 0, 0, 1, 0, 0, 5 /* CLEARTYPE */, 0, "Segoe UI");
             var normal = CreateFont(-S(14), 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, "Segoe UI");
             var old = SelectObject(dc, bold);
             SetTextColor(dc, 0x00FFFFFF);
-            TextOut(dc, S(30), S(7), status, status.Length);
+            TextOut(dc, S(recording ? 30 : 12), S(7), status, status.Length);
             TextOut(dc, S(12), S(29), line1, line1.Length);
             SelectObject(dc, normal);
             SetTextColor(dc, 0x00D8D4D0);
@@ -191,6 +210,45 @@ public sealed class MeasureOverlay : IDisposable
             DeleteObject(normal);
         }
         finally { EndPaint(hwnd, ref ps); }
+    }
+
+    /// <summary>
+    /// The frame-time graph: time runs left to right over the last ~5 seconds, frame time upwards, so a stutter is a
+    /// spike. The top is at least 33 ms and at least twice the median frame time; a faint line marks the median.
+    /// </summary>
+    private static void DrawGraph(IntPtr dc, double[] graph, Func<double, int> S)
+    {
+        var frame = CreateSolidBrush(0x00302A28);   // a slightly lighter box
+        var box = new RECT { Left = S(GraphLeft), Top = S(GraphTop), Right = S(GraphRight), Bottom = S(GraphBottom) };
+        FillRect(dc, ref box, frame);
+        DeleteObject(frame);
+        if (graph.Length < 2) return;
+        var sorted = graph.OrderBy(v => v).ToArray();
+        var median = sorted[sorted.Length / 2];
+        var top = Math.Max(Math.Max(33.4, median * 2), sorted[^1] * 1.1);
+        var total = graph.Sum();
+        double width = GraphRight - GraphLeft, height = GraphBottom - GraphTop;
+        int Y(double ms) => S(GraphBottom - Math.Min(ms, top) / top * height);
+
+        var medianPen = CreatePen(0, 1, 0x00585250);
+        var oldPen = SelectObject(dc, medianPen);
+        MoveToEx(dc, S(GraphLeft), Y(median), IntPtr.Zero);
+        LineTo(dc, S(GraphRight), Y(median));
+        SelectObject(dc, oldPen);
+        DeleteObject(medianPen);
+
+        var points = new POINT[graph.Length];
+        double clock = 0;
+        for (var i = 0; i < graph.Length; i++)
+        {
+            clock += graph[i];
+            points[i] = new POINT { X = S(GraphLeft + clock / total * width), Y = Y(graph[i]) };
+        }
+        var line = CreatePen(0, Math.Max(1, S(1.5)), 0x00A8B63F);   // #3FB6A8
+        oldPen = SelectObject(dc, line);
+        Polyline(dc, points, points.Length);
+        SelectObject(dc, oldPen);
+        DeleteObject(line);
     }
 
     public void Dispose()
@@ -221,6 +279,7 @@ public sealed class MeasureOverlay : IDisposable
     }
 
     [StructLayout(LayoutKind.Sequential)] private struct RECT { public int Left, Top, Right, Bottom; }
+    [StructLayout(LayoutKind.Sequential)] private struct POINT { public int X, Y; }
     [StructLayout(LayoutKind.Sequential)] private struct MONITORINFO { public int cbSize; public RECT rcMonitor, rcWork; public uint dwFlags; }
     [StructLayout(LayoutKind.Sequential)] private struct MSG { public IntPtr hwnd; public int message; public IntPtr wParam, lParam; public uint time; public int x, y; }
 
@@ -259,6 +318,10 @@ public sealed class MeasureOverlay : IDisposable
     [DllImport("gdi32.dll")] private static extern bool DeleteObject(IntPtr obj);
     [DllImport("gdi32.dll")] private static extern IntPtr GetStockObject(int index);
     [DllImport("gdi32.dll")] private static extern bool Ellipse(IntPtr dc, int left, int top, int right, int bottom);
+    [DllImport("gdi32.dll")] private static extern IntPtr CreatePen(int style, int width, uint color);
+    [DllImport("gdi32.dll")] private static extern bool MoveToEx(IntPtr dc, int x, int y, IntPtr previous);
+    [DllImport("gdi32.dll")] private static extern bool LineTo(IntPtr dc, int x, int y);
+    [DllImport("gdi32.dll")] private static extern bool Polyline(IntPtr dc, POINT[] points, int count);
     [DllImport("gdi32.dll")] private static extern int SetBkMode(IntPtr dc, int mode);
     [DllImport("gdi32.dll")] private static extern uint SetTextColor(IntPtr dc, uint color);
     [DllImport("gdi32.dll", CharSet = CharSet.Unicode)] private static extern bool TextOut(IntPtr dc, int x, int y, string text, int length);

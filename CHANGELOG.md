@@ -2,6 +2,30 @@
 
 All notable changes to Upshift. Each release's section becomes its GitHub release notes, so the heading must be `## [x.y.z]` with the same version as `Directory.Build.props` (a date after it is fine).
 
+## [1.6.0]
+
+The overlay without measuring, with a frame-time graph.
+
+### New
+
+- **Show overlay.** A new switch on the Performance tab shows the overlay over any game, with or without OptiScaler, without measuring: live FPS, the 1% low and the frame time. It uses the same PresentMon, the same Windows permission step, the same corner and Shift+F10. Nothing is saved, and it stops when you turn it off or the game closes.
+- **Frame-time graph.** The overlay now draws the last few seconds of frame times under the numbers, so stutter shows as a spike the moment it happens. It's there both with Show overlay and while measuring.
+- **Measuring with the overlay on** takes over the overlay's capture instead of starting a second PresentMon, and with no extra permission prompt.
+- **Recording it.** The overlay isn't hidden from screen recorders. To get it in a video, use borderless or windowed mode and your recorder's screen or display capture; game-only capture (OBS Game Capture, Xbox Game Bar) won't include it.
+
+### Fixed
+
+- The overlay could stay on screen after a measurement ended, until Upshift was closed.
+
+### Removed
+
+- The CapFrameX suggestion on the Performance tab.
+
+### Not tested yet
+
+- Show overlay and the handover with the real PresentMon and a real game: tested with a stand-in capture program and a stand-in game process. The first time, Windows asks for permission, as for measuring.
+- Exclusive fullscreen with Show overlay (the "Overlay needs borderless or windowed mode" notice is the same as while measuring).
+
 ## [1.5.0] - 2026-10-23
 
 A live overlay while measuring, for any game, and CapFrameX as a companion tool.

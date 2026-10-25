@@ -28,6 +28,8 @@ public static class Measurement
     private static GlobalHotkey? _hotkey;
     private static MeasureJob? _job;
     private static string? _directWorkDir;
+    /// <summary>This measurement takes over the overlay's capture (the same game was already shown with "Show overlay").</summary>
+    private static bool _viaLive;
     private static GameInfo? _game;
     private static Func<MeasuredSettings>? _snapshot;
     private static CancellationTokenSource? _armCts;
@@ -106,30 +108,28 @@ public static class Measurement
             return;
         }
 
-        string presentMon;
-        try
+        // The overlay already captures this game: measuring takes over its PresentMon (no second capture, no prompt).
+        if (LiveOverlay.ActiveFor(game.Id))
         {
-            var component = AppServices.Catalog.Components.First(c => c.Id == "presentmon");
-            var cached = AppServices.Components.TryGetCached(component)
-                ?? await AppServices.Components.EnsureAsync(component, AppServices.Updates.Target(component)?.Tag ?? component.PinnedVersion!,
-                    new Progress<string>(s => Set(MeasureState.Preparing, $"Getting PresentMon: {s}", false)), ct);
-            presentMon = Directory.EnumerateFiles(cached.Folder, "PresentMon*.exe").First();
-            if (SignatureCheck.Problem(presentMon, PresentMonRunner.IntelSigners) is { } signature)
-            {
-                Finish($"The downloaded PresentMon isn't signed by Intel, so it won't be run. {signature}", problem: true);
-                return;
-            }
-        }
-        catch (Exception ex) when (ex is Core.Components.ComponentDownloadException or IOException or UnauthorizedAccessException or InvalidOperationException or HttpRequestException)
-        {
-            Finish($"PresentMon couldn't be downloaded: {ex.Message}", problem: true);
+            _viaLive = true;
+            var slice = Path.Combine(AppServices.DataDir, "measure", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(slice);
+            _job = new MeasureJob { WorkDir = slice, Seconds = _seconds };
+            RegisterStartKey(game);
             return;
         }
-        if (ct.IsCancellationRequested) return;
+        if (LiveOverlay.State != OverlayState.Off) LiveOverlay.Stop();   // another game's overlay: one capture at a time
+
+        var (presentMon, problem) = await PresentMonAsync(s => Set(MeasureState.Preparing, $"Getting PresentMon: {s}", false), ct);
+        if (presentMon is null)
+        {
+            if (problem is not null) Finish(problem, problem: true);
+            return;
+        }
 
         var work = Path.Combine(AppServices.DataDir, "measure", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(work);
-        if (PresentMonRunner.CanCaptureWithoutPrompt())
+        if (PresentMonRunner.CanCaptureWithoutPrompt() || TestPresentMon is not null)
         {
             // This account may already read frame timings (Performance Log Users): no helper, no prompt.
             _directWorkDir = work;
@@ -142,18 +142,7 @@ public static class Measurement
                 PresentMonPath = presentMon, WorkDir = work, ParentProcessId = Environment.ProcessId, Seconds = _seconds,
                 DeadlineUtc = DateTime.UtcNow.AddMinutes(30)
             };
-            var jobPath = Path.Combine(work, "job.json");
-            await File.WriteAllTextAsync(jobPath, JsonSerializer.Serialize(_job), ct);
-            try
-            {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = Environment.ProcessPath!,
-                    Arguments = $"--measure \"{jobPath}\" --sha256 {OptiScalerInstaller.Sha256(jobPath)}",
-                    UseShellExecute = true, Verb = "runas"
-                })?.Dispose();
-            }
-            catch (Win32Exception ex) when (ex.NativeErrorCode == ErrorCancelled)
+            if (!await StartHelperAsync(_job, ct))
             {
                 DeleteWorkDir(TakeWorkDir());
                 Finish("Windows permission was refused, so nothing can be measured. Press Measure this game to try again.", problem: true);
@@ -161,6 +150,68 @@ public static class Measurement
             }
         }
 
+        RegisterStartKey(game);
+    }
+
+    /// <summary>
+    /// PresentMon from Upshift's components (downloaded the first time), checked for Intel's signature. Shared by Measure
+    /// and the overlay. Returns its path, or the reason it can't be used (null reason: cancelled).
+    /// </summary>
+    public static async Task<(string? Path, string? Problem)> PresentMonAsync(Action<string> progress, CancellationToken ct)
+    {
+#if DEBUG
+        // Debug builds only: a stand-in that writes PresentMon-style rows, to test the overlay without the permission prompt.
+        if (TestPresentMon is { } fake) return (fake, null);
+#endif
+        try
+        {
+            var component = AppServices.Catalog.Components.First(c => c.Id == "presentmon");
+            var cached = AppServices.Components.TryGetCached(component)
+                ?? await AppServices.Components.EnsureAsync(component, AppServices.Updates.Target(component)?.Tag ?? component.PinnedVersion!,
+                    new Progress<string>(progress), ct);
+            var presentMon = Directory.EnumerateFiles(cached.Folder, "PresentMon*.exe").First();
+            if (SignatureCheck.Problem(presentMon, PresentMonRunner.IntelSigners) is { } signature)
+                return (null, $"The downloaded PresentMon isn't signed by Intel, so it won't be run. {signature}");
+            return ct.IsCancellationRequested ? (null, null) : (presentMon, null);
+        }
+        catch (OperationCanceledException) { return (null, null); }
+        catch (Exception ex) when (ex is Core.Components.ComponentDownloadException or IOException or UnauthorizedAccessException or InvalidOperationException or HttpRequestException)
+        {
+            return (null, $"PresentMon couldn't be downloaded: {ex.Message}");
+        }
+    }
+
+#if DEBUG
+    /// <summary>Debug builds only (UPSHIFT_TEST_PRESENTMON): a stand-in PresentMon, run directly (no helper, no prompt).</summary>
+    public static string? TestPresentMon => Environment.GetEnvironmentVariable("UPSHIFT_TEST_PRESENTMON") is { Length: > 0 } p && File.Exists(p) ? p : null;
+#else
+    public static string? TestPresentMon => null;
+#endif
+
+    /// <summary>
+    /// Starts the measuring helper with Windows' permission prompt (Upshift.exe --measure job.json). False when the
+    /// prompt was refused. Shared by Measure and the overlay.
+    /// </summary>
+    public static async Task<bool> StartHelperAsync(MeasureJob job, CancellationToken ct)
+    {
+        var jobPath = Path.Combine(job.WorkDir, "job.json");
+        await File.WriteAllTextAsync(jobPath, JsonSerializer.Serialize(job), ct);
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = Environment.ProcessPath!,
+                Arguments = $"--measure \"{jobPath}\" --sha256 {OptiScalerInstaller.Sha256(jobPath)}",
+                UseShellExecute = true, Verb = "runas"
+            })?.Dispose();
+            return true;
+        }
+        catch (Win32Exception ex) when (ex.NativeErrorCode == ErrorCancelled) { return false; }
+    }
+
+    private static void RegisterStartKey(GameInfo game)
+    {
+        var key = AppServices.Settings.Current.MeasureHotkey;
         // Without the key (nothing could watch it), "Start in 10 seconds" still works.
         _hotkey = GlobalHotkey.TryRegister(key);
         if (_hotkey is not null) _hotkey.Pressed += () => _ui?.TryEnqueue(async () => await StartAsync());
@@ -207,7 +258,7 @@ public static class Measurement
         if (State != MeasureState.Measuring || _job is not { } job) return;
         _hotkey?.Dispose();
         _hotkey = null;
-        if (_directWorkDir is not null) _stopCts?.Cancel();
+        if (_directWorkDir is not null || _viaLive) _stopCts?.Cancel();
         else try { File.WriteAllText(job.StopFile, "stop"); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         Set(MeasureState.Measuring, "Stopping and keeping what was recorded…", false);
     }
@@ -255,14 +306,23 @@ public static class Measurement
         // The same key now stops the run early.
         _hotkey = GlobalHotkey.TryRegister(AppServices.Settings.Current.MeasureHotkey);
         if (_hotkey is not null) _hotkey.Pressed += () => _ui?.TryEnqueue(StopEarly);
-        StartOverlay(game, process, job.CsvFile, _seconds);
+        if (!_viaLive) StartOverlay(game, process, job.CsvFile, _seconds);
 
         // Windows' own counters (GPU and CPU usage, video memory) for the same stretch. A missing counter only means a dash.
         using var sampler = SystemSampler.Start();
 
         MeasureRunResult? result;
         var seconds = _seconds;
-        if (_directWorkDir is not null)
+        var viaLive = _viaLive;
+        var livePid = LiveOverlay.ProcessId;
+        if (viaLive)
+        {
+            // The overlay's PresentMon keeps running; this measurement is the stretch of its capture between now and the
+            // end (or the early stop), cut out into this measurement's own CSV.
+            _stopCts = new CancellationTokenSource();
+            result = await RecordFromLiveAsync(game, process, job, seconds, _stopCts.Token);
+        }
+        else if (_directWorkDir is not null)
         {
             _stopCts = new CancellationTokenSource();
             var stop = _stopCts.Token;
@@ -282,7 +342,7 @@ public static class Measurement
         _ = Task.Run(() => { Beep(1320, 120); Beep(880, 120); Beep(660, 220); });
 
         var gameClosed = process.HasExited;
-        var stats = await Task.Run(() => PresentMonCsv.Read(job.CsvFile, process.Id));
+        var stats = await Task.Run(() => PresentMonCsv.Read(job.CsvFile, viaLive ? livePid ?? process.Id : process.Id));
         DeleteWorkDir(TakeWorkDir());   // PresentMon has quit; its CSV and the job files go
 
         if (stats is null)
@@ -309,6 +369,29 @@ public static class Measurement
                (verdict is { } b ? $" {b.Title}{(b.LessCertain ? " (less certain)" : "")}." : "") +
                (stoppedEarly ? $" You stopped it early (of {Length(seconds)})." : "") +
                (gameClosed && !stoppedEarly ? $" The game closed before the end, so this covers less than {Length(seconds)}." : ""), problem: false);
+    }
+
+    /// <summary>The overlay's capture from now until the time is up, the early stop, the game closing or the overlay stopping.</summary>
+    private static async Task<MeasureRunResult?> RecordFromLiveAsync(GameInfo game, Process process, MeasureJob job, int seconds, CancellationToken stop)
+    {
+        if (LiveOverlay.BeginRecording(game.Id, seconds) is not { } from)
+            return new MeasureRunResult { Problem = $"The overlay isn't showing {game.Name} any more, so nothing was recorded." };
+        var until = DateTime.UtcNow.AddSeconds(seconds);
+        var stoppedEarly = false;
+        while (DateTime.UtcNow < until)
+        {
+            if (stop.IsCancellationRequested) { stoppedEarly = true; break; }
+            if (process.HasExited || !LiveOverlay.RunningFor(game.Id)) break;
+            await Task.Delay(200);
+        }
+        await Task.Delay(300);   // PresentMon writes in batches: let the last frames of the stretch land
+        var to = LiveOverlay.EndRecording();
+        try { await Task.Run(() => LiveFrames.Slice(from.Csv, from.Offset, to ?? long.MaxValue, job.CsvFile)); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return new MeasureRunResult { Problem = $"The overlay's capture couldn't be read: {ex.Message}" };
+        }
+        return new MeasureRunResult { Started = true, StoppedEarly = stoppedEarly };
     }
 
     /// <summary>Upshift's frame cap from the recorded settings ("60 fps"), or null for "No cap".</summary>
@@ -348,7 +431,7 @@ public static class Measurement
     }
 
     /// <summary>The game's running process: its main exe by name (the one with a window when there are several).</summary>
-    private static Process? FindGame(GameInfo game)
+    public static Process? FindGame(GameInfo game)
     {
         var names = new[] { game.ExePath, game.LaunchExePath }.Where(p => p is not null)
             .Select(p => Path.GetFileNameWithoutExtension(p!)).Distinct(StringComparer.OrdinalIgnoreCase);
@@ -383,6 +466,7 @@ public static class Measurement
         var dir = _job?.WorkDir;
         _job = null;
         _directWorkDir = null;
+        _viaLive = false;
         return dir;
     }
 
@@ -436,7 +520,7 @@ public static class Measurement
                     var left = Math.Max(0, seconds - (int)(DateTime.UtcNow - since).TotalSeconds);
                     overlay?.Update(State == MeasureState.Measuring && Message.StartsWith("Stopping", StringComparison.Ordinal) ? "Stopping…" : $"{left / 60}:{left % 60:00} left",
                         snap.Fps is { } fps ? $"FPS {Math.Round(fps)}" + (snap.LowFps is { } low ? $"  ·  1% low {Math.Round(low)}" : "") : "FPS –",
-                        snap.FrameMs is { } ms ? $"Frame time {ms:0.0} ms" : "Waiting for frames…");
+                        snap.FrameMs is { } ms ? $"Frame time {ms:0.0} ms" : "Waiting for frames…", snap.Graph);
                     await Task.Delay(250, cts.Token);
                 }
             }
@@ -456,7 +540,7 @@ public static class Measurement
     }
 
     /// <summary>The exclusive-fullscreen sentence, once per game (remembered in settings.json).</summary>
-    private static void NoticeOnce(GameInfo game)
+    public static void NoticeOnce(GameInfo game)
     {
         var settings = AppServices.Settings.Current;
         if (settings.OverlayNoticeShown.Contains(game.Id)) return;
@@ -464,7 +548,7 @@ public static class Measurement
         AppServices.Settings.Save(settings);
         OverlayNotice = ExclusiveFullscreenText;
         OverlayNoticeGameId = game.Id;
-        _ui?.TryEnqueue(() => Changed?.Invoke());
+        (_ui ?? LiveOverlay.Ui)?.TryEnqueue(() => Changed?.Invoke());
     }
 
     private static void Finish(string message, bool problem)
