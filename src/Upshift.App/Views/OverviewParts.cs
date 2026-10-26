@@ -67,6 +67,13 @@ public sealed class GameNoticesView : CardPart
         {
             if (ReEngineGames.Notice(card.Info, AppServices.Catalog.ReEngine) is { } re)
                 panel.Children.Add(re.Found ? Found() : ReFrameworkNotice(card, re.Warning));
+            // The catalog's advice for this game on this card, once OptiScaler is in (from testing on that vendor's cards).
+            if (card.IsInstalledByUs && GameNotes.For(card.Info, AppServices.EffectiveGpu?.Vendor, AppServices.Catalog.GameNotes)?.After is { } after)
+                panel.Children.Add(new InfoBar
+                {
+                    IsOpen = true, IsClosable = false, Severity = InfoBarSeverity.Informational,
+                    Title = $"For this game on {GameNotes.VendorName(AppServices.EffectiveGpu?.Vendor)} cards", Message = after
+                });
             if (card.Info.Source == GameSourceKind.BattleNet && !card.HasAntiCheat)
                 panel.Children.Add(new InfoBar
                 {

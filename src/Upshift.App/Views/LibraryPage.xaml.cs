@@ -310,6 +310,18 @@ public sealed partial class LibraryPage : Page
     {
         if (_dialogOpen || ViewModel.Selected is not { CanInstall: true } card || card.Info.TargetDir is not { } target) return;
 
+        // The catalog's advice for this game on this card, from testing (e.g. which upscaler the game must be on first).
+        if (GameNotes.For(card.Info, AppServices.EffectiveGpu?.Vendor, AppServices.Catalog.GameNotes)?.Before is { } before)
+        {
+            var first = new ContentDialog
+            {
+                XamlRoot = XamlRoot, Title = "Do this first",
+                Content = new TextBlock { Text = before, TextWrapping = TextWrapping.Wrap },
+                PrimaryButtonText = "Done, continue", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary
+            };
+            if (await ShowDialogAsync(first) != ContentDialogResult.Primary) return;
+        }
+
         // Capcom RE Engine games need REFramework before OptiScaler works (OptiScaler's wiki). Upshift never installs it.
         if (ReEngineGames.Text(ReEngineGames.For(card.Info, AppServices.Catalog.ReEngine)) is { } reText)
         {
@@ -372,6 +384,36 @@ public sealed partial class LibraryPage : Page
             Visibility = restoreTime is null ? Visibility.Collapsed : Visibility.Visible
         };
 
+        // The defaults of the version the saved settings came from, when that version is still downloaded.
+        var oldDefaults = !useLeftover && saved is { ComponentId: { } savedId, Version: { } savedVersion }
+            && AppServices.Catalog.Components.FirstOrDefault(c => c.Id == savedId) is { } savedComponent
+            && AppServices.Components.TryGetCached(savedComponent, savedVersion) is { } cached
+            && File.Exists(Path.Combine(cached.Folder, "OptiScaler.ini"))
+            ? Path.Combine(cached.Folder, "OptiScaler.ini") : null;
+
+        // The user's own changes in that ini (values that are neither the old nor the new default): a warning names the
+        // ones this install won't keep, all of them when "Restore" is unticked.
+        var restorePath = useLeftover ? leftoverPath : saved?.Path;
+        var freshIni = Path.Combine(component.Folder, "OptiScaler.ini");
+        var edits = restoreTime is not null && restorePath is not null && File.Exists(restorePath) && File.Exists(freshIni)
+            ? SavedSettings.Edits(restorePath, freshIni, oldDefaults) : (Restorable: new List<IniSetting>(), NotKept: new List<IniSetting>());
+        // Values every install sets anyway (OptiScaler's log for "Is it working?") aren't the user's to lose.
+        var setAnyway = OptiScalerLog.LogSettings(true);
+        edits.Restorable.RemoveAll(e => setAnyway.Any(s => s.Section.Equals(e.Section, StringComparison.OrdinalIgnoreCase)
+                                                           && s.Key.Equals(e.Key, StringComparison.OrdinalIgnoreCase) && s.Value == e.Value));
+        var keepBar = new InfoBar { Severity = InfoBarSeverity.Warning, IsClosable = false, Title = "Some of your OptiScaler settings won't be kept" };
+        void RefreshKeep()
+        {
+            var lost = restore.IsChecked == true ? edits.NotKept : edits.Restorable.Concat(edits.NotKept).ToList();
+            keepBar.Message = restore.IsChecked == true
+                ? $"This version has no such setting: {SavedSettings.Describe(lost)}."
+                : $"With Restore unticked, the fresh OptiScaler.ini replaces your changes: {SavedSettings.Describe(lost)}. They stay in Upshift's saved settings.";
+            keepBar.IsOpen = lost.Count > 0;
+        }
+        RefreshKeep();
+        restore.Checked += (_, _) => RefreshKeep();
+        restore.Unchecked += (_, _) => RefreshKeep();
+
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
@@ -393,6 +435,7 @@ public sealed partial class LibraryPage : Page
                         loadsAs,
                         backups,
                         restore,
+                        keepBar,
                         new Expander { Header = "Advanced", HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch, Content = names },
                         leftoverBar,
                         blockers
@@ -432,12 +475,6 @@ public sealed partial class LibraryPage : Page
                 return;
             }
         }
-        // The defaults of the version the saved settings came from, when that version is still downloaded.
-        var oldDefaults = !useLeftover && saved is { ComponentId: { } savedId, Version: { } savedVersion }
-            && AppServices.Catalog.Components.FirstOrDefault(c => c.Id == savedId) is { } savedComponent
-            && AppServices.Components.TryGetCached(savedComponent, savedVersion) is { } cached
-            && File.Exists(Path.Combine(cached.Folder, "OptiScaler.ini"))
-            ? Path.Combine(cached.Folder, "OptiScaler.ini") : null;
         var restoreChosen = restore.IsChecked == true && restoreTime is not null;
         var result = await ViewModel.InstallOptiScalerAsync(card, component, names.SelectedItem as string ?? "dxgi.dll", new InstallRestore(
             settingsFolder,
@@ -571,7 +608,8 @@ public sealed partial class LibraryPage : Page
         }
 
         var removeChanged = false;
-        var permission = check.NeedsPermission ? "\n\nThis folder needs Windows permission to change, so Windows will ask next." : "";
+        var permission = (GameNotes.WarnBeforeRemoving(AppServices.EffectiveGpu?.Vendor) ? "\n\n" + GameNotes.RemoveWarning : "")
+                         + (check.NeedsPermission ? "\n\nThis folder needs Windows permission to change, so Windows will ask next." : "");
         if (check.Changed.Count > 0 || check.MissingBackups.Count > 0)
         {
             var text = new List<string>();

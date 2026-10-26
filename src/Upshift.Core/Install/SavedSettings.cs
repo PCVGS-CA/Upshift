@@ -77,24 +77,38 @@ public static class SavedSettings
     /// differs from the fresh default. With the old version's own ini, values that were simply that version's
     /// defaults are left out too, so a newer default isn't overwritten by an old one.
     /// </summary>
-    public static List<IniSetting> ValuesToRestore(string savedIni, string freshIni, string? oldDefaultsIni)
+    public static List<IniSetting> ValuesToRestore(string savedIni, string freshIni, string? oldDefaultsIni) =>
+        Edits(savedIni, freshIni, oldDefaultsIni).Restorable;
+
+    /// <summary>
+    /// The user's own changes in a saved ini, compared with a fresh one: values that differ from the fresh default and
+    /// weren't simply the old version's defaults. <c>Restorable</c> can go into the fresh ini; <c>NotKept</c> can't (the
+    /// new version has no such setting, or it's HelixSR's path), so the install says so instead of dropping them quietly.
+    /// </summary>
+    public static (List<IniSetting> Restorable, List<IniSetting> NotKept) Edits(string savedIni, string freshIni, string? oldDefaultsIni)
     {
         var saved = IniFile.Load(savedIni);
         var fresh = IniFile.Load(freshIni);
         var oldDefaults = oldDefaultsIni is not null && File.Exists(oldDefaultsIni) ? IniFile.Load(oldDefaultsIni) : null;
-        var list = new List<IniSetting>();
+        var restorable = new List<IniSetting>();
+        var notKept = new List<IniSetting>();
         foreach (var (section, key, value) in saved.Entries())
         {
-            if (!fresh.Has(section, key)) continue;
             if (string.Equals(fresh.Get(section, key), value, StringComparison.Ordinal)) continue;
             if (oldDefaults is not null && string.Equals(oldDefaults.Get(section, key), value, StringComparison.Ordinal)) continue;
-            if (list.Any(s => s.Section.Equals(section, StringComparison.OrdinalIgnoreCase) && s.Key.Equals(key, StringComparison.OrdinalIgnoreCase))) continue;
+            if (restorable.Concat(notKept).Any(s => s.Section.Equals(section, StringComparison.OrdinalIgnoreCase) && s.Key.Equals(key, StringComparison.OrdinalIgnoreCase))) continue;
+            // An entry the new version doesn't have is reported, never added: OptiScaler would ignore it.
+            if (!fresh.Has(section, key)) { notKept.Add(new IniSetting(section, key, value)); continue; }
             // HelixSR's paths (into Upshift's own helixsr folder) aren't brought back by a reinstall: HelixSR may be gone
             // by then, and choosing it again in the game's OptiScaler options records it properly.
             if (section.Equals("Libraries", StringComparison.OrdinalIgnoreCase) && key.StartsWith("FfxDx12", StringComparison.OrdinalIgnoreCase)
-                && value.Contains(@"\Upshift\helixsr\", StringComparison.OrdinalIgnoreCase)) continue;
-            list.Add(new IniSetting(section, key, value));
+                && value.Contains(@"\Upshift\helixsr\", StringComparison.OrdinalIgnoreCase)) { notKept.Add(new IniSetting(section, key, value)); continue; }
+            restorable.Add(new IniSetting(section, key, value));
         }
-        return list;
+        return (restorable, notKept);
     }
+
+    /// <summary>"[Dxgi] Dxgi = false" for each setting, for messages.</summary>
+    public static string Describe(IEnumerable<IniSetting> settings) =>
+        string.Join(", ", settings.Select(s => $"[{s.Section}] {s.Key} = {s.Value}"));
 }

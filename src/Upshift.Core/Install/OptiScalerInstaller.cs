@@ -496,11 +496,13 @@ public static partial class OptiScalerInstaller
             if (plan.IniSettings.Count > 0) ApplyIni(target, manifest, plan.IniSettings, log, fileWasOurs: true);
             var restoreFrom = plan.RestoreFromLeftover ? leftoverCopy ?? plan.RestoreSettingsFrom : plan.RestoreSettingsFrom;
             var iniPath = Path.Combine(target, LeftoverIni);
+            List<IniSetting> notKept = new();
             if (restoreFrom is not null && File.Exists(restoreFrom) && File.Exists(iniPath))
             {
-                var restore = SavedSettings.ValuesToRestore(restoreFrom, iniPath, plan.RestoreFromLeftover ? null : plan.RestoreDefaultsFrom);
+                (var restore, notKept) = SavedSettings.Edits(restoreFrom, iniPath, plan.RestoreFromLeftover ? null : plan.RestoreDefaultsFrom);
                 log.Write($"  restoring {restore.Count} previous setting(s) from {restoreFrom}");
                 if (restore.Count > 0) ApplyIni(target, manifest, restore, log, fileWasOurs: true);
+                if (notKept.Count > 0) log.Write($"  not kept (this version has no such setting): {SavedSettings.Describe(notKept)}");
             }
 
             // 4. The manifest goes last: without it, the install didn't happen.
@@ -516,6 +518,7 @@ public static partial class OptiScalerInstaller
                 Manifest = manifest,
                 Message = $"OptiScaler {plan.Version} installed as {manifest.ProxyName}."
                           + (restoreFrom is not null ? " Your previous OptiScaler settings were restored." : "")
+                          + (notKept.Count > 0 ? $" Not kept, because this version has no such setting: {SavedSettings.Describe(notKept)}." : "")
                           + (leftoverCopy is not null ? " The leftover OptiScaler.ini was backed up to Upshift's saved settings." : "")
             };
         }

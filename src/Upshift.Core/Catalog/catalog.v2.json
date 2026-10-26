@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-10-23T12:00Z",
+  "updated": "2026-10-25T18:00Z",
   "notes": "Upshift's built-in catalog. Upshift will later download a newer version of this file from its GitHub repo, so new forks and GPU support can be added without releasing a new version. The userAgent values below are fallbacks; the app sends Upshift/<its version>.",
 
   "components": [
@@ -491,5 +491,16 @@
       "PRAGMATA"
     ],
     "noWarning": [ "Monster Hunter Rise" ]
-  }
+  },
+  "gameNotes": [
+    {
+      "titles": [ "Silent Hill 2" ],
+      "exeNames": [ "SHProto-Win64-Shipping.exe" ],
+      "vendors": [ "amd" ],
+      "before": "Set the game's upscaler to XeSS first. With FSR 3.1 selected, the game crashes once OptiScaler is installed.",
+      "after": "Pick DLSS in the game's menu. OptiScaler then runs FSR 4. Don't use the game's FSR 3.1 option.",
+      "inGamePick": "DLSS",
+      "notes": "Silent Hill 2 (2024, GOG) on an RX 9070 XT, Adrenalin 26.10.1, OptiScaler 0.9.4, tested 2026-10-25: with the game's own FSR 3.1 selected it crashed every time (with OptiScaler inside its dxgi.dll with spoofing on; without OptiScaler a GPU hang, 887A0006). DLSS, XeSS and TSR worked. If the game is still on FSR 3.1 when OptiScaler goes in, it crashes before the menu. Working: XeSS, install OptiScaler, then DLSS in the game (OptiScaler outputs FSR 4). Spoofing defaults are left alone."
+    }
+  ]
 }

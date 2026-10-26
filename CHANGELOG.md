@@ -15,8 +15,12 @@ A working overlay with a frame-time graph, game-aware updates, and AMD's FSR 4 u
 
 - **Allow AMD's FSR 4 upgrade.** A switch per game on the Upscaling tab, for DirectX 12 games with their own FSR 3.1 or newer: it adds the game to AMD's driver list, so AMD's driver can upgrade the game's FSR to FSR 4. Then pick FSR in the game's graphics menu; this needs "AMD FSR Upscaling" turned on in AMD Adrenalin > Gaming > Graphics (it's on by default). Shown on RX 9000; on RX 7000 and RX 6000 it needs Adrenalin 26.10.1 or newer and is marked "testing". No game files are changed. Turning it on or off goes into the game's change history, and "Remove Upshift from all games" (and the uninstaller) takes back what Upshift added. A game AMD's driver already lists is shown as allowed and left alone.
 
+- **Advice for specific games on your card.** Upshift can now carry tested advice for a game on AMD, NVIDIA or Intel cards: a "Do this first" step before installing OptiScaler, a note on the game page once it's installed, and which upscaler to pick in the game's menu. The first is Silent Hill 2 on AMD cards: set the game to XeSS before installing (with its FSR 3.1 option selected it crashes once OptiScaler is in), then pick DLSS in the game's menu, and OptiScaler runs FSR 4.
+- **Removing OptiScaler on AMD and Intel cards** now says: if the game is set to DLSS in its menu, switch it to XeSS, FSR or TAA first, or it may crash at start-up; if it already does, launch it once in DX11 mode (-dx11) and change the upscaler. Also in "Remove Upshift from all games" and the uninstaller.
+
 ### Fixed
 
+- **Reinstalling OptiScaler kept your settings only partly, without saying so.** A setting the new OptiScaler.ini has no place for was dropped silently. The install dialog now names any of your own changes it won't keep (and all of them when "Restore my previous OptiScaler settings" is unticked), and the result says which weren't kept. Your saved copy stays in Upshift's saved settings either way.
 - **The overlay showed "Waiting for frames…" for the whole measurement**, and could end with "The overlay's capture couldn't be read". PresentMon kept its file locked while writing it, so Upshift couldn't read it. Upshift now takes PresentMon's output as it comes and writes the file itself, so the overlay shows FPS from the first second. (This also affected 1.5.0.)
 - "Overlay needs borderless or windowed mode" appeared in borderless games while the overlay was showing. It now appears only when PresentMon reports the game in exclusive fullscreen for a run of frames, where the overlay really can't be seen.
 - Error messages in Upshift's window no longer show folder paths with your Windows user name: a file is named by its file name only.
@@ -32,6 +36,7 @@ A working overlay with a frame-time graph, game-aware updates, and AMD's FSR 4 u
 
 - The overlay with the real PresentMon was tested on a small windowed DirectX 11 test program, not a real game, and not through Windows' permission prompt (this PC's account may already read frame timings).
 - Exclusive fullscreen in a real game.
+- The Silent Hill 2 advice and the removal warning were checked in Upshift on a stand-in folder with the game's exe name, not by installing into the real game again.
 - AMD's FSR 4 upgrade in a real game: adding and removing a game on AMD's driver list was tested on an RX 9070 XT with Adrenalin 26.10.1, but not a game actually running with FSR 4 afterwards, and not on RX 7000 or RX 6000.
 
 ## [1.5.0] - 2026-10-23

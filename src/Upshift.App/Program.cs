@@ -134,6 +134,13 @@ public static class Program
         return to;
     }
 
+    /// <summary>The main graphics card's vendor, for the uninstaller's questions (null when it can't be read).</summary>
+    private static Core.Models.GpuVendor? PrimaryVendor()
+    {
+        try { return Core.Hardware.GpuDetector.PickPrimary(Core.Hardware.GpuDetector.DetectAll())?.Vendor; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return null; }
+    }
+
     /// <summary>
     /// The copy started by the uninstaller: "Also remove OptiScaler and Upshift's changes from your games?" (Yes by
     /// default), the removal with a summary of what was done and skipped, then the question about Upshift's data, and
@@ -179,6 +186,7 @@ public static class Program
             "Yes removes OptiScaler and everything Upshift added, and puts back the game's own DLSS, FSR and XeSS files that " +
             "Upshift replaced, using each game's own record. Files Upshift didn't add (REFramework, your saves, other mods) " +
             "stay where they are, and so do files that changed since. A game that's running is skipped and listed.\n\n" +
+            (Core.Detection.GameNotes.WarnBeforeRemoving(PrimaryVendor()) ? Core.Detection.GameNotes.RemoveWarning + "\n\n" : "") +
             "No leaves your games exactly as they are now.",
             "Uninstall Upshift", MbYesNo | MbIconQuestion | MbTopmost | MbSetForeground, 0, 300_000);
         // Yes is the default: the question timing out (nobody there) counts as Yes.

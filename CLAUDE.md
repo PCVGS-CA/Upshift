@@ -946,6 +946,30 @@ errors and no warnings.
     file opens for reading, an early stop keeps a complete file, the file deletes right after); the app on throwaway data
     with the real PresentMon and FrameLabGame: overlay with live FPS/1% low/graph, 20 s result saved, no fullscreen notice,
     overlay, PresentMon and work folder gone afterwards. Not tested: a real game, the UAC helper route, exclusive fullscreen.
+  - Harness section 24 depends on `FrameLabGame.exe` presenting; covered by other windows it stops after a few frames, so
+    its checks only need some frames, and compare the file's rows with what the overlay read (always equal so far).
+
+- **1.6.0-test.6 (2026-10-25): from the user's SH2 crash testing (RX 9070 XT, OptiScaler 0.9.4).** The game's own FSR 3.1
+  option crashed every time (inside OptiScaler's dxgi.dll with spoofing on; without OptiScaler a GPU hang 887A0006);
+  DLSS/XeSS/TSR worked. Working: game on XeSS → install → DLSS in game (OptiScaler outputs FSR 4). Not Upshift's fault;
+  **spoofing defaults stay as they are.**
+  - **Per-game notes:** catalog.v2.json `gameNotes` (`Catalog.GameNote`: `titles`, `exeNames` (when given, the only match),
+    `vendors` amd/nvidia/intel, `before`, `after`, `inGamePick`, `notes`), `Core/Detection/GameNotes.For(game, vendor, notes)`
+    by `AppServices.EffectiveGpu?.Vendor`. Before: "Do this first" dialog first in `Install_Click`. After: InfoBar "For this
+    game on AMD cards" in `GameNoticesView` (top of Upscaling; the Overview tab no longer exists) when `IsInstalledByUs`.
+    `inGamePick` beats the wiki in `OptiScalerOptionsView.InGamePick`; `InGameChoice.Line(pick, source, helixSr)` takes the
+    source text. Silent Hill 2 = exe `SHProto-Win64-Shipping.exe`, AMD. Catalog `updated` 2026-10-25T18:00Z.
+  - **Removal warning** `GameNotes.RemoveWarning` on AMD/Intel (`WarnBeforeRemoving`): game uninstall dialogs, Settings'
+    "Remove Upshift from all games", the uninstaller's games question (`Program.PrimaryVendor`, GpuDetector directly).
+  - **Reinstall keeps edits:** `SavedSettings.Edits(saved, fresh, oldDefaults)` → Restorable / NotKept (keys the new ini lacks,
+    HelixSR paths); `ValuesToRestore` = its Restorable. Install logs and reports NotKept ("Not kept, because this version has
+    no such setting: …"). The install dialog's warning InfoBar names what won't be kept (all edits when Restore is unticked),
+    leaving out `OptiScalerLog.LogSettings(true)` values every install sets. "Edits" = differs from the fresh default and
+    from the old version's default (when that version is still downloaded).
+  - Tested: harness 239 (section 25: matching by exe/vendor/title, the line, Edits, a real install restoring an edit and
+    reporting a missing key), the app on throwaway data with a stand-in folder named like SH2's exe: Do this first, the after
+    note, "choose DLSS", the removal warning, uninstall → reinstall dialog warnings (ticked/unticked) → edit restored. The
+    real SH2 folder wasn't touched.
 
 ## Next
 

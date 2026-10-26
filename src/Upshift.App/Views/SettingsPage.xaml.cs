@@ -614,7 +614,8 @@ public sealed partial class SettingsPage : Page
                     TextWrapping = TextWrapping.Wrap,
                     Text = string.Join("\n", list) + "\n\nOptiScaler and everything Upshift added goes, and the game's own DLSS, FSR and XeSS files " +
                            "Upshift replaced come back. Your OptiScaler settings are saved, so a reinstall can restore them. Files changed " +
-                           "since Upshift's change are left as they are and listed. Games in protected folders ask for Windows' permission."
+                           "since Upshift's change are left as they are and listed. Games in protected folders ask for Windows' permission." +
+                           (Core.Detection.GameNotes.WarnBeforeRemoving(AppServices.EffectiveGpu?.Vendor) ? "\n\n" + Core.Detection.GameNotes.RemoveWarning : "")
                 }
             },
             PrimaryButtonText = "Remove", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary

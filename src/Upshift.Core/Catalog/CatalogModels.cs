@@ -45,6 +45,33 @@ public sealed class UpscalerCatalog
     /// copies that don't know them never show them.
     /// </summary>
     public List<CatalogComponent> TestBuilds { get; set; } = new();
+
+    /// <summary>Per-game advice by card vendor (e.g. which upscaler to set in the game before installing OptiScaler).</summary>
+    public List<GameNote> GameNotes { get; set; } = new();
+}
+
+/// <summary>
+/// Advice for one game on some card vendors, from testing: shown before installing OptiScaler ("Do this first"), on the
+/// game page once it's installed, and as the in-game upscaler to pick (ahead of the OptiScaler wiki's advice).
+/// </summary>
+public sealed class GameNote
+{
+    /// <summary>The game, for people reading the catalog; also matched when there are no exe names.</summary>
+    public List<string> Titles { get; set; } = new();
+
+    /// <summary>The game's exe file names; when given, only these match.</summary>
+    public List<string> ExeNames { get; set; } = new();
+
+    /// <summary>"amd", "nvidia", "intel".</summary>
+    public List<string> Vendors { get; set; } = new();
+
+    public string? Before { get; set; }
+    public string? After { get; set; }
+
+    /// <summary>The upscaler to choose in the game's own menu once OptiScaler is in ("DLSS").</summary>
+    public string? InGamePick { get; set; }
+
+    public string? Notes { get; set; }
 }
 
 /// <summary>

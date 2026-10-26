@@ -29,11 +29,14 @@ public static class InGameChoice
         return null;
     }
 
-    /// <summary>The line under the options: "In the game's own graphics menu, choose DLSS as the upscaler. …"</summary>
-    public static string? Line(string? pick, bool fromWiki, bool helixSr)
+    /// <summary>
+    /// The line under the options: "In the game's own graphics menu, choose DLSS as the upscaler. …". <paramref name="source"/>
+    /// says where advice for this game came from ("the OptiScaler wiki's advice for this game"), or null.
+    /// </summary>
+    public static string? Line(string? pick, string? source, bool helixSr)
     {
         if (pick is null) return null;
-        var why = fromWiki ? " (the OptiScaler wiki's advice for this game)" : "";
+        var why = source is null ? "" : $" ({source})";
         var then = helixSr
             ? "OptiScaler takes it from there and runs HelixSR in its place."
             : "OptiScaler takes it from there and uses the upscaler chosen here.";

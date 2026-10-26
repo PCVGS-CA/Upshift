@@ -640,9 +640,13 @@ public sealed class OptiScalerOptionsView : UserControl
         var addedByOpti = manifest.Added
             .Select(f => Path.GetRelativePath(card.Info.InstallDir, Path.GetFullPath(Path.Combine(dir, f.Path))))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // The catalog's note for this game and card comes first (from testing on that vendor's cards), then the wiki's advice.
+        var vendor = AppServices.EffectiveGpu?.Vendor;
+        if (GameNotes.For(card.Info, vendor, AppServices.Catalog.GameNotes)?.InGamePick is { } notePick)
+            return (notePick, InGameChoice.Line(notePick, $"tested on {GameNotes.VendorName(vendor)} cards", helixSr));
         var wikiInput = card.Suggestions?.InGameInput;
         var pick = InGameChoice.Pick(card.Upscalers.CoreRows, wikiInput, addedByOpti);
-        return (pick, InGameChoice.Line(pick, wikiInput is not null, helixSr));
+        return (pick, InGameChoice.Line(pick, wikiInput is null ? null : "the OptiScaler wiki's advice for this game", helixSr));
     }
 
     /// <summary>The upscaler choice whose settings match what the ini has now.</summary>
