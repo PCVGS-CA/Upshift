@@ -971,6 +971,37 @@ errors and no warnings.
     note, "choose DLSS", the removal warning, uninstall → reinstall dialog warnings (ticked/unticked) → edit restored. The
     real SH2 folder wasn't touched.
 
+- **1.6.0-test.7 (2026-10-31): the overlay redesign** (the user's spec; the mockup `overlay-mockup.png` was never attached
+  and isn't on disk, so it follows the written spec).
+  - **Capture from arming:** `MeasureJob.Continuous` / `PresentMonRunner.Run(…, continuous)` (`--terminate_on_proc_exit`,
+    no deadline). `Measurement.WatchForGameAsync` starts it when `FindGame` finds the game (`StartCaptureAsync`: direct Run
+    or the helper's start.txt + `WaitForHelperAsync`), so Ready has live figures; it Finishes when the game closes while
+    armed, or after 30 minutes. `StartAsync` marks `_recordFrom` (file offset), waits for the time/stop/game exit, +600 ms
+    for PresentMon's batches, then `StopCapture` and `LiveFrames.Slice(from, to)` → `PresentMonCsv.Read`. `LiveFrames`
+    has `startAt`/`Slice` again, plus `AverageFps`, `Low01Fps`, `MaxFps` (whole-second rule), `LatencyMs` (MsPCLatency,
+    else MsAllInputToPhotonLatency, numeric values over ~5 s), `GpuBusyMs`/`GpuWaitMs`, `Length(csv)`.
+  - `Core/Measure/OverlayModel.cs`: `OverlayPhase`, `LiveLoad`, `OverlayItems` (keys, defaults fps/average/low1/graph/
+    progress, `Normalize`, `Tile`, `Build` → `OverlayFrame`). `SystemSampler.Now(cardLuid)` = the last sample's GPU %, CPU
+    %, video memory in use (game's card first).
+  - `App/Services/OverlayRenderer.cs`: GDI into a 32-bit DIB, then per-pixel alpha (`Finish`: the four background fill
+    colours get the opacity, everything else solid, rounded corners with distance AA, a 32% light border), premultiplied.
+    Full 324 px wide (tiles 3 per row, labels end in "…"), Minimal 228 px one line. Segoe UI digits are all one width
+    (checked: 21.56 px regular, 23.01 bold at 40 px). `MeasureOverlay` now uses UpdateLayeredWindow (`Update(frame)`,
+    `Restyle`, `Fade`); the Result frame shows 8 s, then 8 fade steps.
+  - Settings: `OverlayStyle` ("Full"/"Minimal"), `OverlayOpacity` (70, 30–100), `OverlayItems` (null = defaults);
+    `Views/OverlaySettingsView.cs` under Measure performance (switch, style, corner, opacity with %, checkboxes, preview with
+    Ready/Recording/Result). The Performance tab keeps the switch and "Choose what it shows" (opens Settings).
+  - Notice text: "Use borderless or windowed mode to see the overlay. Measuring still works."
+  - Tested: harness 253 (section 26: figures vs the saved rules, latency/busy null without columns, the recording window =
+    slice, items/defaults/normalize, Ready/Recording/Result frames, minimal, continuous stand-in capture); `--overlay-test`
+    states; Settings preview (all items, Minimal); a real 20 s measurement with the real PresentMon and FrameLabGame on
+    throwaway data (Ready before F10 with live FPS, Recording, Result 8 s then gone, result saved, no PresentMon or folder
+    left). Not tested: the helper (UAC) route, a real game, exclusive fullscreen, a high-DPI screen.
+  - The scratchpad was pruned on 2026-10-26 between sessions (`helixtest\game0`, `uitest\games`, the old writer). The
+    harness now rebuilds `game0` from a fresh 0.9.4 install with a hand edit when missing (SH2 has no OptiScaler now), and
+    reads the fixture's record hash instead of SH2's `9b10b5a8…`. New fake capture writer: scratchpad `ov\writer.py`;
+    `ov\states.ps1`, `ov\timeline.ps1`.
+
 ## Next
 
 1. **DLSS 5 follow-ups:**

@@ -4,6 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:hw="using:Upshift.Core.Hardware"
+    xmlns:views="using:Upshift.App.Views"
     Background="Transparent">
 
     <ScrollViewer x:Name="PageScroller">
@@ -72,6 +73,7 @@
                           SelectionChanged="MeasureKey_Changed" AutomationProperties.Name="Key that starts a measurement" />
                 <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
                            Text="Pick a key the game doesn't use. OptiScaler's keys (Insert, Page Up, Page Down, End, Home) aren't offered. Measuring uses PresentMon, Intel's frame-timing tool (MIT licence), downloaded from its GitHub page the first time. Windows asks for permission each time unless your account is in the Performance Log Users group." />
+                <views:OverlaySettingsView />
             </StackPanel>
 
             <StackPanel Spacing="8">

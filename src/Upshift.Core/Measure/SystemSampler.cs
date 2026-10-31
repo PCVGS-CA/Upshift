@@ -34,6 +34,10 @@ public sealed class SystemSampler : IDisposable
     private readonly Dictionary<string, List<double>> _gpuByAdapter = new();
     private readonly Dictionary<string, long> _peakVramByAdapter = new();
     private readonly Dictionary<string, double> _gameByAdapter = new();
+    // The latest sample, for the overlay's live tiles.
+    private double? _lastCpu;
+    private readonly Dictionary<string, double> _lastGpuByAdapter = new();
+    private readonly Dictionary<string, long> _lastVramByAdapter = new();
 
     /// <summary>Starts sampling; returns a sampler that records nothing when PDH isn't usable. With
     /// <paramref name="gameProcessId"/>, the card that process uses is the one reported.</summary>
@@ -66,7 +70,7 @@ public sealed class SystemSampler : IDisposable
             {
                 if (Pdh.PdhCollectQueryData(_query) != 0) return;
                 _samples++;
-                if (Single(_cpuTotal) is { } cpu) _cpu.Add(Math.Clamp(cpu, 0, 100));
+                if (Single(_cpuTotal) is { } cpu) { _cpu.Add(Math.Clamp(cpu, 0, 100)); _lastCpu = Math.Clamp(cpu, 0, 100); }
                 var cores = Instances(_cpuCores).Where(i => !i.Name.Contains("_Total", StringComparison.OrdinalIgnoreCase)).ToList();
                 if (cores.Count > 0) _busiestCore.Add(Math.Clamp(cores.Max(c => c.Value), 0, 100));
 
@@ -86,10 +90,14 @@ public sealed class SystemSampler : IDisposable
                 {
                     if (!_gpuByAdapter.TryGetValue(adapter, out var list)) _gpuByAdapter[adapter] = list = new();
                     list.Add(Math.Clamp(value, 0, 100));
+                    _lastGpuByAdapter[adapter] = Math.Clamp(value, 0, 100);
                 }
                 foreach (var item in Instances(_gpuMemory))
                     if (Luid(item.Name) is { } adapter)
+                    {
                         _peakVramByAdapter[adapter] = Math.Max(_peakVramByAdapter.GetValueOrDefault(adapter), (long)item.Value);
+                        _lastVramByAdapter[adapter] = (long)item.Value;
+                    }
             }
             catch (Exception ex) when (ex is not OutOfMemoryException) { }
         }
@@ -118,6 +126,22 @@ public sealed class SystemSampler : IDisposable
             if (peak is <= 0) peak = null;
             return new SystemLoad(gpu, _cpu.Count > 0 ? _cpu.Average() : null, _busiestCore.Count > 0 ? _busiestCore.Average() : null,
                 peak, totalVramBytes, _samples);
+        }
+    }
+
+    /// <summary>
+    /// The latest one-second sample, for the overlay: GPU % and video memory in use on the card the game uses (else
+    /// <paramref name="cardLuid"/>, the detected card), and the processor total. Null where a counter gave nothing.
+    /// </summary>
+    public LiveLoad Now(string? cardLuid)
+    {
+        lock (_sync)
+        {
+            var card = _gameByAdapter.Where(a => a.Value > 0).OrderByDescending(a => a.Value).Select(a => a.Key).FirstOrDefault()
+                    ?? (cardLuid is not null && _lastGpuByAdapter.ContainsKey(cardLuid) ? cardLuid : null);
+            double? gpu = card is not null && _lastGpuByAdapter.TryGetValue(card, out var g) ? g : null;
+            long? vram = card is not null && _lastVramByAdapter.TryGetValue(card, out var v) && v > 0 ? v : null;
+            return new LiveLoad(gpu, _lastCpu, vram);
         }
     }
 

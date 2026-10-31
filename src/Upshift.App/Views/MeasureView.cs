@@ -242,35 +242,24 @@ public sealed class MeasureView : UserControl
     // ---------------- Measure this game ----------------
 
     /// <summary>
-    /// "Show overlay while measuring" and the corner. The overlay is Upshift's own small window over the game (nothing is
-    /// injected), for every game; Shift + the measuring key hides and shows it. It isn't hidden from screen capture, so a
-    /// recorder that captures the screen includes it.
+    /// "Show overlay while measuring". The overlay is Upshift's own small window over the game (nothing is injected), for
+    /// every game; Shift + the measuring key hides and shows it. Its style, corner, opacity and items are in Settings. It
+    /// isn't hidden from screen capture, so a recorder that captures the screen includes it.
     /// </summary>
     private static FrameworkElement OverlayRow()
     {
         var settings = AppServices.Settings.Current;
         var toggle = new ToggleSwitch { Header = "Show overlay while measuring", IsOn = settings.MeasureOverlay };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(toggle, "Show overlay while measuring");
-        var corner = new ComboBox { Header = "Corner", MinWidth = 150 };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(corner, "Overlay corner");
-        foreach (var (value, label) in new[] { ("TopLeft", "Top left"), ("TopRight", "Top right"), ("BottomLeft", "Bottom left"), ("BottomRight", "Bottom right") })
-            corner.Items.Add(new ComboBoxItem { Content = label, Tag = value });
-        var current = MeasureOverlay.ParseCorner(settings.OverlayCorner).ToString();
-        corner.SelectedItem = corner.Items.OfType<ComboBoxItem>().First(i => (string)i.Tag == current);
         toggle.Toggled += (_, _) =>
         {
             var s = AppServices.Settings.Current;
             s.MeasureOverlay = toggle.IsOn;
             AppServices.Settings.Save(s);
         };
-        corner.SelectionChanged += (_, _) =>
-        {
-            if (corner.SelectedItem is not ComboBoxItem { Tag: string tag }) return;
-            var s = AppServices.Settings.Current;
-            s.OverlayCorner = tag;
-            AppServices.Settings.Save(s);
-        };
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 16, Children = { toggle, corner } };
+        var change = new HyperlinkButton { Content = "Choose what it shows", Padding = new Thickness(0), VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 6) };
+        change.Click += (_, _) => (App.MainAppWindow as MainWindow)?.ShowPage("settings");
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 16, Children = { toggle, change } };
         var panel = new StackPanel { Spacing = 2, Children = { row, Subtle($"Live FPS in a corner of the game. {Measurement.OverlayKeyName} hides it.") } };
         // Said in full (not shortened to a tooltip): it answers "why isn't it in my video?".
         panel.Children.Add(new TextBlock

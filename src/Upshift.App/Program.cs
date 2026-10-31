@@ -213,19 +213,31 @@ public static class Program
     /// </summary>
     private static void OverlayTest(string corner, string csv, int seconds)
     {
-        var overlay = Services.MeasureOverlay.Show(IntPtr.Zero, Services.MeasureOverlay.ParseCorner(corner));
+        // Ready for 3 s, Recording for the given seconds, then the Result (it fades after 8 s), from a capture CSV (pid 4242).
+        var settings = new Core.Services.SettingsStore(Core.Services.DataMigration.NewDataDir).Current;
+        var look = new Services.OverlayRenderer.Look(string.Equals(settings.OverlayStyle, "Minimal", StringComparison.OrdinalIgnoreCase), settings.OverlayOpacity);
+        var items = Core.Measure.OverlayItems.Normalize(settings.OverlayItems);
+        var overlay = Services.MeasureOverlay.Show(IntPtr.Zero, Services.MeasureOverlay.ParseCorner(corner), look);
         if (overlay is null) return;
         var live = new Core.Measure.LiveFrames(csv, 4242);
-        var since = DateTime.UtcNow;
-        while ((DateTime.UtcNow - since).TotalSeconds < seconds)
+        Core.Measure.LiveFrames? recorded = null;
+        var start = DateTime.UtcNow;
+        DateTime? since = null;
+        while (true)
         {
-            var snap = live.Poll();
-            var left = Math.Max(0, seconds - (int)(DateTime.UtcNow - since).TotalSeconds);
-            overlay.Update($"{left / 60}:{left % 60:00} left",
-                snap.Fps is { } fps ? $"FPS {Math.Round(fps)}" + (snap.LowFps is { } low ? $"  ·  1% low {Math.Round(low)}" : "") : "FPS –",
-                snap.FrameMs is { } ms ? $"Frame time {ms:0.0} ms" : "Waiting for frames…", snap.Graph);
+            var now = DateTime.UtcNow;
+            if (since is null && (now - start).TotalSeconds >= 3) (since, recorded) = (now, new Core.Measure.LiveFrames(csv, 4242, Core.Measure.LiveFrames.Length(csv)));
+            var elapsed = since is { } t ? (now - t).TotalSeconds : 0;
+            if (since is not null && elapsed >= seconds) break;
+            overlay.Update(Core.Measure.OverlayItems.Build(since is null ? Core.Measure.OverlayPhase.Ready : Core.Measure.OverlayPhase.Recording,
+                items, "F10", seconds, live.Poll(), recorded?.Poll(), new Core.Measure.LiveLoad(88, 27, 6_400_000_000), elapsed));
             Thread.Sleep(250);
         }
+        var snap = recorded!.Poll();
+        overlay.Update(Core.Measure.OverlayItems.Build(Core.Measure.OverlayPhase.Result, items, "F10", seconds, null, null, null, seconds,
+            new Core.Measure.FrameStats(snap.Frames, seconds, snap.AverageFps ?? 0, snap.LowFps ?? 0, 0, true, snap.MaxFps), "Limited by your graphics card"));
+        Thread.Sleep(8000);
+        for (var step = 1; step <= 8; step++) { overlay.Fade(1 - step / 8.0); Thread.Sleep(60); }
         overlay.Dispose();
         Thread.Sleep(300);
     }

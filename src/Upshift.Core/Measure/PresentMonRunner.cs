@@ -16,6 +16,11 @@ public sealed class MeasureJob
     /// <summary>The folder for this measurement (start signal, cancel signal, CSV, result).</summary>
     public string WorkDir { get; set; } = "";
     public int Seconds { get; set; } = MeasureThresholds.MeasureSeconds;
+    /// <summary>
+    /// The capture runs from the game being found until it's stopped (stop.txt), the game exits or Upshift goes, so the
+    /// overlay has live figures before the key is pressed; the measurement is cut out of it. Seconds is still checked.
+    /// </summary>
+    public bool Continuous { get; set; }
     /// <summary>The main Upshift window's process: the helper quits when it's gone.</summary>
     public int ParentProcessId { get; set; }
     /// <summary>The helper gives up waiting after this.</summary>
@@ -68,8 +73,10 @@ public static class PresentMonRunner
     /// stopped if it overruns, so it never keeps running in the background. <paramref name="ct"/> cancels (the result
     /// isn't wanted); <paramref name="stop"/> stops early and keeps what was recorded: PresentMon's trace session is
     /// ended, so PresentMon finishes its file and quits by itself (it's only killed if it hasn't after 8 seconds).
+    /// <paramref name="continuous"/>: no time limit (see <see cref="MeasureJob.Continuous"/>); it ends with the game or a stop.
     /// </summary>
-    public static MeasureRunResult Run(string presentMon, int processId, string csv, int seconds, CancellationToken ct, CancellationToken stop = default)
+    public static MeasureRunResult Run(string presentMon, int processId, string csv, int seconds, CancellationToken ct, CancellationToken stop = default,
+        bool continuous = false)
     {
         const string session = SessionName;
         var result = new MeasureRunResult();
@@ -80,7 +87,8 @@ public static class PresentMonRunner
             RedirectStandardError = true, RedirectStandardOutput = true,
             WorkingDirectory = Path.GetDirectoryName(csv)!
         };
-        var timing = new[] { "--timed", seconds.ToString(), "--terminate_after_timed" };
+        // Continuous: no time limit; PresentMon ends with the game, or when it's stopped.
+        var timing = continuous ? new[] { "--terminate_on_proc_exit" } : new[] { "--timed", seconds.ToString(), "--terminate_after_timed" };
         // PresentMon's own --output_file is opened without read sharing, so the overlay couldn't read it while it was being
         // written. Its CSV comes from stdout instead and Upshift writes the file itself, readable (and deletable) meanwhile.
         foreach (var arg in new[] { "--process_id", processId.ToString(), "--output_stdout" }.Concat(timing).Concat(new[]
@@ -110,7 +118,7 @@ public static class PresentMonRunner
         process.BeginOutputReadLine();
 
         var exited = process.WaitForExitAsync();
-        var deadline = Task.Delay(TimeSpan.FromSeconds(seconds + 20));
+        var deadline = continuous ? Task.Delay(Timeout.Infinite) : Task.Delay(TimeSpan.FromSeconds(seconds + 20));
         var cancelled = Task.Delay(Timeout.Infinite, ct);
         var stopped = Task.Delay(Timeout.Infinite, stop);
         var first = Task.WhenAny(exited, deadline, cancelled, stopped).GetAwaiter().GetResult();
@@ -194,7 +202,7 @@ public static class PresentMonRunner
                                 await Task.Delay(250);
                             }
                         });
-                        result = Run(job.PresentMonPath, pid, job.CsvFile, job.Seconds, cancel.Token, stop.Token);
+                        result = Run(job.PresentMonPath, pid, job.CsvFile, job.Seconds, cancel.Token, stop.Token, job.Continuous);
                         done.Cancel();
                         break;
                     }

@@ -15,10 +15,13 @@ public enum MeasureState { Idle, Preparing, Armed, Measuring }
 /// 1. Arm: PresentMon is downloaded the first time (from its GitHub releases), then, unless this account can already
 ///    read frame timings, Windows is asked once for permission to start the measuring helper (Upshift.exe --measure,
 ///    elevated); the main window stays a normal app. The hotkey is registered.
-/// 2. The hotkey (F10 by default), or "Start in 10 seconds" in Upshift's window for games that swallow the key, starts PresentMon for the game's process only, for the length the user chose (10 to
-///    1800 seconds, 60 by default), with a beep at the start and at the end. The same key stops it early, keeping what
-///    was recorded.
-/// 3. The CSV is read, its folder deleted, and the run saved with the settings the game had. Nothing leaves the PC.
+/// 2. Once the game is running, PresentMon captures its process (from then until the measurement ends, so the overlay is
+///    live while it waits: "Ready").
+/// 3. The hotkey (F10 by default), or "Start in 10 seconds" in Upshift's window for games that swallow the key, starts
+///    the measurement for the length the user chose (10 to 1800 seconds, 60 by default), with a beep at the start and at
+///    the end. The same key stops it early, keeping what was recorded. The measurement is the stretch of the capture
+///    between the two.
+/// 4. That stretch is read, the folder deleted, and the run saved with the settings the game had. Nothing leaves the PC.
 /// Changed is raised on the UI thread.
 /// </summary>
 public static class Measurement
@@ -31,8 +34,19 @@ public static class Measurement
     private static GameInfo? _game;
     private static Func<MeasuredSettings>? _snapshot;
     private static CancellationTokenSource? _armCts;
-    /// <summary>Stops a direct (no helper) run early, keeping its frames.</summary>
+    /// <summary>Ends the recording early (the key again, or "Stop and keep result"), keeping what was recorded.</summary>
     private static CancellationTokenSource? _stopCts;
+    /// <summary>The capture: PresentMon on the game's process from the game being found until the measurement ends.</summary>
+    private static Process? _captureProcess;
+    private static Task<MeasureRunResult?>? _captureTask;
+    private static CancellationTokenSource? _captureStop;
+    /// <summary>Windows' counters while the capture runs (the overlay's GPU, CPU and video memory tiles).</summary>
+    private static SystemSampler? _liveSampler;
+    private static string? _cardLuid;
+    /// <summary>Where the recording starts in the capture's CSV (a file offset) while it records; null otherwise.</summary>
+    private static long? _recordFrom;
+    /// <summary>The result for the overlay to show for 8 seconds before it fades.</summary>
+    private static OverlayFrame? _resultFrame;
     /// <summary>The overlay while measuring, its Shift+key, and the loop that feeds it.</summary>
     private static MeasureOverlay? _overlay;
     private static GlobalHotkey? _overlayKey;
@@ -72,7 +86,7 @@ public static class Measurement
     /// <summary>Said once per game, when its exclusive fullscreen keeps the overlay from showing; null otherwise.</summary>
     public static string? OverlayNotice { get; private set; }
     public static string? OverlayNoticeGameId { get; private set; }
-    public const string ExclusiveFullscreenText = "Overlay needs borderless or windowed mode in the game's settings.";
+    public const string ExclusiveFullscreenText = "Use borderless or windowed mode to see the overlay. Measuring still works.";
 
     /// <summary>The sentence shown before Windows' prompt.</summary>
     public static string PermissionExplanation =>
@@ -119,14 +133,14 @@ public static class Measurement
         {
             // This account may already read frame timings (Performance Log Users): no helper, no prompt.
             _directWorkDir = work;
-            _job = new MeasureJob { PresentMonPath = presentMon, WorkDir = work, Seconds = _seconds };
+            _job = new MeasureJob { PresentMonPath = presentMon, WorkDir = work, Seconds = _seconds, Continuous = true };
         }
         else
         {
             _job = new MeasureJob
             {
                 PresentMonPath = presentMon, WorkDir = work, ParentProcessId = Environment.ProcessId, Seconds = _seconds,
-                DeadlineUtc = DateTime.UtcNow.AddMinutes(30)
+                DeadlineUtc = DateTime.UtcNow.AddMinutes(30), Continuous = true
             };
             if (!await StartHelperAsync(_job, ct))
             {
@@ -137,6 +151,63 @@ public static class Measurement
         }
 
         RegisterStartKey(game);
+        _ = WatchForGameAsync(game, ct);
+    }
+
+    /// <summary>
+    /// While armed: starts the capture as soon as the game runs (the overlay shows "Ready" with live figures), ends the
+    /// wait if the game closes again, and gives up after 30 minutes without a measurement.
+    /// </summary>
+    private static async Task WatchForGameAsync(GameInfo game, CancellationToken ct)
+    {
+        var until = DateTime.UtcNow.AddMinutes(30);
+        while (!ct.IsCancellationRequested && State == MeasureState.Armed)
+        {
+            if (_captureTask is null && FindGame(game) is { } process) await StartCaptureAsync(process);
+            else if (_captureTask is { IsCompleted: true })
+            {
+                Finish($"{game.Name} closed, so measuring stopped. Press Measure this game to measure again.", problem: false);
+                return;
+            }
+            if (DateTime.UtcNow > until)
+            {
+                Finish("Nothing was measured in 30 minutes, so Upshift stopped waiting. Press Measure this game to try again.", problem: false);
+                return;
+            }
+            try { await Task.Delay(1000, ct); }
+            catch (OperationCanceledException) { return; }
+        }
+    }
+
+    /// <summary>Starts PresentMon on the game (directly, or through the helper's start signal) and the overlay.</summary>
+    private static async Task StartCaptureAsync(Process process)
+    {
+        if (_job is not { } job || _game is not { } game || _captureTask is not null) return;
+        _captureProcess = process;
+        _liveSampler = SystemSampler.Start(process.Id);
+        if (AppServices.Gpu is { } gpu) _ = Task.Run(() => _cardLuid = SystemSampler.AdapterLuid(gpu.VendorId, gpu.DeviceId));
+        if (_directWorkDir is not null)
+        {
+            var stop = (_captureStop = new CancellationTokenSource()).Token;
+            _captureTask = Task.Run<MeasureRunResult?>(() =>
+                PresentMonRunner.Run(job.PresentMonPath, process.Id, job.CsvFile, job.Seconds, CancellationToken.None, stop, continuous: true));
+        }
+        else
+        {
+            await File.WriteAllTextAsync(job.StartFile, process.Id.ToString());
+            _captureTask = WaitForHelperAsync(job);
+        }
+        StartOverlay(game, process, job.CsvFile);
+    }
+
+    /// <summary>Ends the capture: PresentMon finishes its output and quits (the helper through its stop signal).</summary>
+    private static void StopCapture()
+    {
+        _captureStop?.Cancel();
+        if (_directWorkDir is null && _job is { } job && _captureTask is not null)
+            try { File.WriteAllText(job.StopFile, "stop"); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        _liveSampler?.Dispose();
+        _liveSampler = null;
     }
 
     /// <summary>
@@ -235,17 +306,13 @@ public static class Measurement
         return rest == 0 ? $"{m} minutes" : $"{m} minutes {rest} seconds";
     }
 
-    /// <summary>
-    /// The hotkey pressed again during a run: stop now and keep what was recorded (direct runs through their token, the
-    /// helper through its stop signal).
-    /// </summary>
+    /// <summary>The hotkey pressed again during a run: stop now and keep what was recorded.</summary>
     public static void StopEarly()
     {
-        if (State != MeasureState.Measuring || _job is not { } job) return;
+        if (State != MeasureState.Measuring) return;
         _hotkey?.Dispose();
         _hotkey = null;
-        if (_directWorkDir is not null) _stopCts?.Cancel();
-        else try { File.WriteAllText(job.StopFile, "stop"); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        _stopCts?.Cancel();
         Set(MeasureState.Measuring, "Stopping and keeping what was recorded…", false);
     }
 
@@ -253,6 +320,7 @@ public static class Measurement
     public static void Cancel(bool silent = false)
     {
         StopOverlay();
+        StopCapture();
         _armCts?.Cancel();
         CountdownUntilUtc = null;
         _hotkey?.Dispose();
@@ -271,55 +339,72 @@ public static class Measurement
         if (State != MeasureState.Armed || _game is not { } game || _job is not { } job) return;
         var counted = CountdownUntilUtc is not null;
         CountdownUntilUtc = null;
-        var process = FindGame(game);
-        if (process is null)
+        if (_captureTask is null)
         {
-            _ = Task.Run(() => Beep(330, 300));
-            Set(MeasureState.Armed, $"{game.Name} wasn't running when {(counted ? "the countdown ended" : $"you pressed {HotkeyName}")}. Start it, get to a normal " +
-                                    $"gameplay area, then press {HotkeyName} or Start in {CountdownSeconds} seconds again.", true);
-            return;
+            if (FindGame(game) is not { } found)
+            {
+                _ = Task.Run(() => Beep(330, 300));
+                Set(MeasureState.Armed, $"{game.Name} wasn't running when {(counted ? "the countdown ended" : $"you pressed {HotkeyName}")}. Start it, get to a normal " +
+                                        $"gameplay area, then press {HotkeyName} or Start in {CountdownSeconds} seconds again.", true);
+                return;
+            }
+            await StartCaptureAsync(found);
         }
+        var process = _captureProcess!;
+        var capture = _captureTask!;
 
         _hotkey?.Dispose();
         _hotkey = null;
         AppServices.History.Launched(game.Id);
         var settings = _snapshot?.Invoke() ?? new MeasuredSettings();
         var refresh = Helpers.Display.Pick(Helpers.Display.All(), AppServices.Settings.Current.FrameCapDisplay)?.RefreshHz;
-        MeasuringSinceUtc = DateTime.UtcNow;
+        // The measurement starts here in the capture.
+        var from = LiveFrames.Length(job.CsvFile);
+        _recordFrom = from;
+        var since = DateTime.UtcNow;
+        MeasuringSinceUtc = since;
         Set(MeasureState.Measuring, $"Measuring {game.Name} for {Length(_seconds)}… keep playing. Press {HotkeyName} again (or Stop and keep result here) to stop early.", false);
         _ = Task.Run(() => { Beep(880, 120); Beep(1320, 160); });
 
         // The same key now stops the run early.
         _hotkey = GlobalHotkey.TryRegister(AppServices.Settings.Current.MeasureHotkey);
         if (_hotkey is not null) _hotkey.Pressed += () => _ui?.TryEnqueue(StopEarly);
-        StartOverlay(game, process, job.CsvFile, _seconds);
 
         // Windows' own counters (GPU and CPU usage, video memory) for the same stretch. A missing counter only means a dash.
         using var sampler = SystemSampler.Start(process.Id);
-
-        MeasureRunResult? result;
         var seconds = _seconds;
-        if (_directWorkDir is not null)
+        var stop = (_stopCts = new CancellationTokenSource()).Token;
+        var stoppedEarly = false;
+        while ((DateTime.UtcNow - since).TotalSeconds < seconds)
         {
-            _stopCts = new CancellationTokenSource();
-            var stop = _stopCts.Token;
-            result = await Task.Run(() => PresentMonRunner.Run(job.PresentMonPath, process.Id, job.CsvFile, seconds, CancellationToken.None, stop));
+            if (stop.IsCancellationRequested) { stoppedEarly = true; break; }
+            if (capture.IsCompleted || process.HasExited) break;
+            await Task.Delay(100);
         }
-        else
-        {
-            await File.WriteAllTextAsync(job.StartFile, process.Id.ToString());
-            result = await WaitForResultAsync(job, TimeSpan.FromSeconds(seconds + 45));
-        }
+        await Task.Delay(600);   // PresentMon's output arrives in batches (about every 250 ms): let the stretch's last frames land
+        var to = LiveFrames.Length(job.CsvFile);
+        _recordFrom = null;
         _hotkey?.Dispose();
         _hotkey = null;
-        StopOverlay();
         MeasuringSinceUtc = null;
         var gpu = AppServices.Gpu;
         var load = gpu is null ? sampler.Stop(null) : sampler.Stop(VideoMemory.TotalBytes(gpu.VendorId, gpu.DeviceId), gpu.VendorId, gpu.DeviceId);
         _ = Task.Run(() => { Beep(1320, 120); Beep(880, 120); Beep(660, 220); });
 
+        StopCapture();
+        var result = await Task.WhenAny(capture, Task.Delay(TimeSpan.FromSeconds(15))) == capture ? capture.Result : null;
         var gameClosed = process.HasExited;
-        var stats = await Task.Run(() => PresentMonCsv.Read(job.CsvFile, process.Id));
+        FrameStats? stats = null;
+        var measured = Path.Combine(job.WorkDir, "measured.csv");
+        try
+        {
+            stats = await Task.Run(() =>
+            {
+                LiveFrames.Slice(job.CsvFile, from, to, measured);
+                return PresentMonCsv.Read(measured, process.Id);
+            });
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { result ??= new MeasureRunResult { Problem = $"The capture couldn't be read: {ex.Message}" }; }
         DeleteWorkDir(TakeWorkDir());   // PresentMon has quit; its CSV and the job files go
 
         if (stats is null)
@@ -327,7 +412,6 @@ public static class Measurement
             Finish(Why(result, gameClosed), problem: true);
             return;
         }
-        var stoppedEarly = result?.StoppedEarly == true;
         var timing = stats.Timing;
         var frameGenOn = stats.GeneratedFrames > 0 || settings.OptiScalerFrameGenOn;
         var verdict = BottleneckRules.Judge(stats.AverageFps, timing, load, CapOf(settings), refresh, frameGenOn);
@@ -341,11 +425,15 @@ public static class Measurement
             PeakVramBytes = load.PeakVramBytes, TotalVramBytes = load.TotalVramBytes,
             Verdict = verdict?.Verdict, VerdictLessCertain = verdict?.LessCertain == true, VerdictByVSync = verdict?.ByVSync == true
         });
+        // The overlay shows the result, then fades.
+        var verdictLine = verdict is { } v ? v.Title + (v.LessCertain ? " (less certain)" : "") : null;
+        _resultFrame = OverlayItems.Build(OverlayPhase.Result, OverlayItems.Normalize(AppServices.Settings.Current.OverlayItems), HotkeyName, seconds,
+            null, null, null, stats.Seconds, stats, verdictLine);
         Finish($"Measured {game.Name} for {Length(stats.Seconds)}: {Math.Round(stats.AverageFps)} fps average, low points {Math.Round(stats.LowFps)} fps" +
                (stats.MaxFps is { } max ? $", max {Math.Round(max)} fps." : ".") +
-               (verdict is { } b ? $" {b.Title}{(b.LessCertain ? " (less certain)" : "")}." : "") +
+               (verdictLine is not null ? $" {verdictLine}." : "") +
                (stoppedEarly ? $" You stopped it early (of {Length(seconds)})." : "") +
-               (gameClosed && !stoppedEarly ? $" The game closed before the end, so this covers less than {Length(seconds)}." : ""), problem: false);
+               (gameClosed && !stoppedEarly ? $" The game closed before the end, so this covers less than {Length(seconds)}." : ""), problem: false, keepOverlay: true);
     }
 
     /// <summary>Upshift's frame cap from the recorded settings ("60 fps"), or null for "No cap".</summary>
@@ -367,10 +455,14 @@ public static class Measurement
                (errors.Length > 0 ? $" PresentMon said: {errors.Split('\n').Last()}" : "");
     }
 
-    private static async Task<MeasureRunResult?> WaitForResultAsync(MeasureJob job, TimeSpan timeout)
+    /// <summary>
+    /// The helper's capture: its result once PresentMon has quit (after the stop or cancel signal, or the game closing).
+    /// Null when the helper never answers: 20 seconds after a signal, or when this measurement was abandoned.
+    /// </summary>
+    private static async Task<MeasureRunResult?> WaitForHelperAsync(MeasureJob job)
     {
-        var until = DateTime.UtcNow + timeout;
-        while (DateTime.UtcNow < until)
+        DateTime? signalled = null;
+        while (true)
         {
             if (File.Exists(job.ResultFile))
             {
@@ -378,10 +470,10 @@ public static class Measurement
                 try { return JsonSerializer.Deserialize<MeasureRunResult>(await File.ReadAllTextAsync(job.ResultFile)); }
                 catch (Exception ex) when (ex is IOException or JsonException) { }
             }
-            await Task.Delay(500);
+            if (signalled is null && (File.Exists(job.StopFile) || File.Exists(job.CancelFile) || !Directory.Exists(job.WorkDir))) signalled = DateTime.UtcNow;
+            if (signalled is { } at && DateTime.UtcNow - at > TimeSpan.FromSeconds(20)) return null;
+            await Task.Delay(300);
         }
-        try { File.WriteAllText(job.CancelFile, "cancel"); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
-        return null;
     }
 
     /// <summary>The game's running process: its main exe by name (the one with a window when there are several).</summary>
@@ -420,6 +512,10 @@ public static class Measurement
         var dir = _job?.WorkDir;
         _job = null;
         _directWorkDir = null;
+        _captureTask = null;
+        _captureProcess = null;
+        _captureStop = null;
+        _recordFrom = null;
         return dir;
     }
 
@@ -453,52 +549,94 @@ public static class Measurement
     // ---------------- The overlay ----------------
 
     /// <summary>
-    /// Shows the overlay on the game's screen, when "Show overlay while measuring" is on, and updates it four times a
-    /// second from the CSV being written (PresentMon's output, copied by Upshift into a file it can read meanwhile). Only
-    /// when PresentMon reports the game in exclusive fullscreen, where nothing can show on top, is the overlay taken
-    /// down and that said once per game; measuring goes on either way. (Windows' "full screen" notification state isn't
-    /// used: it's also set for borderless games, where the overlay shows fine.)
+    /// Shows the overlay on the game's screen, when "Show overlay while measuring" is on, from the moment the capture runs:
+    /// Ready (yellow) while it waits for the key, Recording (red) while it measures, then the Result (teal) for 8 seconds,
+    /// fading out. It's updated four times a second from the CSV being written (PresentMon's output, which Upshift writes
+    /// into a file it can read meanwhile) and Windows' counters, and follows the style, corner, opacity and items chosen in
+    /// Settings as they change. Only when PresentMon reports the game in exclusive fullscreen, where nothing can show on top,
+    /// is it taken down, and that's said once per game; measuring goes on either way. (Windows' "full screen" notification
+    /// state isn't used: it's also set for borderless games, where the overlay shows fine.)
     /// </summary>
-    private static void StartOverlay(GameInfo game, Process process, string csv, int seconds)
+    private static void StartOverlay(GameInfo game, Process process, string csv)
     {
         StopOverlay();
+        _resultFrame = null;
         var settings = AppServices.Settings.Current;
         if (!settings.MeasureOverlay) return;
         var cts = _overlayCts = new CancellationTokenSource();
-        IntPtr window;
-        try { window = process.MainWindowHandle; } catch (Exception ex) when (ex is InvalidOperationException or Win32Exception) { window = IntPtr.Zero; }
-        var corner = MeasureOverlay.ParseCorner(settings.OverlayCorner);
         _overlayKey = GlobalHotkey.TryRegister(settings.MeasureHotkey, shift: true);
         if (_overlayKey is not null) _overlayKey.Pressed += () => { if (_overlay is { } o) o.Visible = !o.Visible; };
-        var since = DateTime.UtcNow;
         _ = Task.Run(async () =>
         {
             var live = new LiveFrames(csv, process.Id);
-            var exclusive = false;
-            var overlay = MeasureOverlay.Show(window, corner);
+            LiveFrames? recorded = null;
+            long? recordedFrom = null;
+            var overlay = MeasureOverlay.Show(GameWindow(process), MeasureOverlay.ParseCorner(settings.OverlayCorner), Look(settings));
             _overlay = overlay;
             try
             {
-                while (!cts.IsCancellationRequested)
+                while (!cts.IsCancellationRequested && _resultFrame is null)
                 {
                     var snap = live.Poll();
-                    if (!exclusive && snap.ExclusiveFullscreen)
+                    if (_recordFrom is { } from)
                     {
-                        exclusive = true;
-                        overlay?.Dispose();
-                        _overlay = overlay = null;
+                        if (recordedFrom != from) (recorded, recordedFrom) = (new LiveFrames(csv, process.Id, from), from);
                     }
-                    if (exclusive) NoticeOnce(game);
-                    var left = Math.Max(0, seconds - (int)(DateTime.UtcNow - since).TotalSeconds);
-                    overlay?.Update(State == MeasureState.Measuring && Message.StartsWith("Stopping", StringComparison.Ordinal) ? "Stopping…" : $"{left / 60}:{left % 60:00} left",
-                        snap.Fps is { } fps ? $"FPS {Math.Round(fps)}" + (snap.LowFps is { } low ? $"  ·  1% low {Math.Round(low)}" : "") : "FPS –",
-                        snap.FrameMs is { } ms ? $"Frame time {ms:0.0} ms" : "Waiting for frames…", snap.Graph);
+                    else (recorded, recordedFrom) = (null, null);
+                    var rec = recorded?.Poll();
+                    if (overlay is not null && snap.ExclusiveFullscreen)
+                    {
+                        overlay.Dispose();
+                        _overlay = overlay = null;
+                        NoticeOnce(game);
+                    }
+                    if (overlay is not null)
+                    {
+                        var current = AppServices.Settings.Current;
+                        overlay.Restyle(Look(current), MeasureOverlay.ParseCorner(current.OverlayCorner));
+                        overlay.Follow(GameWindow(process));
+                        var since = MeasuringSinceUtc;
+                        overlay.Update(OverlayItems.Build(since is null ? OverlayPhase.Ready : OverlayPhase.Recording, OverlayItems.Normalize(current.OverlayItems),
+                            HotkeyName, _seconds, snap, rec, _liveSampler?.Now(_cardLuid), since is { } t ? (DateTime.UtcNow - t).TotalSeconds : 0));
+                    }
                     await Task.Delay(250, cts.Token);
+                }
+                // The result: 8 seconds, then a short fade.
+                if (overlay is not null && _resultFrame is { } result)
+                {
+                    overlay.Update(result);
+                    await Task.Delay(8000, cts.Token);
+                    for (var step = 1; step <= 8; step++)
+                    {
+                        overlay.Fade(1 - step / 8.0);
+                        await Task.Delay(60, cts.Token);
+                    }
                 }
             }
             catch (OperationCanceledException) { }
-            finally { overlay?.Dispose(); }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { CrashLog.Write(ex, "Measure overlay"); }
+            finally
+            {
+                overlay?.Dispose();
+                if (_overlay == overlay) _overlay = null;
+                // Faded out by itself: its Shift+key goes too (a new measurement replaces all of this anyway).
+                if (_overlayCts == cts)
+                {
+                    _overlayKey?.Dispose();
+                    _overlayKey = null;
+                    _overlayCts = null;
+                }
+            }
         });
+    }
+
+    private static OverlayRenderer.Look Look(Core.Services.AppSettings settings) =>
+        new(string.Equals(settings.OverlayStyle, "Minimal", StringComparison.OrdinalIgnoreCase), settings.OverlayOpacity);
+
+    private static IntPtr GameWindow(Process process)
+    {
+        try { process.Refresh(); return process.MainWindowHandle; }
+        catch (Exception ex) when (ex is InvalidOperationException or Win32Exception) { return IntPtr.Zero; }
     }
 
     private static void StopOverlay()
@@ -523,9 +661,13 @@ public static class Measurement
         _ui?.TryEnqueue(() => Changed?.Invoke());
     }
 
-    private static void Finish(string message, bool problem)
+    /// <param name="keepOverlay">The overlay stays to show the result, then fades and closes by itself.</param>
+    private static void Finish(string message, bool problem, bool keepOverlay = false)
     {
-        StopOverlay();
+        if (!keepOverlay) StopOverlay();
+        StopCapture();
+        // The capture's folder (PresentMon needs a moment to let go of it).
+        if (TakeWorkDir() is { } dir) _ = Task.Run(async () => { await Task.Delay(1500); DeleteWorkDir(dir); });
         _hotkey?.Dispose();
         _hotkey = null;
         MeasuringSinceUtc = null;

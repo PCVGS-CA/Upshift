@@ -61,6 +61,15 @@ public sealed class AppSettings
     /// <summary>The overlay's corner: TopLeft, TopRight, BottomLeft or BottomRight.</summary>
     public string OverlayCorner { get; set; } = "TopRight";
 
+    /// <summary>The overlay's style: "Full" (panel with tiles) or "Minimal" (one line).</summary>
+    public string OverlayStyle { get; set; } = "Full";
+
+    /// <summary>The overlay panel's opacity in percent (30 to 100).</summary>
+    public int OverlayOpacity { get; set; } = 70;
+
+    /// <summary>"Show on overlay": the ticked items (<see cref="Measure.OverlayItems"/> keys); null means the defaults.</summary>
+    public List<string>? OverlayItems { get; set; }
+
     /// <summary>Games already told that exclusive fullscreen keeps the overlay from showing (said once per game).</summary>
     public List<string> OverlayNoticeShown { get; set; } = new();
 

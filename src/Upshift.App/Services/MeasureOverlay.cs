@@ -1,28 +1,26 @@
 using System.Runtime.InteropServices;
+using Upshift.Core.Measure;
 
 namespace Upshift.App.Services;
 
 /// <summary>
-/// The "Show overlay while measuring" box: Upshift's own small window in a corner of the game's screen with the live
-/// frame rate, the 1% low so far, the frame time and a recording dot with the time left. It's always on top,
-/// see-through to clicks, never takes the focus and is semi-transparent. Nothing is injected into the game: the
-/// figures come from the PresentMon capture Measure already runs. It can't show over a game in exclusive fullscreen.
-/// The window lives on its own thread with its own message loop; every call here is safe from any thread.
+/// The Measure overlay: Upshift's own window in a corner of the game's screen (see <see cref="OverlayRenderer"/> for the
+/// look). It's always on top, see-through to clicks and never takes the focus. Nothing is injected into the game: the
+/// figures come from Measure's PresentMon capture and Windows' counters, so it works in every game, except over exclusive
+/// fullscreen. The window lives on its own thread with its own message loop; every call here is safe from any thread.
 /// </summary>
 public sealed class MeasureOverlay : IDisposable
 {
     public enum Corner { TopLeft, TopRight, BottomLeft, BottomRight }
 
-    private const int WmUpdate = 0x0400 + 0x51, WmQuitLoop = 0x0400 + 0x52, WmPaint = 0x000F, WmNcHitTest = 0x0084, WmDestroy = 0x0002;
+    private const int WmUpdate = 0x0400 + 0x51, WmQuitLoop = 0x0400 + 0x52, WmNcHitTest = 0x0084, WmDestroy = 0x0002;
     private const int HtTransparent = -1;
     private const uint WsPopup = 0x80000000;
     private const uint WsExLayered = 0x00080000, WsExTransparent = 0x00000020, WsExTopmost = 0x00000008, WsExToolWindow = 0x00000080, WsExNoActivate = 0x08000000;
-    private const uint SwpNoActivate = 0x0010, SwpShowWindow = 0x0040, SwpHideWindow = 0x0080;
-    private const uint LwaAlpha = 0x2;
+    private const uint SwpNoActivate = 0x0010, SwpNoSize = 0x0001, SwpNoMove = 0x0002;
+    private const int SwShowNoActivate = 4, SwHide = 0;
+    private const int Margin = 16;
     private static readonly IntPtr HwndTopmost = new(-1);
-    private const int Width = 230, Height = 118, Margin = 16;
-    /// <summary>The frame-time graph's box inside the window (unscaled pixels).</summary>
-    private const int GraphLeft = 12, GraphTop = 74, GraphRight = Width - 12, GraphBottom = Height - 10;
 
     private static readonly WndProc Proc = WindowProc;   // kept alive while Windows calls it
     private static readonly Dictionary<IntPtr, MeasureOverlay> Windows = new();
@@ -33,29 +31,28 @@ public sealed class MeasureOverlay : IDisposable
     private readonly object _sync = new();
     private IntPtr _hwnd;
     private IntPtr _gameWindow;
-    private Corner _corner;
 
     // What to draw (set under _sync).
-    private string _status = "REC";
-    private string _line1 = "FPS –";
-    private string _line2 = "";
-    private double[] _graph = Array.Empty<double>();
-    private bool _recording = true;
+    private OverlayFrame? _frame;
+    private OverlayRenderer.Look _look;
+    private Corner _corner;
     private bool _visible = true;
+    private double _fade = 1;
 
-    private MeasureOverlay(IntPtr gameWindow, Corner corner)
+    private MeasureOverlay(IntPtr gameWindow, Corner corner, OverlayRenderer.Look look)
     {
         _gameWindow = gameWindow;
         _corner = corner;
+        _look = look;
         _thread = new Thread(Run) { IsBackground = true, Name = "Measure overlay" };
         _thread.Start();
         _ready.Wait(TimeSpan.FromSeconds(5));
     }
 
-    /// <summary>Shows the overlay on the screen <paramref name="gameWindow"/> is on (the main screen when it's zero). Null when the window couldn't be made.</summary>
-    public static MeasureOverlay? Show(IntPtr gameWindow, Corner corner)
+    /// <summary>Makes the overlay for the screen <paramref name="gameWindow"/> is on (the main screen when it's zero); it shows with the first <see cref="Update"/>. Null when the window couldn't be made.</summary>
+    public static MeasureOverlay? Show(IntPtr gameWindow, Corner corner, OverlayRenderer.Look look)
     {
-        var overlay = new MeasureOverlay(gameWindow, corner);
+        var overlay = new MeasureOverlay(gameWindow, corner, look);
         if (overlay._hwnd != IntPtr.Zero) return overlay;
         overlay.Dispose();
         return null;
@@ -63,12 +60,24 @@ public sealed class MeasureOverlay : IDisposable
 
     public static Corner ParseCorner(string? text) => Enum.TryParse<Corner>(text, true, out var c) ? c : Corner.TopRight;
 
-    /// <summary>"0:42 left", "FPS 143 · 1% low 98", "Frame time 7.0 ms".</summary>
-    /// <param name="graph">The last ~5 seconds of frame times (ms), oldest first.</param>
-    /// <param name="recording">The red dot: on while a measurement records, off for the plain overlay.</param>
-    public void Update(string status, string line1, string line2, IReadOnlyList<double>? graph = null, bool recording = true)
+    /// <summary>New figures (at most four times a second from Measure).</summary>
+    public void Update(OverlayFrame frame)
     {
-        lock (_sync) { (_status, _line1, _line2, _graph, _recording) = (status, line1, line2, graph?.ToArray() ?? Array.Empty<double>(), recording); }
+        lock (_sync) _frame = frame;
+        Post();
+    }
+
+    /// <summary>Settings changed while it shows (style, opacity, corner).</summary>
+    public void Restyle(OverlayRenderer.Look look, Corner corner)
+    {
+        lock (_sync) (_look, _corner) = (look, corner);
+        Post();
+    }
+
+    /// <summary>The result's fade-out: 1 is fully shown, 0 gone.</summary>
+    public void Fade(double opacity)
+    {
+        lock (_sync) _fade = Math.Clamp(opacity, 0, 1);
         Post();
     }
 
@@ -108,11 +117,9 @@ public sealed class MeasureOverlay : IDisposable
                 }
             }
             _hwnd = CreateWindowEx(WsExLayered | WsExTransparent | WsExTopmost | WsExToolWindow | WsExNoActivate,
-                "UpshiftMeasureOverlay", "Upshift measuring", WsPopup, 0, 0, Width, Height, IntPtr.Zero, IntPtr.Zero, module, IntPtr.Zero);
+                "UpshiftMeasureOverlay", "Upshift measuring", WsPopup, 0, 0, 1, 1, IntPtr.Zero, IntPtr.Zero, module, IntPtr.Zero);
             if (_hwnd == IntPtr.Zero) return;
             lock (Windows) Windows[_hwnd] = this;
-            SetLayeredWindowAttributes(_hwnd, 0, 220, LwaAlpha);
-            Place(show: true);
         }
         finally { _ready.Set(); }
 
@@ -125,22 +132,59 @@ public sealed class MeasureOverlay : IDisposable
         }
     }
 
-    /// <summary>The game's screen, the chosen corner, scaled for that screen; kept on top of the game.</summary>
-    private void Place(bool show)
+    /// <summary>Draws the latest frame into the window, sized for the game's screen and placed in the chosen corner, on top.</summary>
+    private void Draw(IntPtr hwnd)
     {
-        var monitor = MonitorFromWindow(_gameWindow, 2 /* nearest */);
+        OverlayFrame? frame;
+        OverlayRenderer.Look look;
+        Corner corner;
+        bool visible;
+        double fade;
+        IntPtr game;
+        lock (_sync) (frame, look, corner, visible, fade, game) = (_frame, _look, _corner, _visible, _fade, _gameWindow);
+        if (frame is null || !visible || fade <= 0)
+        {
+            ShowWindow(hwnd, SwHide);
+            return;
+        }
+
+        var monitor = MonitorFromWindow(game, 2 /* nearest */);
         var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
         if (!GetMonitorInfo(monitor, ref info)) info.rcMonitor = new RECT { Right = 1920, Bottom = 1080 };
-        var scale = Scale(monitor);
-        int w = (int)(Width * scale), h = (int)(Height * scale), m = (int)(Margin * scale);
+        var scale = GetDpiForMonitor(monitor, 0, out var dpi, out _) == 0 && dpi > 0 ? dpi / 96.0 : 1.0;
+        var (pixels, w, h) = OverlayRenderer.Render(frame, look, scale);
+        var m = (int)(Margin * scale);
         var r = info.rcMonitor;
-        var x = _corner is Corner.TopLeft or Corner.BottomLeft ? r.Left + m : r.Right - w - m;
-        var y = _corner is Corner.TopLeft or Corner.TopRight ? r.Top + m : r.Bottom - h - m;
-        SetWindowPos(_hwnd, HwndTopmost, x, y, w, h, SwpNoActivate | (show ? SwpShowWindow : SwpHideWindow));
-    }
+        var position = new POINT
+        {
+            X = corner is Corner.TopLeft or Corner.BottomLeft ? r.Left + m : r.Right - w - m,
+            Y = corner is Corner.TopLeft or Corner.TopRight ? r.Top + m : r.Bottom - h - m
+        };
 
-    private static double Scale(IntPtr monitor) =>
-        GetDpiForMonitor(monitor, 0, out var dpi, out _) == 0 && dpi > 0 ? dpi / 96.0 : 1.0;
+        var screen = GetDC(IntPtr.Zero);
+        var memory = CreateCompatibleDC(screen);
+        var bmi = new BITMAPINFO { biSize = 40, biWidth = w, biHeight = -h, biPlanes = 1, biBitCount = 32 };
+        var bitmap = CreateDIBSection(memory, ref bmi, 0, out var bits, IntPtr.Zero, 0);
+        var old = SelectObject(memory, bitmap);
+        try
+        {
+            Marshal.Copy(pixels, 0, bits, pixels.Length);
+            var size = new SIZE { cx = w, cy = h };
+            var source = new POINT();
+            var blend = new BLENDFUNCTION { BlendOp = 0, SourceConstantAlpha = (byte)Math.Round(255 * fade), AlphaFormat = 1 /* AC_SRC_ALPHA */ };
+            UpdateLayeredWindow(hwnd, screen, ref position, ref size, memory, ref source, 0, ref blend, 2 /* ULW_ALPHA */);
+            // Kept above the game (a game going fullscreen can push it down).
+            SetWindowPos(hwnd, HwndTopmost, 0, 0, 0, 0, SwpNoActivate | SwpNoMove | SwpNoSize);
+            ShowWindow(hwnd, SwShowNoActivate);
+        }
+        finally
+        {
+            SelectObject(memory, old);
+            DeleteObject(bitmap);
+            DeleteDC(memory);
+            ReleaseDC(IntPtr.Zero, screen);
+        }
+    }
 
     private static IntPtr WindowProc(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam)
     {
@@ -151,11 +195,8 @@ public sealed class MeasureOverlay : IDisposable
             case WmNcHitTest:
                 return new IntPtr(HtTransparent);
             case WmUpdate when overlay is not null:
-                overlay.Place(overlay.Visible);
-                InvalidateRect(hwnd, IntPtr.Zero, true);
-                return IntPtr.Zero;
-            case WmPaint when overlay is not null:
-                overlay.Paint(hwnd);
+                try { overlay.Draw(hwnd); }
+                catch (Exception ex) when (ex is not OutOfMemoryException) { CrashLog.Write(ex, "MeasureOverlay"); }
                 return IntPtr.Zero;
             case WmDestroy:
                 lock (Windows) Windows.Remove(hwnd);
@@ -165,98 +206,11 @@ public sealed class MeasureOverlay : IDisposable
         return DefWindowProc(hwnd, message, wParam, lParam);
     }
 
-    private void Paint(IntPtr hwnd)
-    {
-        string status, line1, line2;
-        double[] graph;
-        bool recording;
-        lock (_sync) (status, line1, line2, graph, recording) = (_status, _line1, _line2, _graph, _recording);
-        var dc = BeginPaint(hwnd, out var ps);
-        try
-        {
-            GetClientRect(hwnd, out var rect);
-            var scale = rect.Right / (double)Width;
-            int S(double v) => (int)Math.Round(v * scale);
-            var back = CreateSolidBrush(0x00201C1B);   // #1B1C20 (BGR)
-            FillRect(dc, ref rect, back);
-            DeleteObject(back);
-
-            // The recording dot (only while a measurement records).
-            if (recording)
-            {
-                var red = CreateSolidBrush(0x003C3CE8);    // #E83C3C
-                var oldBrush = SelectObject(dc, red);
-                var nullPen = GetStockObject(8 /* NULL_PEN */);
-                var oldPen = SelectObject(dc, nullPen);
-                Ellipse(dc, S(12), S(10), S(23), S(21));
-                SelectObject(dc, oldPen);
-                SelectObject(dc, oldBrush);
-                DeleteObject(red);
-            }
-            DrawGraph(dc, graph, S);
-
-            SetBkMode(dc, 1 /* TRANSPARENT */);
-            var bold = CreateFont(-S(15), 0, 0, 0, 600, 0, 0, 0, 1, 0, 0, 5 /* CLEARTYPE */, 0, "Segoe UI");
-            var normal = CreateFont(-S(14), 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, "Segoe UI");
-            var old = SelectObject(dc, bold);
-            SetTextColor(dc, 0x00FFFFFF);
-            TextOut(dc, S(recording ? 30 : 12), S(7), status, status.Length);
-            TextOut(dc, S(12), S(29), line1, line1.Length);
-            SelectObject(dc, normal);
-            SetTextColor(dc, 0x00D8D4D0);
-            TextOut(dc, S(12), S(51), line2, line2.Length);
-            SelectObject(dc, old);
-            DeleteObject(bold);
-            DeleteObject(normal);
-        }
-        finally { EndPaint(hwnd, ref ps); }
-    }
-
-    /// <summary>
-    /// The frame-time graph: time runs left to right over the last ~5 seconds, frame time upwards, so a stutter is a
-    /// spike. The top is at least 33 ms and at least twice the median frame time; a faint line marks the median.
-    /// </summary>
-    private static void DrawGraph(IntPtr dc, double[] graph, Func<double, int> S)
-    {
-        var frame = CreateSolidBrush(0x00302A28);   // a slightly lighter box
-        var box = new RECT { Left = S(GraphLeft), Top = S(GraphTop), Right = S(GraphRight), Bottom = S(GraphBottom) };
-        FillRect(dc, ref box, frame);
-        DeleteObject(frame);
-        if (graph.Length < 2) return;
-        var sorted = graph.OrderBy(v => v).ToArray();
-        var median = sorted[sorted.Length / 2];
-        var top = Math.Max(Math.Max(33.4, median * 2), sorted[^1] * 1.1);
-        var total = graph.Sum();
-        double width = GraphRight - GraphLeft, height = GraphBottom - GraphTop;
-        int Y(double ms) => S(GraphBottom - Math.Min(ms, top) / top * height);
-
-        var medianPen = CreatePen(0, 1, 0x00585250);
-        var oldPen = SelectObject(dc, medianPen);
-        MoveToEx(dc, S(GraphLeft), Y(median), IntPtr.Zero);
-        LineTo(dc, S(GraphRight), Y(median));
-        SelectObject(dc, oldPen);
-        DeleteObject(medianPen);
-
-        var points = new POINT[graph.Length];
-        double clock = 0;
-        for (var i = 0; i < graph.Length; i++)
-        {
-            clock += graph[i];
-            points[i] = new POINT { X = S(GraphLeft + clock / total * width), Y = Y(graph[i]) };
-        }
-        var line = CreatePen(0, Math.Max(1, S(1.5)), 0x00A8B63F);   // #3FB6A8
-        oldPen = SelectObject(dc, line);
-        Polyline(dc, points, points.Length);
-        SelectObject(dc, oldPen);
-        DeleteObject(line);
-    }
-
     public void Dispose()
     {
         if (_hwnd != IntPtr.Zero) PostMessage(_hwnd, WmQuitLoop, IntPtr.Zero, IntPtr.Zero);
         _hwnd = IntPtr.Zero;
     }
-
 
     // ---------------- Win32 ----------------
 
@@ -275,17 +229,18 @@ public sealed class MeasureOverlay : IDisposable
 
     [StructLayout(LayoutKind.Sequential)] private struct RECT { public int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential)] private struct POINT { public int X, Y; }
+    [StructLayout(LayoutKind.Sequential)] private struct SIZE { public int cx, cy; }
     [StructLayout(LayoutKind.Sequential)] private struct MONITORINFO { public int cbSize; public RECT rcMonitor, rcWork; public uint dwFlags; }
     [StructLayout(LayoutKind.Sequential)] private struct MSG { public IntPtr hwnd; public int message; public IntPtr wParam, lParam; public uint time; public int x, y; }
+    [StructLayout(LayoutKind.Sequential)] private struct BLENDFUNCTION { public byte BlendOp, BlendFlags, SourceConstantAlpha, AlphaFormat; }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct PAINTSTRUCT
+    private struct BITMAPINFO
     {
-        public IntPtr hdc;
-        public bool fErase;
-        public RECT rcPaint;
-        public bool fRestore, fIncUpdate;
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)] public byte[] rgbReserved;
+        public int biSize, biWidth, biHeight;
+        public short biPlanes, biBitCount;
+        public int biCompression, biSizeImage, biXPelsPerMeter, biYPelsPerMeter, biClrUsed, biClrImportant;
+        public int bmiColors;
     }
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern ushort RegisterClassEx(ref WNDCLASSEX wc);
@@ -298,30 +253,18 @@ public sealed class MeasureOverlay : IDisposable
     [DllImport("user32.dll")] private static extern int GetMessage(out MSG msg, IntPtr hwnd, uint min, uint max);
     [DllImport("user32.dll")] private static extern bool TranslateMessage(ref MSG msg);
     [DllImport("user32.dll")] private static extern IntPtr DispatchMessage(ref MSG msg);
-    [DllImport("user32.dll")] private static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint key, byte alpha, uint flags);
+    [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hwnd, int command);
     [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int w, int h, uint flags);
+    [DllImport("user32.dll")] private static extern bool UpdateLayeredWindow(IntPtr hwnd, IntPtr screen, ref POINT position, ref SIZE size, IntPtr source, ref POINT sourcePoint, uint key, ref BLENDFUNCTION blend, uint flags);
     [DllImport("user32.dll")] private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
     [DllImport("user32.dll")] private static extern bool GetMonitorInfo(IntPtr monitor, ref MONITORINFO info);
     [DllImport("shcore.dll")] private static extern int GetDpiForMonitor(IntPtr monitor, int type, out uint dpiX, out uint dpiY);
-    [DllImport("user32.dll")] private static extern bool InvalidateRect(IntPtr hwnd, IntPtr rect, bool erase);
-    [DllImport("user32.dll")] private static extern IntPtr BeginPaint(IntPtr hwnd, out PAINTSTRUCT ps);
-    [DllImport("user32.dll")] private static extern bool EndPaint(IntPtr hwnd, ref PAINTSTRUCT ps);
-    [DllImport("user32.dll")] private static extern bool GetClientRect(IntPtr hwnd, out RECT rect);
-    [DllImport("user32.dll")] private static extern int FillRect(IntPtr dc, ref RECT rect, IntPtr brush);
-    [DllImport("gdi32.dll")] private static extern IntPtr CreateSolidBrush(uint color);
+    [DllImport("user32.dll")] private static extern IntPtr GetDC(IntPtr hwnd);
+    [DllImport("user32.dll")] private static extern int ReleaseDC(IntPtr hwnd, IntPtr dc);
+    [DllImport("gdi32.dll")] private static extern IntPtr CreateCompatibleDC(IntPtr dc);
+    [DllImport("gdi32.dll")] private static extern bool DeleteDC(IntPtr dc);
+    [DllImport("gdi32.dll")] private static extern IntPtr CreateDIBSection(IntPtr dc, ref BITMAPINFO info, uint usage, out IntPtr bits, IntPtr section, uint offset);
     [DllImport("gdi32.dll")] private static extern IntPtr SelectObject(IntPtr dc, IntPtr obj);
     [DllImport("gdi32.dll")] private static extern bool DeleteObject(IntPtr obj);
-    [DllImport("gdi32.dll")] private static extern IntPtr GetStockObject(int index);
-    [DllImport("gdi32.dll")] private static extern bool Ellipse(IntPtr dc, int left, int top, int right, int bottom);
-    [DllImport("gdi32.dll")] private static extern IntPtr CreatePen(int style, int width, uint color);
-    [DllImport("gdi32.dll")] private static extern bool MoveToEx(IntPtr dc, int x, int y, IntPtr previous);
-    [DllImport("gdi32.dll")] private static extern bool LineTo(IntPtr dc, int x, int y);
-    [DllImport("gdi32.dll")] private static extern bool Polyline(IntPtr dc, POINT[] points, int count);
-    [DllImport("gdi32.dll")] private static extern int SetBkMode(IntPtr dc, int mode);
-    [DllImport("gdi32.dll")] private static extern uint SetTextColor(IntPtr dc, uint color);
-    [DllImport("gdi32.dll", CharSet = CharSet.Unicode)] private static extern bool TextOut(IntPtr dc, int x, int y, string text, int length);
-    [DllImport("gdi32.dll", CharSet = CharSet.Unicode)]
-    private static extern IntPtr CreateFont(int height, int width, int escapement, int orientation, int weight, uint italic, uint underline, uint strike,
-        uint charset, uint outPrecision, uint clipPrecision, uint quality, uint pitchAndFamily, string face);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr GetModuleHandle(string? name);
 }

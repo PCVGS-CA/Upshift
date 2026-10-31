@@ -4,11 +4,15 @@ All notable changes to Upshift. Each release's section becomes its GitHub releas
 
 ## [1.6.0]
 
-A working overlay with a frame-time graph, game-aware updates, and AMD's FSR 4 upgrade per game.
+A redesigned Measure overlay you can choose the contents of, game-aware updates, and AMD's FSR 4 upgrade per game.
 
 ### New
 
-- **Frame-time graph.** The overlay while measuring now draws the last few seconds of frame times under the numbers, so stutter shows as a spike the moment it happens.
+- **A new Measure overlay.** A dark see-through panel with rounded corners in a corner of the game, still Upshift's own click-through window (nothing is hooked into the game, so it works in every game). It has three states:
+  - **Ready** (yellow): as soon as the game runs after you press Measure this game, with live FPS and the values you ticked, and "Press F10 to start".
+  - **Recording** (red): big live FPS, a frame-time line for the last 5 seconds (stutter shows as a spike), your values as tiles, a progress bar with elapsed and total time, and "F10 stop & keep".
+  - **Result** (teal): Average, 1% low, Max, the bottleneck verdict and how long it measured, for 8 seconds, then it fades out.
+- **Choose what the overlay shows** in Settings > Measure performance, with a live preview: Full or Minimal (one line), the corner, the panel's opacity, and "Show on overlay". FPS, Average, 1% low, the frame-time line and progress are on by default; 0.1% low, Max FPS, frame time, latency, GPU %, CPU %, GPU busy/wait and video memory used are optional. Latency comes from PresentMon's own columns; anything a game or PC doesn't report shows "—". Every value comes from PresentMon or Windows' own counters; nothing extra is downloaded.
 - **Recording it.** The overlay isn't hidden from screen recorders. To get it in a video, use borderless or windowed mode and your recorder's screen or display capture; game-only capture (OBS Game Capture, Xbox Game Bar) won't include it.
 
 - **Updates for this game.** The Upscaling tab now lists every newer DLSS, FSR and XeSS file for the game, each with its own button, plus Update all, in place of the DLSS-only banner (FSR and XeSS updates had only been in Files, under Advanced). The order follows your card: FSR first on AMD, XeSS first on Intel, DLSS first on NVIDIA. On AMD and Intel cards DLSS is marked "Only used through OptiScaler", and on AMD the FSR line says it lets AMD's driver upgrade the game to FSR 4.
@@ -22,7 +26,7 @@ A working overlay with a frame-time graph, game-aware updates, and AMD's FSR 4 u
 
 - **Reinstalling OptiScaler kept your settings only partly, without saying so.** A setting the new OptiScaler.ini has no place for was dropped silently. The install dialog now names any of your own changes it won't keep (and all of them when "Restore my previous OptiScaler settings" is unticked), and the result says which weren't kept. Your saved copy stays in Upshift's saved settings either way.
 - **The overlay showed "Waiting for frames…" for the whole measurement**, and could end with "The overlay's capture couldn't be read". PresentMon kept its file locked while writing it, so Upshift couldn't read it. Upshift now takes PresentMon's output as it comes and writes the file itself, so the overlay shows FPS from the first second. (This also affected 1.5.0.)
-- "Overlay needs borderless or windowed mode" appeared in borderless games while the overlay was showing. It now appears only when PresentMon reports the game in exclusive fullscreen for a run of frames, where the overlay really can't be seen.
+- "Overlay needs borderless or windowed mode" appeared in borderless games while the overlay was showing. Now, only when PresentMon reports the game in exclusive fullscreen for a run of frames (where the overlay really can't be seen), Upshift says once: "Use borderless or windowed mode to see the overlay. Measuring still works."
 - Error messages in Upshift's window no longer show folder paths with your Windows user name: a file is named by its file name only.
 - The overlay could stay on screen after a measurement ended, until Upshift was closed.
 - Measure's video memory and GPU figures on PCs with two graphics adapters: they could come from the one running the desktop (e.g. Intel graphics next to a Radeon) instead of the card the game uses.
@@ -34,7 +38,7 @@ A working overlay with a frame-time graph, game-aware updates, and AMD's FSR 4 u
 
 ### Not tested yet
 
-- The overlay with the real PresentMon was tested on a small windowed DirectX 11 test program, not a real game, and not through Windows' permission prompt (this PC's account may already read frame timings).
+- The overlay with the real PresentMon was tested on a small windowed DirectX 11 test program, not a real game, and not through Windows' permission prompt (this PC's account may already read frame timings). With the prompt, the capture now starts when the game is found after arming rather than at the key.
 - Exclusive fullscreen in a real game.
 - The Silent Hill 2 advice and the removal warning were checked in Upshift on a stand-in folder with the game's exe name, not by installing into the real game again.
 - AMD's FSR 4 upgrade in a real game: adding and removing a game on AMD's driver list was tested on an RX 9070 XT with Adrenalin 26.10.1, but not a game actually running with FSR 4 afterwards, and not on RX 7000 or RX 6000.
