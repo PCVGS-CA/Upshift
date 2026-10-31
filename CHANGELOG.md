@@ -4,15 +4,18 @@ All notable changes to Upshift. Each release's section becomes its GitHub releas
 
 ## [1.6.0]
 
-A redesigned Measure overlay you can choose the contents of, game-aware updates, and AMD's FSR 4 upgrade per game.
+A redesigned Measure overlay you can choose the contents of, installing on several games at once, OptiPatcher, game-aware updates, and AMD's FSR 4 upgrade per game.
 
 ### New
 
 - **A new Measure overlay.** A dark see-through panel with rounded corners in a corner of the game, still Upshift's own click-through window (nothing is hooked into the game, so it works in every game). It has three states:
-  - **Ready** (yellow): as soon as the game runs after you press Measure this game, with live FPS and the values you ticked, and "Press F10 to start".
+  - **Ready** (yellow): as soon as the game runs after you press Measure this game: live FPS, your graphics card's and processor's use, and "Press F10 to start · 60 s".
   - **Recording** (red): big live FPS, a frame-time line for the last 5 seconds (stutter shows as a spike), your values as tiles, a progress bar with elapsed and total time, and "F10 stop & keep".
-  - **Result** (teal): Average, 1% low, Max, the bottleneck verdict and how long it measured, for 8 seconds, then it fades out.
+  - **Result** (teal, "Saved"): Average, 1% low and Max, the bottleneck verdict with a tip, and how long it measured; "Hides in 8 s" counts down, then it fades out.
 - **Choose what the overlay shows** in Settings > Measure performance, with a live preview: Full or Minimal (one line), the corner, the panel's opacity, and "Show on overlay". FPS, Average, 1% low, the frame-time line and progress are on by default; 0.1% low, Max FPS, frame time, latency, GPU %, CPU %, GPU busy/wait and video memory used are optional. Latency comes from PresentMon's own columns; anything a game or PC doesn't report shows "—". Every value comes from PresentMon or Windows' own counters; nothing extra is downloaded.
+- **Install on several games at once.** In the Library, press Select, tick games and press "Install OptiScaler on N games". Each gets its suggested settings and the same checks as a single install: one dialog first shows every "Do this first" note and the REFramework and Battle.net warnings, games with anti-cheat (or OptiScaler already installed) are skipped, and anything skipped or failed is listed at the end while the rest carry on.
+- **OptiScaler's menu key** is shown under Play once OptiScaler is installed: the game's own key, or Insert, with OptiScaler's own tip to try Alt+Insert if the menu closes at once (given first on Chinese, Japanese and Korean keyboard layouts).
+- **OptiPatcher (optional).** A tick box when installing (and a switch in the game's More options) adds the OptiScaler team's OptiPatcher plugin, which gives supported games DLSS inputs without spoofing, mainly for AMD and Intel cards. It's downloaded from its own GitHub release and checked against a fixed checksum. Switching it off, or uninstalling OptiScaler, removes it again.
 - **Recording it.** The overlay isn't hidden from screen recorders. To get it in a video, use borderless or windowed mode and your recorder's screen or display capture; game-only capture (OBS Game Capture, Xbox Game Bar) won't include it.
 
 - **Updates for this game.** The Upscaling tab now lists every newer DLSS, FSR and XeSS file for the game, each with its own button, plus Update all, in place of the DLSS-only banner (FSR and XeSS updates had only been in Files, under Advanced). The order follows your card: FSR first on AMD, XeSS first on Intel, DLSS first on NVIDIA. On AMD and Intel cards DLSS is marked "Only used through OptiScaler", and on AMD the FSR line says it lets AMD's driver upgrade the game to FSR 4.
@@ -41,6 +44,8 @@ A redesigned Measure overlay you can choose the contents of, game-aware updates,
 - The overlay with the real PresentMon was tested on a small windowed DirectX 11 test program, not a real game, and not through Windows' permission prompt (this PC's account may already read frame timings). With the prompt, the capture now starts when the game is found after arming rather than at the key.
 - Exclusive fullscreen in a real game.
 - The Silent Hill 2 advice and the removal warning were checked in Upshift on a stand-in folder with the game's exe name, not by installing into the real game again.
+- OptiPatcher in a real game, and installing on several games where Windows asks for permission (it asks once per such game).
+- The Alt+Insert hint: OptiScaler's README calls it a workaround for "alternate keyboard layouts" without naming them; giving it first on Chinese, Japanese and Korean layouts is Upshift's reading of that.
 - AMD's FSR 4 upgrade in a real game: adding and removing a game on AMD's driver list was tested on an RX 9070 XT with Adrenalin 26.10.1, but not a game actually running with FSR 4 afterwards, and not on RX 7000 or RX 6000.
 
 ## [1.5.0] - 2026-10-23

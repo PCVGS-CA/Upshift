@@ -100,6 +100,11 @@ public sealed class GlobalHotkey : IDisposable
     }
 
     /// <summary>"F10", "Scroll Lock"…</summary>
+    /// <summary>The language of the keyboard layout in use (GetKeyboardLayout's low word), e.g. 0x0409 for English (US).</summary>
+    public static int LayoutLanguage() => (int)(GetKeyboardLayout(0).ToInt64() & 0xFFFF);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern IntPtr GetKeyboardLayout(uint threadId);
+
     public static string KeyName(int virtualKey) => virtualKey switch
     {
         >= 0x70 and <= 0x87 => $"F{virtualKey - 0x6F}",

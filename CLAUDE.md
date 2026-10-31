@@ -1002,6 +1002,42 @@ errors and no warnings.
     reads the fixture's record hash instead of SH2's `9b10b5a8…`. New fake capture writer: scratchpad `ov\writer.py`;
     `ov\states.ps1`, `ov\timeline.ps1`.
 
+- **1.6.0-test.8 (2026-10-31): the mockup, batch install, menu key, OptiPatcher.** The user sent `overlay-mockup.png` (saved as
+  the conversation's image only; not in the repo).
+  - **Overlay to the mockup** (`OverlayRenderer`, 300 px): header "UPSHIFT · MEASURE"/"· RESULT" in spaced small caps
+    (`SetTextCharacterExtra`) with the state ("READY"/"RECORDING"/"SAVED") and its dot; Ready = big FPS + "FPS live",
+    "Press [F10] to start · 60 s" (key cap), GPU (teal) and CPU (blue) bars from `LiveLoad` (no tiles, as in the mockup);
+    Recording = big FPS, the line without a box, tiles with uppercase labels and one-decimal rates (`OverlayItems.Rate`;
+    frame time's label is "Frame"), progress bar, "0:37 / 1:00" and "[F10] stop & keep"; Result = Average/1% low/Max tiles,
+    a teal-edged verdict box (title + `Bottleneck.Advice`'s first sentence), "1:00 measured" and "Hides in N s" (the loop
+    counts 8→1). Minimal = a pill sized to its text. `OverlayFrame` is a record now (KeyName, LengthText, GpuPercent,
+    CpuPercent, VerdictAdvice, HidesIn); `OverlayItems.Length` ("60 s" / "5:00").
+  - **Batch install:** Library header "Select" ToggleButton (GridView Multiple, no item click) + "Install OptiScaler on N
+    games". `LibraryPage.BatchInstall_Click`: `WhyNotInstallable` skips (installed, anti-cheat, no folder, 32-bit), one
+    dialog with Games / Do this first / Check first (REFramework, Battle.net) / Skipped + "Also add OptiPatcher", then per
+    game `OptiScalerInstaller.Preview` blockers → skip, `InstallOptiScalerAsync` with the suggested settings and
+    `RestoreSourceFor(card, target).ToRestore(true, true)` (shared with the single dialog), summary with every skip.
+  - **Menu key:** `Core/Install/OptiScalerMenuKey` (ShortcutKey: auto/missing → Insert, -1 → none; Alt+Insert first for
+    layouts with primary language 0x04/0x11/0x12) from 0.9.4's menu_common.cpp and README (issue #484: Alt+Insert is a
+    reported workaround when the menu closes at once, "alternate keyboard layouts"; OptiScaler has no Alt+Insert code, so
+    it isn't for keyboards without Insert). `GameCardViewModel.MenuKeyText` under Play (`GlobalHotkey.LayoutLanguage`).
+  - **OptiPatcher:** catalog.v2.json `addons` (not components: 1.3–1.5 never see it) → `optipatcher`, optiscaler/OptiPatcher
+    (MIT) v0.42, `OptiPatcher_v0.42.asi`, `pinnedSha256` 2a6e033a… (GitHub digest). `CatalogComponent.PinnedSha256` is
+    checked by `ComponentStore` on the pinned version (besides GitHub's digest); `.asi` assets are kept as one file.
+    `Core/Install/OptiPatcher` (RelativePath: `plugins\OptiPatcher.asi`, or `OptiScaler\plugins\…` for the v10 layout,
+    per 0.9.4's dllmain.cpp: PluginPath = OptiDllPath\plugins, OptiDllPath "." = exe folder; `Settings(on)` = [Plugins]
+    LoadAsiPlugins). Added/removed through Configure: AddFile now creates missing subfolders and records them in
+    `CreatedFolders`; after a RemoveFile commits, the file's created folder goes when empty. `LibraryViewModel.Add/
+    RemoveOptiPatcherAsync`; install dialog tick box; "OptiPatcher" switch in More options. Catalog `updated` 2026-10-31T18:00Z.
+  - Tested: harness 267 (section 27: real download at the pinned hash, a wrong pin refused, add/off/uninstall exact, v10
+    path, menu key lines, mockup texts); the app on throwaway data: preview in all states and Minimal, the real overlay via
+    `--overlay-test`, batch install on Frame Lab + SH2 Stand-in + AC Stand-in (anti-cheat, skipped) with OptiPatcher (SH2
+    stand-in's saved edit restored), the menu key under Play, OptiPatcher off from the options. Not tested: OptiPatcher in a
+    real game, batch installs through the UAC helper, the menu-key text on a CJK layout in the app.
+  - **Download rule (the user's, 2026-10-31):** open-licensed components (OptiScaler, fakenvapi, OptiPatcher, HelixSR,
+    AMD-NR) come only from the author's own GitHub release at a pinned hash. NVIDIA files and modified AMD/NVIDIA files
+    (the DLSS 5 file, FSR 4.1.1b, dlssg_for_sm86) are always user-supplied: never download them.
+
 ## Next
 
 1. **DLSS 5 follow-ups:**

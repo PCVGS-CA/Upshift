@@ -90,7 +90,129 @@ public sealed partial class LibraryPage : Page
 
     private void GamesGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (SelectingGames) { UpdateBatchButton(); return; }
         if (GamesGrid.SelectedItem is GameCardViewModel game) ViewModel.Selected = game;
+    }
+
+    // ---------------- Install on several games ----------------
+
+    private bool SelectingGames => SelectGamesButton.IsChecked == true;
+
+    /// <summary>"Select": cards are ticked instead of opened, and "Install OptiScaler on N games" appears.</summary>
+    private void SelectGames_Changed(object sender, RoutedEventArgs e)
+    {
+        var on = SelectingGames;
+        if (!on) GamesGrid.SelectedItems.Clear();
+        GamesGrid.SelectionMode = on ? ListViewSelectionMode.Multiple : ListViewSelectionMode.Single;
+        GamesGrid.IsItemClickEnabled = !on;
+        SelectGamesText.Text = on ? "Done" : "Select";
+        UpdateBatchButton();
+    }
+
+    private void UpdateBatchButton()
+    {
+        var count = SelectingGames ? GamesGrid.SelectedItems.Count : 0;
+        BatchInstallButton.Visibility = count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        BatchInstallButton.Content = count == 1 ? "Install OptiScaler on 1 game" : $"Install OptiScaler on {count} games";
+    }
+
+    /// <summary>Why OptiScaler can't go into this game at all (the same rules as the game page's Install button), or null.</summary>
+    private static string? WhyNotInstallable(GameCardViewModel card) =>
+        card.IsInstalledByUs ? "OptiScaler is already installed"
+        : card.Info.HasAntiCheat ? "it has anti-cheat, so installs are blocked"
+        : card.Info.TargetDir is null ? "its game folder isn't known"
+        : card.Info.Is64Bit == false ? "it's a 32-bit game, and OptiScaler is 64-bit only"
+        : card.CanInstall ? null : "it can't be installed";
+
+    /// <summary>
+    /// Installs OptiScaler on every ticked game, one after another, as a single install would: the stable release, the
+    /// upscaler suggested for each game, and the previous settings Upshift saved for it. One dialog first lists the catalog's
+    /// "Do this first" notes and the REFramework and Battle.net warnings; games that can't take it are skipped, and every
+    /// skip or failure is listed at the end while the rest carry on.
+    /// </summary>
+    private async void BatchInstall_Click(object sender, RoutedEventArgs e)
+    {
+        if (_dialogOpen || ViewModel.IsBusy) return;
+        var picked = GamesGrid.SelectedItems.OfType<GameCardViewModel>().ToList();
+        var vendor = AppServices.EffectiveGpu?.Vendor;
+        var go = new List<GameCardViewModel>();
+        var skipped = new List<string>();
+        var first = new List<string>();
+        var check = new List<string>();
+        foreach (var card in picked)
+        {
+            if (WhyNotInstallable(card) is { } why) { skipped.Add($"{card.Name}: {why}."); continue; }
+            go.Add(card);
+            if (GameNotes.For(card.Info, vendor, AppServices.Catalog.GameNotes)?.Before is { } before) first.Add($"{card.Name}: {before}");
+            if (ReEngineGames.Text(ReEngineGames.For(card.Info, AppServices.Catalog.ReEngine)) is { } re) check.Add($"{card.Name}: REFramework isn't installed. {re}");
+            if (card.Info.Source == Core.Models.GameSourceKind.BattleNet) check.Add($"{card.Name}: {GameNoticesView.BattleNetText}");
+        }
+        if (go.Count == 0)
+        {
+            await ShowMessageAsync("Nothing to install", string.Join("\n", skipped));
+            return;
+        }
+
+        var panel = new StackPanel { Spacing = 10, MaxWidth = 520 };
+        void Section(string title, IEnumerable<string> lines)
+        {
+            panel.Children.Add(new TextBlock { Text = title, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+            foreach (var line in lines) panel.Children.Add(new TextBlock { Text = "• " + line, TextWrapping = TextWrapping.Wrap, FontSize = 13 });
+        }
+        panel.Children.Add(new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Text = $"Each game gets OptiScaler {AppServices.OptiScaler.PinnedVersion}, the upscaler suggested for it, and your previous OptiScaler " +
+                   "settings where Upshift saved some, with the same backups and record as a single install. Games that can't take it are " +
+                   "skipped and listed at the end."
+        });
+        Section("Games", go.Select(g => g.Name));
+        if (first.Count > 0) Section("Do this first", first);
+        if (check.Count > 0) Section("Check first", check);
+        if (skipped.Count > 0) Section("Skipped", skipped);
+        var optiPatcher = new CheckBox { Content = "Also add OptiPatcher (does something only in the games it supports)", Visibility = HasOptiPatcher ? Visibility.Visible : Visibility.Collapsed };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(optiPatcher, "Also add OptiPatcher");
+        panel.Children.Add(optiPatcher);
+        var confirm = new ContentDialog
+        {
+            XamlRoot = XamlRoot, Title = go.Count == 1 ? "Install OptiScaler on 1 game?" : $"Install OptiScaler on {go.Count} games?",
+            Content = new ScrollViewer { Content = panel, MaxHeight = 460 },
+            PrimaryButtonText = first.Count > 0 ? "Done, install" : "Install", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary
+        };
+        if (await ShowDialogAsync(confirm) != ContentDialogResult.Primary) return;
+
+        var component = await ViewModel.PrepareOptiScalerAsync();
+        if (component is null)
+        {
+            await ShowMessageAsync("OptiScaler wasn't installed", ViewModel.StatusText);
+            return;
+        }
+        var installed = new List<string>();
+        var notes = new List<string>();
+        for (var i = 0; i < go.Count; i++)
+        {
+            var card = go[i];
+            var target = card.Info.TargetDir!;
+            BatchInstallButton.Content = $"Installing {i + 1} of {go.Count}…";
+            var preview = OptiScalerInstaller.Preview(component.Folder, target, AppServices.InstallPrefs.ProxyFor(card.Info.Id));
+            if (preview.Blockers.Count > 0) { skipped.Add($"{card.Name}: {string.Join(" ", preview.Blockers)}"); continue; }
+            var result = await ViewModel.InstallOptiScalerAsync(card, component, preview.ProxyName, RestoreSourceFor(card, target).ToRestore(restore: true, removeLeftovers: true));
+            if (result is not { Success: true })
+            {
+                skipped.Add($"{card.Name}: {result?.Message ?? (ViewModel.StatusText.Length > 0 ? ViewModel.StatusText : "another change was running")}");
+                continue;
+            }
+            installed.Add(card.Name);
+            if (optiPatcher.IsChecked == true && await ViewModel.AddOptiPatcherAsync(card) is var patched && patched is not { Success: true })
+                notes.Add($"{card.Name}: OptiPatcher wasn't added. {patched?.Message ?? ViewModel.StatusText}");
+        }
+
+        SelectGamesButton.IsChecked = false;
+        var summary = new List<string>();
+        if (installed.Count > 0) summary.Add($"Installed ({installed.Count}): {string.Join(", ", installed)}.");
+        if (skipped.Count > 0) summary.Add("Skipped:\n" + string.Join("\n", skipped.Select(x => "• " + x)));
+        if (notes.Count > 0) summary.Add(string.Join("\n", notes.Select(x => "• " + x)));
+        await ShowMessageAsync(installed.Count == 0 ? "OptiScaler wasn't installed" : "OptiScaler installed", string.Join("\n\n", summary));
     }
 
     // ---------------- The game page ----------------
@@ -370,13 +492,8 @@ public sealed partial class LibraryPage : Page
         };
 
         // "Restore my previous OptiScaler settings": the newest of the copy saved at uninstall and a leftover ini.
-        var settingsFolder = SavedSettings.FolderFor(AppServices.DataDir, card.Name);
-        var saved = SavedSettings.Latest(settingsFolder);
-        var leftoverPath = Path.Combine(target, "OptiScaler.ini");
-        var leftoverTime = File.Exists(leftoverPath) && OptiScalerInstaller.ReadManifest(target) is not { Removed: false }
-            ? File.GetLastWriteTimeUtc(leftoverPath) : (DateTime?)null;
-        var useLeftover = leftoverTime is { } lt && (saved is null || lt > saved.SavedUtc);
-        var restoreTime = useLeftover ? leftoverTime : saved?.SavedUtc;
+        var source = RestoreSourceFor(card, target);
+        var restoreTime = source.Time;
         var restore = new CheckBox
         {
             IsChecked = true,
@@ -384,19 +501,11 @@ public sealed partial class LibraryPage : Page
             Visibility = restoreTime is null ? Visibility.Collapsed : Visibility.Visible
         };
 
-        // The defaults of the version the saved settings came from, when that version is still downloaded.
-        var oldDefaults = !useLeftover && saved is { ComponentId: { } savedId, Version: { } savedVersion }
-            && AppServices.Catalog.Components.FirstOrDefault(c => c.Id == savedId) is { } savedComponent
-            && AppServices.Components.TryGetCached(savedComponent, savedVersion) is { } cached
-            && File.Exists(Path.Combine(cached.Folder, "OptiScaler.ini"))
-            ? Path.Combine(cached.Folder, "OptiScaler.ini") : null;
-
         // The user's own changes in that ini (values that are neither the old nor the new default): a warning names the
         // ones this install won't keep, all of them when "Restore" is unticked.
-        var restorePath = useLeftover ? leftoverPath : saved?.Path;
         var freshIni = Path.Combine(component.Folder, "OptiScaler.ini");
-        var edits = restoreTime is not null && restorePath is not null && File.Exists(restorePath) && File.Exists(freshIni)
-            ? SavedSettings.Edits(restorePath, freshIni, oldDefaults) : (Restorable: new List<IniSetting>(), NotKept: new List<IniSetting>());
+        var edits = restoreTime is not null && source.Path is { } restorePath && File.Exists(restorePath) && File.Exists(freshIni)
+            ? SavedSettings.Edits(restorePath, freshIni, source.OldDefaults) : (Restorable: new List<IniSetting>(), NotKept: new List<IniSetting>());
         // Values every install sets anyway (OptiScaler's log for "Is it working?") aren't the user's to lose.
         var setAnyway = OptiScalerLog.LogSettings(true);
         edits.Restorable.RemoveAll(e => setAnyway.Any(s => s.Section.Equals(e.Section, StringComparison.OrdinalIgnoreCase)
@@ -413,6 +522,16 @@ public sealed partial class LibraryPage : Page
         RefreshKeep();
         restore.Checked += (_, _) => RefreshKeep();
         restore.Unchecked += (_, _) => RefreshKeep();
+
+        // OptiPatcher: optional, off by default; added after OptiScaler, so it's in the record and comes out again.
+        var optiPatcher = new CheckBox
+        {
+            Content = "Add OptiPatcher (for supported games: DLSS inputs without spoofing; mainly for AMD and Intel cards)",
+            IsChecked = false, Visibility = HasOptiPatcher ? Visibility.Visible : Visibility.Collapsed
+        };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(optiPatcher, "Add OptiPatcher");
+        ToolTipService.SetToolTip(optiPatcher, "OptiPatcher is the OptiScaler team's ASI plugin, downloaded from its GitHub release and checked " +
+                                               "against the hash Upshift has for it. It only does something in the games on its support list.");
 
         var dialog = new ContentDialog
         {
@@ -436,6 +555,7 @@ public sealed partial class LibraryPage : Page
                         backups,
                         restore,
                         keepBar,
+                        optiPatcher,
                         new Expander { Header = "Advanced", HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch, Content = names },
                         leftoverBar,
                         blockers
@@ -475,14 +595,47 @@ public sealed partial class LibraryPage : Page
                 return;
             }
         }
-        var restoreChosen = restore.IsChecked == true && restoreTime is not null;
-        var result = await ViewModel.InstallOptiScalerAsync(card, component, names.SelectedItem as string ?? "dxgi.dll", new InstallRestore(
-            settingsFolder,
-            RemoveLeftovers: removeLeftover.IsChecked == true,
-            RestoreFrom: restoreChosen && !useLeftover ? saved?.Path : null,
-            RestoreFromLeftover: restoreChosen && useLeftover,
-            RestoreDefaultsFrom: restoreChosen ? oldDefaults : null));
-        if (result is { Success: false }) await ShowMessageAsync("OptiScaler wasn't installed", result.Message);
+        var result = await ViewModel.InstallOptiScalerAsync(card, component, names.SelectedItem as string ?? "dxgi.dll",
+            source.ToRestore(restore.IsChecked == true, removeLeftover.IsChecked == true));
+        if (result is { Success: false })
+        {
+            await ShowMessageAsync("OptiScaler wasn't installed", result.Message);
+            return;
+        }
+        if (result is { Success: true } && optiPatcher.IsChecked == true
+            && await ViewModel.AddOptiPatcherAsync(card) is var patched && patched is not { Success: true })
+            await ShowMessageAsync("OptiPatcher wasn't added", patched?.Message ?? ViewModel.StatusText);
+    }
+
+    private static bool HasOptiPatcher => AppServices.Catalog.Addons.Any(a => a.Id == OptiPatcher.ComponentId);
+
+    /// <summary>Where "Restore my previous OptiScaler settings" takes them from: the newer of the copy saved at uninstall and a leftover ini.</summary>
+    private sealed record RestoreSource(string SettingsFolder, string? Path, DateTime? Time, bool FromLeftover, string? OldDefaults)
+    {
+        public InstallRestore ToRestore(bool restore, bool removeLeftovers)
+        {
+            var chosen = restore && Time is not null;
+            return new InstallRestore(SettingsFolder, RemoveLeftovers: removeLeftovers,
+                RestoreFrom: chosen && !FromLeftover ? Path : null, RestoreFromLeftover: chosen && FromLeftover,
+                RestoreDefaultsFrom: chosen ? OldDefaults : null);
+        }
+    }
+
+    private static RestoreSource RestoreSourceFor(GameCardViewModel card, string target)
+    {
+        var settingsFolder = SavedSettings.FolderFor(AppServices.DataDir, card.Name);
+        var saved = SavedSettings.Latest(settingsFolder);
+        var leftoverPath = Path.Combine(target, "OptiScaler.ini");
+        var leftoverTime = File.Exists(leftoverPath) && OptiScalerInstaller.ReadManifest(target) is not { Removed: false }
+            ? File.GetLastWriteTimeUtc(leftoverPath) : (DateTime?)null;
+        var useLeftover = leftoverTime is { } lt && (saved is null || lt > saved.SavedUtc);
+        // The defaults of the version the saved settings came from, when that version is still downloaded.
+        var oldDefaults = !useLeftover && saved is { ComponentId: { } savedId, Version: { } savedVersion }
+            && AppServices.Catalog.Components.FirstOrDefault(c => c.Id == savedId) is { } savedComponent
+            && AppServices.Components.TryGetCached(savedComponent, savedVersion) is { } cached
+            && File.Exists(Path.Combine(cached.Folder, "OptiScaler.ini"))
+            ? Path.Combine(cached.Folder, "OptiScaler.ini") : null;
+        return new RestoreSource(settingsFolder, useLeftover ? leftoverPath : saved?.Path, useLeftover ? leftoverTime : saved?.SavedUtc, useLeftover, oldDefaults);
     }
 
     /// <summary>

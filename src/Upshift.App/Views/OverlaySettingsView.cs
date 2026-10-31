@@ -83,7 +83,7 @@ public sealed class OverlaySettingsView : UserControl
         phase.SelectionChanged += (_, _) => { _previewPhase = (OverlayPhase)Math.Max(0, phase.SelectedIndex); Redraw(); };
         var backdrop = new Border
         {
-            Width = OverlayRenderer.FullWidth + 40, MinHeight = 220, Padding = new Thickness(20, 16, 20, 16), CornerRadius = new CornerRadius(8), Child = _preview,
+            Width = OverlayRenderer.FullWidth + 60, MinHeight = 220, Padding = new Thickness(20, 16, 20, 16), CornerRadius = new CornerRadius(8), Child = _preview,
             Background = new LinearGradientBrush
             {
                 StartPoint = new Windows.Foundation.Point(0, 0), EndPoint = new Windows.Foundation.Point(1, 1),
@@ -137,7 +137,7 @@ public sealed class OverlaySettingsView : UserControl
         var scale = XamlRoot.RasterizationScale;
         var frame = OverlayItems.Build(_previewPhase, OverlayItems.Normalize(settings.OverlayItems), Measurement.HotkeyName, 60,
             Sample(), Sample() with { AverageFps = 141, LowFps = 97, Low01Fps = 74, MaxFps = 158 }, new LiveLoad(96, 31, 7_150_000_000), 23,
-            new FrameStats(8460, 60, 141, 97, 0, true, 158), "Limited by your graphics card");
+            new FrameStats(8460, 60, 141, 97, 0, true, 158), "Limited by your graphics card", "Try a lower upscaler quality or lower graphics settings.");
         var look = new OverlayRenderer.Look(string.Equals(settings.OverlayStyle, "Minimal", StringComparison.OrdinalIgnoreCase), settings.OverlayOpacity);
         var (pixels, w, h) = OverlayRenderer.Render(frame, look, scale);
         var bitmap = new WriteableBitmap(w, h);

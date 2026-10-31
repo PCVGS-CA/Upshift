@@ -428,7 +428,7 @@ public static class Measurement
         // The overlay shows the result, then fades.
         var verdictLine = verdict is { } v ? v.Title + (v.LessCertain ? " (less certain)" : "") : null;
         _resultFrame = OverlayItems.Build(OverlayPhase.Result, OverlayItems.Normalize(AppServices.Settings.Current.OverlayItems), HotkeyName, seconds,
-            null, null, null, stats.Seconds, stats, verdictLine);
+            null, null, null, stats.Seconds, stats, verdict?.Title, verdict is { } adv ? FirstSentence(adv.Advice) : null);
         Finish($"Measured {game.Name} for {Length(stats.Seconds)}: {Math.Round(stats.AverageFps)} fps average, low points {Math.Round(stats.LowFps)} fps" +
                (stats.MaxFps is { } max ? $", max {Math.Round(max)} fps." : ".") +
                (verdictLine is not null ? $" {verdictLine}." : "") +
@@ -604,8 +604,11 @@ public static class Measurement
                 // The result: 8 seconds, then a short fade.
                 if (overlay is not null && _resultFrame is { } result)
                 {
-                    overlay.Update(result);
-                    await Task.Delay(8000, cts.Token);
+                    for (var left = 8; left > 0; left--)
+                    {
+                        overlay.Update(result with { HidesIn = left });
+                        await Task.Delay(1000, cts.Token);
+                    }
                     for (var step = 1; step <= 8; step++)
                     {
                         overlay.Fade(1 - step / 8.0);
@@ -629,6 +632,9 @@ public static class Measurement
             }
         });
     }
+
+    /// <summary>"Try a lower upscaler quality or lower graphics settings." from the verdict's advice.</summary>
+    private static string FirstSentence(string text) => text.IndexOf(". ", StringComparison.Ordinal) is var i and > 0 ? text[..(i + 1)] : text;
 
     private static OverlayRenderer.Look Look(Core.Services.AppSettings settings) =>
         new(string.Equals(settings.OverlayStyle, "Minimal", StringComparison.OrdinalIgnoreCase), settings.OverlayOpacity);

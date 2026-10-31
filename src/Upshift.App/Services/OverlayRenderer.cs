@@ -15,35 +15,38 @@ public static class OverlayRenderer
     /// <summary>Full or Minimal, and the panel's opacity (30 to 100 percent).</summary>
     public sealed record Look(bool Minimal, int OpacityPercent);
 
-    public const int FullWidth = 324, MinimalWidth = 228;
+    public const int FullWidth = 300, MinimalHeight = 30;
     private const int Pad = 14, Gap = 6, Radius = 10;
 
     // Colours (GDI COLORREF is 0x00BBGGRR). The background fills are see-through; everything else is solid.
-    private const uint Panel = 0x001C1816, TileBack = 0x002C2723, GraphBack = 0x00262220, Track = 0x003A3633;
-    private const uint White = 0x00F7F4F2, Grey = 0x00ABA19A, Teal = 0x00A3B32B, Red = 0x004D48E5, Yellow = 0x004CC9F2, GridLine = 0x00504A46;
+    private const uint Panel = 0x001C1816, TileBack = 0x002C2723, GraphBack = 0x00262220, Track = 0x003A3633, VerdictBack = 0x002E3412, KeyBack = 0x00332E2B;
+    private const uint White = 0x00F7F4F2, Grey = 0x00ABA19A, Dim = 0x00857D77, Teal = 0x00A3B32B, TealLight = 0x00C4D35F, Blue = 0x00FF8D4C,
+        Red = 0x004D48E5, Yellow = 0x004CC9F2, GridLine = 0x00504A46, KeyEdge = 0x00665F5A;
 
     public static (byte[] Pixels, int Width, int Height) Render(OverlayFrame frame, Look look, double scale)
     {
         int S(double v) => (int)Math.Round(v * scale);
-        var width = S(look.Minimal ? MinimalWidth : FullWidth);
         var dc = CreateCompatibleDC(IntPtr.Zero);
         var fonts = new Fonts(S);
         try
         {
             SetBkMode(dc, 1 /* TRANSPARENT */);
-            var height = look.Minimal ? S(34) : Layout(dc, frame, fonts, S, width, draw: false);
+            int width, height;
+            if (look.Minimal) (width, height) = (Minimal(dc, frame, fonts, S, draw: false), S(MinimalHeight));
+            else (width, height) = (S(FullWidth), Layout(dc, frame, fonts, S, S(FullWidth), draw: false));
             var info = new BITMAPINFO { biSize = 40, biWidth = width, biHeight = -height, biPlanes = 1, biBitCount = 32 };
             var bitmap = CreateDIBSection(dc, ref info, 0, out var bits, IntPtr.Zero, 0);
             var old = SelectObject(dc, bitmap);
             try
             {
                 Fill(dc, 0, 0, width, height, Panel);
-                if (look.Minimal) Minimal(dc, frame, fonts, S, width);
+                if (look.Minimal) Minimal(dc, frame, fonts, S, draw: true);
                 else Layout(dc, frame, fonts, S, width, draw: true);
                 GdiFlush();
                 var pixels = new byte[width * height * 4];
                 Marshal.Copy(bits, pixels, 0, pixels.Length);
-                Finish(pixels, width, height, S(Radius), Math.Max(1, S(1)), look.OpacityPercent);
+                // The minimal pill is fully rounded; the panel has the usual corners.
+                Finish(pixels, width, height, look.Minimal ? height / 2 : S(Radius), Math.Max(1, S(1)), look.OpacityPercent);
                 return (pixels, width, height);
             }
             finally
@@ -61,106 +64,186 @@ public static class OverlayRenderer
 
     private sealed class Fonts : IDisposable
     {
-        public readonly IntPtr Big, Title, Value, Label, Small;
+        public readonly IntPtr Big, Unit, Caps, CapsBold, Value, Small, SmallBold, Key;
         public Fonts(Func<double, int> S)
         {
             // ANTIALIASED_QUALITY (4): grey smoothing, which survives the see-through panel (ClearType would fringe).
-            Big = CreateFont(-S(40), 0, 0, 0, 600, 0, 0, 0, 1, 0, 0, 4, 0, "Segoe UI");
-            Title = CreateFont(-S(13), 0, 0, 0, 600, 0, 0, 0, 1, 0, 0, 4, 0, "Segoe UI");
-            Value = CreateFont(-S(16), 0, 0, 0, 600, 0, 0, 0, 1, 0, 0, 4, 0, "Segoe UI");
-            Label = CreateFont(-S(11), 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 4, 0, "Segoe UI");
-            Small = CreateFont(-S(12), 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 4, 0, "Segoe UI");
+            IntPtr Font(double size, int weight) => CreateFont(-S(size), 0, 0, 0, weight, 0, 0, 0, 1, 0, 0, 4, 0, "Segoe UI");
+            Big = Font(42, 700);
+            Unit = Font(13, 400);
+            Caps = Font(10.5, 400);
+            CapsBold = Font(10.5, 700);
+            Value = Font(17, 700);
+            Small = Font(12, 400);
+            SmallBold = Font(12, 700);
+            Key = Font(10.5, 700);
         }
-        public void Dispose() { foreach (var f in new[] { Big, Title, Value, Label, Small }) DeleteObject(f); }
+        public void Dispose() { foreach (var f in new[] { Big, Unit, Caps, CapsBold, Value, Small, SmallBold, Key }) DeleteObject(f); }
     }
 
     private static uint DotColour(OverlayPhase phase) => phase switch { OverlayPhase.Ready => Yellow, OverlayPhase.Recording => Red, _ => Teal };
 
-    /// <summary>The full panel, top to bottom. Measures only (returns the height) when <paramref name="draw"/> is false.</summary>
+    /// <summary>
+    /// The full panel, top to bottom, as in the mockup. Header: "UPSHIFT · MEASURE" (or "· RESULT") and the state with its
+    /// dot. Ready: big live FPS, "Press [F10] to start · 60 s", the GPU and CPU bars. Recording: big live FPS, the
+    /// frame-time line, the ticked tiles, the progress bar with "0:37 / 1:00" and "[F10] stop & keep". Result: Average,
+    /// 1% low and Max, the verdict box, "1:00 measured" and "Hides in 8 s". Measures only (returns the height) when
+    /// <paramref name="draw"/> is false.
+    /// </summary>
     private static int Layout(IntPtr dc, OverlayFrame f, Fonts fonts, Func<double, int> S, int width, bool draw)
     {
         int left = S(Pad), right = width - S(Pad), y = S(12);
+        var result = f.Phase == OverlayPhase.Result;
 
-        // Header: the state's dot and name, "Upshift" on the right.
+        // Header.
         if (draw)
         {
-            Dot(dc, left, y + S(4), S(10), DotColour(f.Phase));
-            Text(dc, fonts.Title, White, left + S(16), y, f.Phase switch { OverlayPhase.Ready => "Ready", OverlayPhase.Recording => "Recording", _ => "Result" });
-            TextRight(dc, fonts.Label, Grey, right, y + S(2), "Upshift");
+            Spaced(dc, fonts.Caps, Grey, left, y, result ? "UPSHIFT · RESULT" : "UPSHIFT · MEASURE", S(1));
+            var state = f.Phase switch { OverlayPhase.Ready => "READY", OverlayPhase.Recording => "RECORDING", _ => "SAVED" };
+            var w = SpacedWidth(dc, fonts.CapsBold, state, S(1));
+            Spaced(dc, fonts.CapsBold, White, right - w, y, state, S(1));
+            Dot(dc, right - w - S(12), y + S(3), S(7), DotColour(f.Phase));
         }
-        y += S(24);
+        y += S(20);
 
         // The big live FPS.
-        if (f.Phase != OverlayPhase.Result && f.ShowFps)
+        if (!result && f.ShowFps)
         {
             if (draw)
             {
                 var number = f.Fps is { } fps ? Math.Round(fps).ToString("0", CultureInfo.InvariantCulture) : OverlayItems.Dash;
-                var w = Text(dc, fonts.Big, White, left - S(2), y - S(4), number);
-                Text(dc, fonts.Small, Grey, left + w + S(4), y + S(22), "FPS");
+                var w = Text(dc, fonts.Big, White, left - S(2), y - S(6), number);
+                Text(dc, fonts.Unit, Grey, left + w + S(4), y + S(26), f.Phase == OverlayPhase.Ready ? "FPS live" : "FPS");
             }
             y += S(48);
+        }
+
+        if (f.Phase == OverlayPhase.Ready)
+        {
+            // "Press [F10] to start · 60 s", then the card's and the processor's use.
+            if (draw)
+            {
+                var x = left + Text(dc, fonts.Small, White, left, y, "Press ") ;
+                x += KeyCap(dc, fonts.Key, x, y, f.KeyName, S);
+                Text(dc, fonts.Small, White, x + S(4), y, $"to start · {f.LengthText}");
+            }
+            y += S(24);
+            var half = (right - left - S(12)) / 2;
+            if (draw)
+            {
+                Bar(dc, fonts.Caps, left, y, left + half, "GPU", f.GpuPercent, Teal, S);
+                Bar(dc, fonts.Caps, left + half + S(12), y, right, "CPU", f.CpuPercent, Blue, S);
+            }
+            y += S(24);
         }
 
         // The frame-time line, last ~5 seconds.
         if (f.ShowGraph)
         {
-            if (draw) Graph(dc, f.Graph, left, y, right, y + S(44), S);
-            y += S(44) + S(Gap + 2);
+            if (draw) Graph(dc, f.Graph, left, y, right, y + S(34), S);
+            y += S(34) + S(Gap + 4);
         }
 
         // Tiles, three per row.
-        if (f.Tiles.Count > 0)
+        if (f.Phase != OverlayPhase.Ready && f.Tiles.Count > 0)
         {
             var tileW = (right - left - 2 * S(Gap)) / 3;
-            var tileH = S(42);
+            var tileH = S(40);
             for (var i = 0; i < f.Tiles.Count; i++)
             {
-                var col = i % 3;
-                var row = i / 3;
-                var x = left + col * (tileW + S(Gap));
-                var ty = y + row * (tileH + S(Gap));
+                var x = left + i % 3 * (tileW + S(Gap));
+                var ty = y + i / 3 * (tileH + S(Gap));
                 if (!draw) continue;
-                RoundFill(dc, x, ty, x + tileW, ty + tileH, S(6), TileBack);
-                Clipped(dc, fonts.Label, Grey, x + S(7), ty + S(4), x + tileW - S(2), f.Tiles[i].Label);
-                Clipped(dc, fonts.Value, White, x + S(7), ty + S(18), x + tileW - S(2), f.Tiles[i].Value);
+                RoundFill(dc, x, ty, x + tileW, ty + tileH, S(5), TileBack);
+                Clipped(dc, fonts.Caps, Grey, x + S(7), ty + S(4), x + tileW - S(2), f.Tiles[i].Label.ToUpperInvariant(), S(1));
+                Clipped(dc, fonts.Value, White, x + S(7), ty + S(16), x + tileW - S(2), f.Tiles[i].Value);
             }
             var rows = (f.Tiles.Count + 2) / 3;
             y += rows * tileH + (rows - 1) * S(Gap) + S(Gap + 2);
         }
 
-        // The result's verdict, wrapped.
+        // The result's verdict box: the title in the accent, the first advice sentence after it.
         if (f.Verdict is { Length: > 0 } verdict)
         {
-            var h = Wrapped(dc, fonts.Small, White, left, y, right, verdict, draw);
-            y += h + S(4);
+            var inner = S(9);
+            var titleH = Wrapped(dc, fonts.SmallBold, TealLight, left + inner, y + inner, right - inner, verdict + ".", false);
+            var adviceH = f.VerdictAdvice is { Length: > 0 } a ? Wrapped(dc, fonts.Small, White, left + inner, y + inner + titleH, right - inner, a, false) : 0;
+            var boxH = inner * 2 + titleH + adviceH;
+            if (draw)
+            {
+                RoundFill(dc, left, y, right, y + boxH, S(6), VerdictBack, Teal);
+                Wrapped(dc, fonts.SmallBold, TealLight, left + inner, y + inner, right - inner, verdict + ".", true);
+                if (f.VerdictAdvice is { Length: > 0 } advice) Wrapped(dc, fonts.Small, White, left + inner, y + inner + titleH, right - inner, advice, true);
+            }
+            y += boxH + S(8);
         }
 
-        // Progress bar with elapsed / total.
+        // Progress bar.
         if (f.Progress is { } progress)
         {
             if (draw)
             {
-                RoundFill(dc, left, y + S(4), right, y + S(8), S(2), Track);
+                RoundFill(dc, left, y, right, y + S(4), S(2), Track);
                 var done = left + (int)Math.Round((right - left) * progress);
-                if (done > left + S(2)) RoundFill(dc, left, y + S(4), done, y + S(8), S(2), Teal);
-                if (f.Timer is { } timer) TextRight(dc, fonts.Label, Grey, right, y + S(12), timer);
+                if (done > left + S(2)) RoundFill(dc, left, y, done, y + S(4), S(2), Teal);
             }
-            y += S(14);
+            y += S(10);
         }
 
-        // Footer: what the key does now, or how long it measured.
-        if (draw) Text(dc, fonts.Label, Grey, left, y + (f.Progress is null ? 0 : S(-2)), f.Footer);
-        y += S(18);
-        return y + S(10);
+        // Footer: the timer (or "1:00 measured") on the left; "[F10] stop & keep" or "Hides in 8 s" on the right.
+        if (f.Phase != OverlayPhase.Ready)
+        {
+            if (draw)
+            {
+                var leftText = result ? f.Footer : f.Timer;
+                if (leftText is not null) Text(dc, fonts.Caps, Grey, left, y + S(2), leftText);
+                if (result) TextRight(dc, fonts.Caps, Grey, right, y + S(2), $"Hides in {f.HidesIn} s");
+                else
+                {
+                    var tail = Width(dc, fonts.Caps, "stop & keep");
+                    Text(dc, fonts.Caps, Grey, right - tail, y + S(2), "stop & keep");
+                    var capW = KeyCapWidth(dc, fonts.Key, f.KeyName, S);
+                    KeyCap(dc, fonts.Key, right - tail - S(4) - capW, y, f.KeyName, S);
+                }
+            }
+            y += S(18);
+        }
+        return y + S(8);
     }
 
-    /// <summary>Minimal: one line with the dot, the first ticked value and the timer.</summary>
-    private static void Minimal(IntPtr dc, OverlayFrame f, Fonts fonts, Func<double, int> S, int width)
+    /// <summary>Minimal: a pill with the dot, the first ticked value and the timer. Returns its width.</summary>
+    private static int Minimal(IntPtr dc, OverlayFrame f, Fonts fonts, Func<double, int> S, bool draw)
     {
-        Dot(dc, S(12), S(12), S(10), DotColour(f.Phase));
-        Text(dc, fonts.Value, White, S(28), S(6), f.MinimalValue);
-        TextRight(dc, fonts.Small, Grey, width - S(12), S(9), f.MinimalTimer);
+        var valueW = Width(dc, fonts.SmallBold, f.MinimalValue);
+        var timerW = Width(dc, fonts.Small, f.MinimalTimer);
+        var width = S(12) + S(8) + S(8) + valueW + S(8) + timerW + S(12);
+        if (draw)
+        {
+            Dot(dc, S(12), S(MinimalHeight) / 2 - S(4), S(8), DotColour(f.Phase));
+            Text(dc, fonts.SmallBold, White, S(28), S(MinimalHeight) / 2 - S(8), f.MinimalValue);
+            Text(dc, fonts.Small, Grey, S(28) + valueW + S(8), S(MinimalHeight) / 2 - S(8), f.MinimalTimer);
+        }
+        return width;
+    }
+
+    /// <summary>"GPU 97%" over a thin bar filled to that share (an empty bar and "—" when Windows gives no figure).</summary>
+    private static void Bar(IntPtr dc, IntPtr font, int left, int top, int right, string label, double? percent, uint colour, Func<double, int> S)
+    {
+        Spaced(dc, font, colour, left, top, $"{label} {(percent is { } p ? Math.Round(p).ToString("0", CultureInfo.InvariantCulture) + "%" : OverlayItems.Dash)}", S(1));
+        RoundFill(dc, left, top + S(15), right, top + S(18), S(1), Track);
+        if (percent is { } value && value > 0)
+            RoundFill(dc, left, top + S(15), left + Math.Max(S(2), (int)Math.Round((right - left) * Math.Clamp(value, 0, 100) / 100)), top + S(18), S(1), colour);
+    }
+
+    private static int KeyCapWidth(IntPtr dc, IntPtr font, string key, Func<double, int> S) => Width(dc, font, key) + S(10);
+
+    /// <summary>A small key cap ("F10"); returns its width.</summary>
+    private static int KeyCap(IntPtr dc, IntPtr font, int left, int top, string key, Func<double, int> S)
+    {
+        var w = KeyCapWidth(dc, font, key, S);
+        RoundFill(dc, left, top, left + w, top + S(16), S(3), KeyBack, KeyEdge);
+        Text(dc, font, White, left + S(5), top + S(1), key);
+        return w;
     }
 
     /// <summary>
@@ -169,13 +252,12 @@ public static class OverlayRenderer
     /// </summary>
     private static void Graph(IntPtr dc, IReadOnlyList<double> graph, int left, int top, int right, int bottom, Func<double, int> S)
     {
-        RoundFill(dc, left, top, right, bottom, S(6), GraphBack);
         if (graph.Count < 2) return;
         var sorted = graph.OrderBy(v => v).ToArray();
         var median = sorted[sorted.Length / 2];
         var max = Math.Max(Math.Max(33.4, median * 2), sorted[^1] * 1.1);
         var total = graph.Sum();
-        int inset = S(4), x0 = left + inset, x1 = right - inset, y0 = top + inset, y1 = bottom - inset;
+        int x0 = left, x1 = right, y0 = top + S(2), y1 = bottom - S(2);
         int Y(double ms) => y1 - (int)Math.Round(Math.Min(ms, max) / max * (y1 - y0));
 
         var grid = CreatePen(0, 1, GridLine);
@@ -206,7 +288,7 @@ public static class OverlayRenderer
     private static void Finish(byte[] px, int w, int h, int radius, int border, int opacityPercent)
     {
         var panelAlpha = Math.Clamp(opacityPercent, 30, 100) * 255 / 100;
-        var see = new HashSet<uint> { Panel, TileBack, GraphBack, Track };
+        var see = new HashSet<uint> { Panel, TileBack, GraphBack, Track, VerdictBack, KeyBack };
         for (var y = 0; y < h; y++)
             for (var x = 0; x < w; x++)
             {
@@ -251,10 +333,10 @@ public static class OverlayRenderer
         DeleteObject(brush);
     }
 
-    private static void RoundFill(IntPtr dc, int left, int top, int right, int bottom, int radius, uint colour)
+    private static void RoundFill(IntPtr dc, int left, int top, int right, int bottom, int radius, uint colour, uint? edge = null)
     {
         var brush = CreateSolidBrush(colour);
-        var pen = CreatePen(0, 1, colour);
+        var pen = CreatePen(0, 1, edge ?? colour);
         var oldBrush = SelectObject(dc, brush);
         var oldPen = SelectObject(dc, pen);
         RoundRect(dc, left, top, right, bottom, radius * 2, radius * 2);
@@ -287,13 +369,39 @@ public static class OverlayRenderer
     }
 
     /// <summary>One line that ends in "…" rather than running past <paramref name="right"/>.</summary>
-    private static void Clipped(IntPtr dc, IntPtr font, uint colour, int left, int top, int right, string text)
+    private static void Clipped(IntPtr dc, IntPtr font, uint colour, int left, int top, int right, string text, int spacing = 0)
     {
         var old = SelectObject(dc, font);
         SetTextColor(dc, colour);
+        SetTextCharacterExtra(dc, spacing);
         var rect = new RECT { Left = left, Top = top, Right = right, Bottom = top + 1000 };
         DrawText(dc, text, text.Length, ref rect, 0x0020 /* SINGLELINE */ | 0x8000 /* END_ELLIPSIS */ | 0x0800 /* NOPREFIX */);
+        SetTextCharacterExtra(dc, 0);
         SelectObject(dc, old);
+    }
+
+    /// <summary>Small capitals with a little letter spacing ("UPSHIFT · MEASURE").</summary>
+    private static void Spaced(IntPtr dc, IntPtr font, uint colour, int x, int y, string text, int spacing)
+    {
+        SetTextCharacterExtra(dc, spacing);
+        Text(dc, font, colour, x, y, text);
+        SetTextCharacterExtra(dc, 0);
+    }
+
+    private static int SpacedWidth(IntPtr dc, IntPtr font, string text, int spacing)
+    {
+        SetTextCharacterExtra(dc, spacing);
+        var w = Width(dc, font, text);
+        SetTextCharacterExtra(dc, 0);
+        return w;
+    }
+
+    private static int Width(IntPtr dc, IntPtr font, string text)
+    {
+        var old = SelectObject(dc, font);
+        GetTextExtentPoint32(dc, text, text.Length, out var size);
+        SelectObject(dc, old);
+        return size.cx;
     }
 
     private static void TextRight(IntPtr dc, IntPtr font, uint colour, int right, int y, string text)
@@ -347,6 +455,7 @@ public static class OverlayRenderer
     [DllImport("gdi32.dll")] private static extern bool LineTo(IntPtr dc, int x, int y);
     [DllImport("gdi32.dll")] private static extern bool Polyline(IntPtr dc, POINT[] points, int count);
     [DllImport("gdi32.dll")] private static extern int SetBkMode(IntPtr dc, int mode);
+    [DllImport("gdi32.dll")] private static extern int SetTextCharacterExtra(IntPtr dc, int extra);
     [DllImport("gdi32.dll")] private static extern uint SetTextColor(IntPtr dc, uint colour);
     [DllImport("gdi32.dll", CharSet = CharSet.Unicode)] private static extern bool TextOut(IntPtr dc, int x, int y, string text, int length);
     [DllImport("gdi32.dll", CharSet = CharSet.Unicode)] private static extern bool GetTextExtentPoint32(IntPtr dc, string text, int length, out SIZE size);

@@ -46,6 +46,12 @@ public sealed class UpscalerCatalog
     /// </summary>
     public List<CatalogComponent> TestBuilds { get; set; } = new();
 
+    /// <summary>
+    /// Optional add-ons for an OptiScaler install (OptiPatcher), pinned to one release and hash. Kept out of Components so
+    /// copies that don't know them never show or download them.
+    /// </summary>
+    public List<CatalogComponent> Addons { get; set; } = new();
+
     /// <summary>Per-game advice by card vendor (e.g. which upscaler to set in the game before installing OptiScaler).</summary>
     public List<GameNote> GameNotes { get; set; } = new();
 }
@@ -185,6 +191,8 @@ public sealed class CatalogComponent
     public string? AssetPattern { get; set; }
     public string? RepoFilePath { get; set; }
     public string? PinnedVersion { get; set; }
+    /// <summary>The pinned version's file SHA-256, written in the catalog: the download must match it as well as GitHub's own digest.</summary>
+    public string? PinnedSha256 { get; set; }
     public string? VerifyBeforeRelease { get; set; }
 
     /// <summary>For a test build: the component it's a test build of ("optiscaler"). Its newest release is its target.</summary>

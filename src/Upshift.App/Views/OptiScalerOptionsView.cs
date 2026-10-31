@@ -163,6 +163,7 @@ public sealed class OptiScalerOptionsView : UserControl
         // ---- Everything else goes under the page's "More options" ----
         var more = new StackPanel { Spacing = 14 };
         more.Children.Add(FpsCounterSection(card, ini));
+        if (AppServices.Catalog.Addons.Any(a => a.Id == OptiPatcher.ComponentId)) more.Children.Add(OptiPatcherSection(card, manifest));
 
         // ---- DLSS model (NVIDIA RTX only) ----
         if (OptiScalerOptions.IsNvidiaRtx(gpu))
@@ -616,6 +617,34 @@ public sealed class OptiScalerOptionsView : UserControl
     }
 
     /// <summary>OptiScaler's FPS counter ([Menu] ShowFps), next to the frame cap.</summary>
+    /// <summary>OptiPatcher on or off: added through the game's record, so off (or uninstalling) takes the file and the setting back.</summary>
+    private FrameworkElement OptiPatcherSection(GameCardViewModel card, InstallManifest manifest)
+    {
+        var installed = OptiPatcher.InstalledPath(manifest);
+        var toggle = new ToggleSwitch { Header = "OptiPatcher", IsOn = installed is not null };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(toggle, "OptiPatcher");
+        toggle.Toggled += async (_, _) =>
+        {
+            if (_building || Library is null || toggle.IsOn == (installed is not null)) return;
+            if (AppServices.PretendGpu is not null) { await Save(card, Array.Empty<IniSetting>()); return; }
+            var result = toggle.IsOn ? await Library.AddOptiPatcherAsync(card) : await Library.RemoveOptiPatcherAsync(card, installed!);
+            if (result is not { Success: true } && ShowDialog is not null)
+            {
+                await ShowDialog(new ContentDialog
+                {
+                    Title = toggle.IsOn ? "OptiPatcher wasn't added" : "OptiPatcher wasn't removed",
+                    Content = new TextBlock { Text = result?.Message ?? Library.StatusText, TextWrapping = TextWrapping.Wrap },
+                    CloseButtonText = "OK", XamlRoot = XamlRoot
+                });
+                Build();
+            }
+        };
+        var link = new HyperlinkButton { Content = "Supported games", NavigateUri = new Uri(OptiPatcher.GameSupportUrl), Padding = new Thickness(0) };
+        return Group(toggle,
+            Subtle("The OptiScaler team's plugin that gives supported games DLSS inputs without spoofing, mainly for AMD and Intel cards. " +
+                   "It does nothing in other games. Takes effect after restarting the game."), link);
+    }
+
     private FrameworkElement FpsCounterSection(GameCardViewModel card, IniFile ini)
     {
         var toggle = new ToggleSwitch { Header = "Show FPS counter", IsOn = OptiScalerOptions.FpsCounterOn(ini) };

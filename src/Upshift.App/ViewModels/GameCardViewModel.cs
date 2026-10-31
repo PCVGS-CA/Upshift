@@ -145,6 +145,10 @@ public sealed partial class GameCardViewModel : ObservableObject
         IniPath = info.TargetDir is null ? "" : Path.Combine(info.TargetDir, "OptiScaler.ini");
         // OptiScaler is 64-bit only, so 32-bit games can't use it.
         CanInstall = !info.HasAntiCheat && info.TargetDir is not null && !IsInstalledByUs && info.Is64Bit != false;
+        // The key for OptiScaler's in-game menu, shown under Play (the game's own ShortcutKey, else Insert).
+        MenuKeyText = IsInstalledByUs && File.Exists(IniPath)
+            ? OptiScalerMenuKey.Line(IniFile.Load(IniPath).Get("Menu", "ShortcutKey"), Services.GlobalHotkey.LayoutLanguage(), Services.GlobalHotkey.KeyName) ?? ""
+            : "";
 
         Mods = info.ExistingMods
             .Where(m => !(IsInstalledByUs && m.Kind == ModKind.OptiScaler)) // shown on its own card instead
@@ -422,6 +426,9 @@ public sealed partial class GameCardViewModel : ObservableObject
     public string? InstalledComponentId { get; }
 
     public bool IsInstalledByUs { get; }
+    /// <summary>"OptiScaler menu: Insert (if it closes at once, try Alt+Insert)" under Play; empty without OptiScaler.</summary>
+    public string MenuKeyText { get; }
+    public bool HasMenuKey => MenuKeyText.Length > 0;
     public bool IsNotInstalledByUs => !IsInstalledByUs;
     public string InstalledText { get; }
 

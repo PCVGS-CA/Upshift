@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-10-25T18:00Z",
+  "updated": "2026-10-31T18:00Z",
   "notes": "Upshift's built-in catalog. Upshift will later download a newer version of this file from its GitHub repo, so new forks and GPU support can be added without releasing a new version. The userAgent values below are fallbacks; the app sends Upshift/<its version>.",
 
   "components": [
@@ -492,6 +492,19 @@
     ],
     "noWarning": [ "Monster Hunter Rise" ]
   },
+  "addons": [
+    {
+      "id": "optipatcher",
+      "name": "OptiPatcher",
+      "kind": "addon",
+      "description": "An ASI plugin for OptiScaler that exposes DLSS and DLSS frame generation inputs without spoofing in supported games (mainly for AMD and Intel cards).",
+      "repo": "optiscaler/OptiPatcher",
+      "assetPattern": "^OptiPatcher_v[0-9.]+\\.asi$",
+      "pinnedVersion": "v0.42",
+      "pinnedSha256": "2a6e033aeda72d63281889480b2380da830530cf6e1e448e2056d451ade75f1b",
+      "notes": "Official (optiscaler org), MIT. v0.42 published 2026-10-18; the hash is GitHub's asset digest for OptiPatcher_v0.42.asi (107,520 bytes). Installed as plugins\\OptiPatcher.asi under OptiScaler's DLL folder with [Plugins] LoadAsiPlugins=true (its README; OptiScaler 0.9.4 dllmain.cpp). Change the version only together with its hash."
+    }
+  ],
   "gameNotes": [
     {
       "titles": [ "Silent Hill 2" ],

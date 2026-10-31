@@ -185,7 +185,18 @@
                     <TextBlock Text="Library" FontSize="26" FontWeight="SemiBold" />
                     <TextBlock Text="Better upscaling in any game. One click, undo anytime." Foreground="{StaticResource SubtleTextBrush}" />
                 </StackPanel>
-                <SplitButton Grid.Column="1" Command="{x:Bind ViewModel.ScanCommand}">
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <!-- Install on several games: tick cards, then one button -->
+                <Button x:Name="BatchInstallButton" Style="{StaticResource AccentButtonStyle}" Content="Install OptiScaler" Visibility="Collapsed"
+                        Click="BatchInstall_Click" AutomationProperties.Name="Install OptiScaler on the selected games" />
+                <ToggleButton x:Name="SelectGamesButton" Checked="SelectGames_Changed" Unchecked="SelectGames_Changed"
+                              AutomationProperties.Name="Select games" ToolTipService.ToolTip="Pick several games to install OptiScaler on at once">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE762;" FontSize="14" />
+                        <TextBlock x:Name="SelectGamesText" Text="Select" />
+                    </StackPanel>
+                </ToggleButton>
+                <SplitButton Command="{x:Bind ViewModel.ScanCommand}">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon Glyph="&#xE72C;" FontSize="14" />
                         <TextBlock Text="Scan for games" />
@@ -205,6 +216,7 @@
                         </MenuFlyout>
                     </SplitButton.Flyout>
                 </SplitButton>
+                </StackPanel>
             </Grid>
 
             <!-- After a newer DLSS file finished downloading: how many games could use it -->
@@ -365,6 +377,10 @@
                             </StackPanel>
                         </Button>
                     </StackPanel>
+                    <!-- The key for OptiScaler's in-game menu, under Play -->
+                    <TextBlock Grid.Row="2" Grid.Column="2" HorizontalAlignment="Right" Margin="0,6,0,0" FontSize="12" Foreground="#CCFFFFFF"
+                               Text="{x:Bind ViewModel.Selected.MenuKeyText, Mode=OneWay}" AutomationProperties.Name="OptiScaler menu key"
+                               Visibility="{x:Bind ViewModel.Selected.HasMenuKey, Mode=OneWay}" />
                 </Grid>
             </Grid>
 

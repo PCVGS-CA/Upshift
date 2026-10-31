@@ -396,6 +396,44 @@ public sealed partial class LibraryViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// OptiPatcher into an installed game: the catalog's pinned release (downloaded from its GitHub release the first time,
+    /// checked against GitHub's digest and the catalog's own hash), copied into OptiScaler's plugins folder, ASI loading on.
+    /// Null result with <see cref="StatusText"/> set when it couldn't be fetched.
+    /// </summary>
+    public async Task<InstallResult?> AddOptiPatcherAsync(GameCardViewModel card)
+    {
+        if (IsBusy || card.Info.TargetDir is not { } target) return null;
+        if (AppServices.Catalog.Addons.FirstOrDefault(c => c.Id == OptiPatcher.ComponentId) is not { PinnedVersion: { } version } component)
+        {
+            StatusText = "This catalog has no OptiPatcher release.";
+            return null;
+        }
+        string file;
+        IsBusy = true;
+        try
+        {
+            var cached = AppServices.Components.TryGetCached(component, version)
+                ?? await AppServices.Components.EnsureAsync(component, version, new Progress<string>(s => StatusText = s), CancellationToken.None);
+            file = Directory.EnumerateFiles(cached.Folder, "*.asi").First();
+            StatusText = string.Empty;
+        }
+        catch (Exception ex) when (ex is ComponentDownloadException or IOException or UnauthorizedAccessException or InvalidOperationException or HttpRequestException)
+        {
+            StatusText = $"Couldn't get OptiPatcher: {Helpers.ScreenText.Clean(ex.Message)}";
+            return null;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+        return await ConfigureOptiScalerAsync(card, OptiPatcher.Settings(true), addFileFrom: file, addFileAs: OptiPatcher.RelativePath(target));
+    }
+
+    /// <summary>Takes OptiPatcher out again: its file (and the plugins folder Upshift made for it) and the ASI setting.</summary>
+    public Task<InstallResult?> RemoveOptiPatcherAsync(GameCardViewModel card, string relativePath) =>
+        ConfigureOptiScalerAsync(card, OptiPatcher.Settings(false), removeFile: relativePath);
+
     public Task<InstallResult?> InstallOptiScalerAsync(GameCardViewModel card, CachedComponent component, string proxyName, InstallRestore? restore = null) =>
         RunInstallAsync(card, new InstallPlan
         {

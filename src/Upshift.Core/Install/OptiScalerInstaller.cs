@@ -1097,6 +1097,17 @@ public static partial class OptiScalerInstaller
                 }
                 else
                 {
+                    // A file in a subfolder (OptiPatcher's plugins\): the folders made for it are recorded, so they go again.
+                    var folder = Path.GetDirectoryName(path)!;
+                    var made = new List<string>();
+                    for (var dir = folder; !Directory.Exists(dir); dir = Path.GetDirectoryName(dir)!) made.Insert(0, dir);
+                    foreach (var dir in made)
+                    {
+                        Directory.CreateDirectory(dir);
+                        var relativeDir = Path.GetRelativePath(target, dir);
+                        manifest.CreatedFolders.Add(relativeDir);
+                        undo.Push(() => { TryRemoveEmptyFolder(dir); manifest.CreatedFolders.Remove(relativeDir); });
+                    }
                     File.Copy(from, path, overwrite: false);
                     undo.Push(() => File.Delete(path));
                     manifest.Added.Add(Stamp(new ManifestFile { Path = name }, path, Sha256(path)));
@@ -1131,6 +1142,21 @@ public static partial class OptiScalerInstaller
             // Nothing to undo any more: drop the temporary copies.
             foreach (var temp in Directory.EnumerateFiles(target, "*.upshift-undo", SearchOption.AllDirectories).ToList())
                 try { File.Delete(temp); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+            // A removed file's folder, when Upshift made it for that file (OptiPatcher's plugins) and it's empty now.
+            if (removeAdded is not null && Path.GetDirectoryName(plan.RemoveFile!) is { Length: > 0 } parent
+                && manifest.CreatedFolders.Contains(parent, StringComparer.OrdinalIgnoreCase))
+            {
+                var folder = Path.Combine(target, parent);
+                if (Directory.Exists(folder) && !Directory.EnumerateFileSystemEntries(folder).Any())
+                {
+                    TryRemoveEmptyFolder(folder);
+                    if (!Directory.Exists(folder))
+                    {
+                        manifest.CreatedFolders.RemoveAll(f => f.Equals(parent, StringComparison.OrdinalIgnoreCase));
+                        WriteManifest(target, manifest);
+                    }
+                }
+            }
             log.Write("  done");
             return new InstallResult { Success = true, Manifest = manifest, Message = "OptiScaler settings saved." };
         }

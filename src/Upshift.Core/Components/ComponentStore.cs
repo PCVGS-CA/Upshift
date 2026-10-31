@@ -153,9 +153,11 @@ public sealed partial class ComponentStore : IDisposable
             var actual = Convert.ToHexString(await HashFileAsync(download, SHA256.Create(), ct)).ToLowerInvariant();
             if (asset.Sha256 is not null && actual != asset.Sha256)
                 throw new ComponentDownloadException($"{asset.Name} doesn't match GitHub's checksum (expected {asset.Sha256}, got {actual}). Nothing was kept.");
+            if (version == component.PinnedVersion && component.PinnedSha256 is { } pinned && !actual.Equals(pinned, StringComparison.OrdinalIgnoreCase))
+                throw new ComponentDownloadException($"{asset.Name} doesn't match the checksum Upshift has for {component.Name} {version}. Nothing was kept.");
 
-            // A release that is one program (PresentMon's console app) is kept as it is; archives are unpacked.
-            if (asset.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            // A release that is one file (PresentMon's console app, OptiPatcher's .asi) is kept as it is; archives are unpacked.
+            if (asset.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || asset.Name.EndsWith(".asi", StringComparison.OrdinalIgnoreCase))
                 return await StoreAsync(component, version, asset.Name, actual, staging =>
                 {
                     File.Copy(download, Path.Combine(staging, asset.Name));

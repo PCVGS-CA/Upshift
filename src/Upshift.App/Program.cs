@@ -235,7 +235,8 @@ public static class Program
         }
         var snap = recorded!.Poll();
         overlay.Update(Core.Measure.OverlayItems.Build(Core.Measure.OverlayPhase.Result, items, "F10", seconds, null, null, null, seconds,
-            new Core.Measure.FrameStats(snap.Frames, seconds, snap.AverageFps ?? 0, snap.LowFps ?? 0, 0, true, snap.MaxFps), "Limited by your graphics card"));
+            new Core.Measure.FrameStats(snap.Frames, seconds, snap.AverageFps ?? 0, snap.LowFps ?? 0, 0, true, snap.MaxFps), "Limited by your graphics card",
+            "Try a lower upscaler quality or lower graphics settings."));
         Thread.Sleep(8000);
         for (var step = 1; step <= 8; step++) { overlay.Fade(1 - step / 8.0); Thread.Sleep(60); }
         overlay.Dispose();
