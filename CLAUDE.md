@@ -1038,6 +1038,11 @@ errors and no warnings.
     AMD-NR) come only from the author's own GitHub release at a pinned hash. NVIDIA files and modified AMD/NVIDIA files
     (the DLSS 5 file, FSR 4.1.1b, dlssg_for_sm86) are always user-supplied: never download them.
 
+- **1.6.0 released (2026-11-01)** at the user's "go", from test.8's code plus the changelog (tag v1.6.0, main = 1f8aa91,
+  fast-forwarded from dd79ddc; `feature/1.4` was pushed too, same commit). CHANGELOG 1.6.0 rewritten as short New / Fixes
+  lines. Left out: the README/screenshot rewrite (unapproved draft, kept in `git stash` "README and screenshots draft").
+  Harness 267/267 and a local Release package before tagging.
+
 ## Next
 
 1. **DLSS 5 follow-ups:**
