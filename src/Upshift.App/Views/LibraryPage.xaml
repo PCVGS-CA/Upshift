@@ -355,6 +355,9 @@
                         <TextBlock Foreground="#E6FFFFFF" FontSize="13" TextWrapping="Wrap">
                             <Run Text="{x:Bind ViewModel.Selected.SourceText, Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{x:Bind ViewModel.Selected.ApiText, Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{x:Bind ViewModel.Selected.EngineText, Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{x:Bind ViewModel.Selected.BuildText, Mode=OneWay}" /><Run Text="  ·  Anti-cheat: " /><Run Text="{x:Bind ViewModel.Selected.AntiCheatText, Mode=OneWay}" />
                         </TextBlock>
+                        <!-- FSR 4 in use, with this game's model: "FSR 4: OptiScaler's built-in · v… · Lite model" -->
+                        <TextBlock Text="{x:Bind ViewModel.Selected.Fsr4Text, Mode=OneWay}" Visibility="{x:Bind ViewModel.Selected.HasFsr4Text, Mode=OneWay}"
+                                   Foreground="#E6FFFFFF" FontSize="13" TextWrapping="Wrap" AutomationProperties.Name="FSR 4 in use" />
                     </StackPanel>
 
                     <!-- Main actions -->

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-10-31T18:00Z",
+  "updated": "2026-11-11T18:00Z",
   "notes": "Upshift's built-in catalog. Upshift will later download a newer version of this file from its GitHub repo, so new forks and GPU support can be added without releasing a new version. The userAgent values below are fallbacks; the app sends Upshift/<its version>.",
 
   "components": [
@@ -124,7 +124,7 @@
   ],
 
   "upscalerFiles": {
-    "notes": "Newer copies of upscaler DLLs that games ship. A game's file is only replaced by one with the same name, never added, and only when its version is in [minVersion, belowVersion) and older than 'version'. Checked 2026-09-28: DLSS 2.0+ SR and 3.5+ RR use the same NGX interface (DLSS 1.x doesn't). FSR 3.1's amd_fidelityfx_dx12/vk.dll (1.0.x) go to 3.1.4, the last single-DLL release; SDK 2.x's loader needs the separate upscaler DLL next to it, which would mean adding files. XeSS stays within its major version (Intel: a major version 'indicates a new API, and potentially a break'), and XeSS 1.x only from 1.3 (1.3 changed the resolution scaling). DLSS Frame Generation isn't offered: it's paired with the game's Streamline version. All sources are 64-bit.",
+    "notes": "Newer copies of upscaler DLLs that games ship. A game's file is only replaced by one with the same name, never added, and only when its version is in [minVersion, belowVersion) and older than 'version'. Checked 2026-09-28: DLSS 2.0+ SR and 3.5+ RR use the same NGX interface (DLSS 1.x doesn't). FSR 3.1's amd_fidelityfx_dx12/vk.dll (1.0.x) go to 3.1.4, the last single-DLL release; SDK 2.x's loader needs the separate upscaler DLL next to it, which would mean adding files. XeSS stays within its major version (Intel: a major version 'indicates a new API, and potentially a break'), and XeSS 1.x only from 1.3 (1.3 changed the resolution scaling). DLSS Frame Generation isn't offered: it's paired with the game's Streamline version. All sources are 64-bit. 2026-11-11: AMD FSR SDK 2.4.0 (FSR Upscaling 4.1.2, Frame Generation 4.0.2) replaces 2.3.0 for the SDK 2.x DLLs, and its Vulkan DLLs (loader_vk 1.0.2, upscaler_vk 4.1.2, framegeneration_vk 4.0.2) are offered too. Versions are the files' own, read from the signed DLLs (all signed by Advanced Micro Devices).",
     "signers": {
       "Dlss": [ "NVIDIA Corporation" ],
       "Fsr": [ "Advanced Micro Devices", "Advanced Micro Devices, Inc.", "Advanced Micro Devices Inc." ],
@@ -135,9 +135,12 @@
       { "file": "nvngx_dlssd.dll", "family": "Dlss", "version": "310.9.1", "minVersion": "3.5", "componentId": "nvidia-dlss", "tag": "v310.9.1", "repoPath": "lib/Windows_x86_64/rel/nvngx_dlssd.dll" },
       { "file": "amd_fidelityfx_dx12.dll", "family": "Fsr", "version": "1.0.1.41314", "minVersion": "1.0", "belowVersion": "2.0", "componentId": "amd-fidelityfx", "tag": "v1.1.4", "repoPath": "PrebuiltSignedDLL/amd_fidelityfx_dx12.dll" },
       { "file": "amd_fidelityfx_vk.dll", "family": "Fsr", "version": "1.0.1.41314", "minVersion": "1.0", "belowVersion": "2.0", "componentId": "amd-fidelityfx", "tag": "v1.1.4", "repoPath": "PrebuiltSignedDLL/amd_fidelityfx_vk.dll" },
-      { "file": "amd_fidelityfx_loader_dx12.dll", "family": "Fsr", "version": "2.3.0.2740", "minVersion": "2.0", "belowVersion": "3.0", "componentId": "amd-fidelityfx", "tag": "v2.3.0", "repoPath": "Kits/FidelityFX/signedbin/amd_fidelityfx_loader_dx12.dll" },
-      { "file": "amd_fidelityfx_upscaler_dx12.dll", "family": "Fsr", "version": "4.1.1.2740", "minVersion": "4.0", "belowVersion": "5.0", "componentId": "amd-fidelityfx", "tag": "v2.3.0", "repoPath": "Kits/FidelityFX/signedbin/amd_fidelityfx_upscaler_dx12.dll" },
-      { "file": "amd_fidelityfx_framegeneration_dx12.dll", "family": "Fsr", "version": "4.0.1.2740", "minVersion": "4.0", "belowVersion": "5.0", "componentId": "amd-fidelityfx", "tag": "v2.3.0", "repoPath": "Kits/FidelityFX/signedbin/amd_fidelityfx_framegeneration_dx12.dll" },
+      { "file": "amd_fidelityfx_loader_dx12.dll", "family": "Fsr", "version": "2.3.0.4555", "minVersion": "2.0", "belowVersion": "3.0", "componentId": "amd-fidelityfx", "tag": "v2.4.0", "repoPath": "Kits/FidelityFX/signedbin/amd_fidelityfx_loader_dx12.dll" },
+      { "file": "amd_fidelityfx_upscaler_dx12.dll", "family": "Fsr", "version": "4.1.2.4555", "minVersion": "4.0", "belowVersion": "5.0", "componentId": "amd-fidelityfx", "tag": "v2.4.0", "repoPath": "Kits/FidelityFX/signedbin/amd_fidelityfx_upscaler_dx12.dll" },
+      { "file": "amd_fidelityfx_framegeneration_dx12.dll", "family": "Fsr", "version": "4.0.2.4555", "minVersion": "4.0", "belowVersion": "5.0", "componentId": "amd-fidelityfx", "tag": "v2.4.0", "repoPath": "Kits/FidelityFX/signedbin/amd_fidelityfx_framegeneration_dx12.dll" },
+      { "file": "amd_fidelityfx_loader_vk.dll", "family": "Fsr", "version": "1.0.2.4555", "minVersion": "1.0", "belowVersion": "2.0", "componentId": "amd-fidelityfx", "tag": "v2.4.0", "repoPath": "Kits/FidelityFX/signedbin/amd_fidelityfx_loader_vk.dll" },
+      { "file": "amd_fidelityfx_upscaler_vk.dll", "family": "Fsr", "version": "4.1.2.4555", "minVersion": "4.0", "belowVersion": "5.0", "componentId": "amd-fidelityfx", "tag": "v2.4.0", "repoPath": "Kits/FidelityFX/signedbin/amd_fidelityfx_upscaler_vk.dll" },
+      { "file": "amd_fidelityfx_framegeneration_vk.dll", "family": "Fsr", "version": "4.0.2.4555", "minVersion": "4.0", "belowVersion": "5.0", "componentId": "amd-fidelityfx", "tag": "v2.4.0", "repoPath": "Kits/FidelityFX/signedbin/amd_fidelityfx_framegeneration_vk.dll" },
       { "file": "libxess.dll", "family": "Xess", "version": "1.3.1.32", "minVersion": "1.3", "belowVersion": "2.0", "componentId": "intel-xess", "tag": "v1.3.1", "archivePath": "XeSS_SDK-1.3.1/bin/libxess.dll" },
       { "file": "libxess.dll", "family": "Xess", "version": "2.0.2.68", "minVersion": "2.0", "belowVersion": "3.0", "componentId": "intel-xess", "tag": "v3.0.2", "archivePath": "bin/libxess.dll" },
       { "file": "libxess_dx11.dll", "family": "Xess", "version": "2.0.2.68", "minVersion": "2.0", "belowVersion": "3.0", "componentId": "intel-xess", "tag": "v3.0.2", "archivePath": "bin/libxess_dx11.dll" },
@@ -505,6 +508,10 @@
       "notes": "Official (optiscaler org), MIT. v0.42 published 2026-10-18; the hash is GitHub's asset digest for OptiPatcher_v0.42.asi (107,520 bytes). Installed as plugins\\OptiPatcher.asi under OptiScaler's DLL folder with [Plugins] LoadAsiPlugins=true (its README; OptiScaler 0.9.4 dllmain.cpp). Change the version only together with its hash."
     }
   ],
+  "officialDlss5": {
+    "titles": [ "NBA 2K27", "Hogwarts Legacy", "War Thunder", "Where Winds Meet" ],
+    "notes": "Games that ship NVIDIA's own DLSS 5 (the user's list, 2026-11-11). On NVIDIA cards Upshift says to turn it on in the game's menu and doesn't offer the DLSS 5 build of OptiScaler; a game already switched keeps its switch-back. Matched by title like the wiki's titles. Add titles as more games ship it."
+  },
   "gameNotes": [
     {
       "titles": [ "Silent Hill 2" ],

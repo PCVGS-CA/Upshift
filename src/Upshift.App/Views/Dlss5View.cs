@@ -105,6 +105,16 @@ public sealed class Dlss5View : UserControl
                 Message = $"Pretending this PC has an {gpu!.Name}. Nothing is installed or changed while this is on (Settings, developer options)."
             });
 
+        // Official DLSS 5 in this game: its own menu turns it on, so the DLSS 5 build isn't offered. A game already switched keeps
+        // its "switch back" below.
+        if (status.OfficialInGame && manifest?.Switch is null)
+        {
+            body.Children.Add(Line("\uE946", Dlss5.OfficialText, "UpshiftAccentBrush", strong: true));
+            Content = Wrap(body);
+            _building = false;
+            return;
+        }
+
         // Can this card use it, and why; once switched, what's set up (from the DLSS 5 file actually in the game).
         if (installedByUs && manifest!.Switch is not null && !pretend)
         {

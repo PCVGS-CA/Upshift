@@ -25,6 +25,9 @@ public static class Fingerprints
         new UpscalerFile("amd_fidelityfx_loader_dx12.dll", UpscalerFamily.Fsr, "FidelityFX loader"),
         new UpscalerFile("amd_fidelityfx_upscaler_dx12.dll", UpscalerFamily.Fsr, "FSR upscaler"),
         new UpscalerFile("amd_fidelityfx_framegeneration_dx12.dll", UpscalerFamily.Fsr, "FSR frame generation"),
+        new UpscalerFile("amd_fidelityfx_loader_vk.dll", UpscalerFamily.Fsr, "FidelityFX loader (Vulkan)"),
+        new UpscalerFile("amd_fidelityfx_upscaler_vk.dll", UpscalerFamily.Fsr, "FSR upscaler (Vulkan)"),
+        new UpscalerFile("amd_fidelityfx_framegeneration_vk.dll", UpscalerFamily.Fsr, "FSR frame generation (Vulkan)"),
         new UpscalerFile("ffx_fsr2_api_x64.dll", UpscalerFamily.Fsr, "FSR 2"),
         new UpscalerFile("ffx_fsr2_api_dx12_x64.dll", UpscalerFamily.Fsr, "FSR 2 (DX12)"),
         new UpscalerFile("ffx_fsr2_api_vk_x64.dll", UpscalerFamily.Fsr, "FSR 2 (Vulkan)")

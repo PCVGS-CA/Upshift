@@ -143,6 +143,9 @@ public sealed class OptiScalerOptionsView : UserControl
         else if (helixOffered && helixMissing is not null)
             body.Children.Add(Subtle($"{HelixSr.ChoiceLabel} can be added to this list: set HelixSR up first, on the Updates page."));
 
+        // ---- FSR 4 model (this game only, while FSR 4 is its upscaler) ----
+        if (currentUpscaler == "fsr4" || Fsr4Models.IsUpscaler(ini, card.Info.Api)) body.Children.Add(Fsr4ModelSection(card, ini, gpu));
+
         // ---- Frame generation ----
         var modes = OptiScalerOptions.FrameGenModes(gpu, card.Info, card.Suggestions?.HiddenFrameGen ?? new HashSet<string>());
         var fgBox = Combo("Frame generation", modes.Select(m => Item(m.Id, m.Label)));
@@ -351,13 +354,14 @@ public sealed class OptiScalerOptionsView : UserControl
         var filesOffered = amd && official != OfficialFsr4.Ready;
 
         var offered = new List<(Fsr4Source Source, string Label)> { (Fsr4Source.BuiltIn, "OptiScaler's built-in FSR 4") };
-        if (inUse == Fsr4Source.File411b || (filesOffered && file411 is not null && fsrDll is not null))
-            offered.Add((Fsr4Source.File411b, "Your 4.1.1b file" + (file411?.Version is { } v1 ? $" (v{v1})" : "")));
+        // The 4.1.1b file is no longer offered (AMD's official FSR 4.1 covers RX 6000): a game that still uses it keeps it, and
+        // shows it here so it can be switched to another source.
+        if (inUse == Fsr4Source.File411b)
+            offered.Add((Fsr4Source.File411b, "Your 4.1.1b file (no longer offered)" + (file411?.Version is { } v1 ? $" (v{v1})" : "")));
         if (inUse == Fsr4Source.File402c || (filesOffered && file402 is not null))
             offered.Add((Fsr4Source.File402c, "Your 4.0.2c file" + (file402?.Version is { } v2 ? $" (v{v2})" : "")));
         bool Has(Fsr4Source s) => offered.Any(o => o.Source == s);
         var preferred = official == OfficialFsr4.Ready ? Fsr4Source.BuiltIn
-            : rdna2 && Has(Fsr4Source.File411b) ? Fsr4Source.File411b
             : rdna2 && Has(Fsr4Source.File402c) ? Fsr4Source.File402c
             : Fsr4Source.BuiltIn;
 
@@ -447,49 +451,40 @@ public sealed class OptiScalerOptionsView : UserControl
             {
                 OfficialFsr4.Ready => Subtle(AmdOfficialFsr4.ReadyLine),
                 OfficialFsr4.DriverTooOld or OfficialFsr4.DriverUnknown => Subtle(AmdOfficialFsr4.UpdateDriverLine + "."),
-                _ => amd && file411 is null && file402 is null && (gpu.Generation == "RDNA 1" || gpu.IsIntegrated)
+                _ => amd && file402 is null && (gpu.Generation == "RDNA 1" || gpu.IsIntegrated)
                     ? Subtle("Cards AMD's FSR 4.1 doesn't cover can use a modified file: add one in Settings, under Advanced.")
                     : null
             },
-            amd && file411 is not null && fsrDll is null
-                ? Subtle("This OptiScaler has no amd_fidelityfx_upscaler_dx12.dll, so your 4.1.1b file can't be used here.")
-                : null,
             Subtle("With it on, pick FSR 4 as the upscaler above."),
-            Fsr4ModelPicker(card, ini),
             watermark,
             Subtle("Takes effect after restarting the game. The watermark shows whether FSR 4 or the FSR 3 fallback is really running."));
     }
 
     /// <summary>
-    /// "FSR 4 model" ([FSR] Fsr4Model), only when the installed build's own OptiScaler.ini has that setting (the v10 test
-    /// builds; 0.9.4 doesn't). Values and notes are that ini's. Not yet tested on AMD hardware.
+    /// "FSR 4 model" for this game, while FSR 4 is on: Auto (OptiScaler's own pick), Full or Lite, only the ones this card and
+    /// game can use (<see cref="Fsr4Models"/>), written to this game's OptiScaler.ini only. A build without the setting (0.9.4)
+    /// says "Needs a newer OptiScaler" and nothing else.
     /// </summary>
-    private FrameworkElement? Fsr4ModelPicker(GameCardViewModel card, IniFile ini)
+    private FrameworkElement Fsr4ModelSection(GameCardViewModel card, IniFile ini, GpuInfo? gpu)
     {
-        if (!OptiScalerOptions.HasFsr4Model(ini)) return null;
-        var current = ini.Get("FSR", "Fsr4Model")?.Trim();
-        var box = new ComboBox { Header = "FSR 4 model", MinWidth = 200, HorizontalAlignment = HorizontalAlignment.Left };
+        if (!Fsr4Models.Supported(ini))
+            return Group(new TextBlock { Text = "FSR 4 model" }, Subtle(Fsr4Models.NeedsNewerText));
+        var api = card.Info.Api;
+        var offered = Fsr4Models.Offered(gpu, api, ini);
+        var current = Fsr4Models.Current(ini);
+        var box = Combo("FSR 4 model", offered.Select(c => Item(c.ToString(), Fsr4Models.Label(c))));
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(box, "FSR 4 model");
-        ToolTipService.SetToolTip(box, "From this OptiScaler build's own notes: needs FSR 4.1.1 or newer. FP8 needs an RX 9000. " +
-                                       "INT8 RDNA 2 and INT8 Lite are only in AMD's Vulkan driver FSR. It can also be changed in OptiScaler's menu in game.");
-        foreach (var (label, value) in OptiScalerOptions.Fsr4Models) box.Items.Add(new ComboBoxItem { Content = label, Tag = value });
-        box.SelectedItem = box.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string?)i.Tag == current) ?? box.Items[0];
+        // A model set in OptiScaler's own menu that isn't offered here is still shown as it is.
+        if (current is { } set && !offered.Contains(set)) box.Items.Add(Item(set.ToString(), Fsr4Models.Label(set) + " (set in OptiScaler's menu)"));
+        if (current is null) box.Items.Add(Item("other", "Set in OptiScaler's menu"));
+        var selected = current?.ToString() ?? "other";
+        box.SelectedItem = box.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string)i.Tag == selected) ?? box.Items[0];
         box.SelectionChanged += async (_, _) =>
         {
-            if (_building || box.SelectedItem is not ComboBoxItem item) return;
-            await Save(card, OptiScalerOptions.Fsr4ModelSettings((string?)item.Tag));
+            if (_building || box.SelectedItem is not ComboBoxItem { Tag: string tag } || !Enum.TryParse<Fsr4ModelChoice>(tag, out var choice)) return;
+            if (Fsr4Models.Value(choice, gpu, api, ini) is { } value) await Save(card, Fsr4Models.Settings(value));
         };
-        return new StackPanel
-        {
-            Spacing = 2,
-            Children =
-            {
-                box,
-                // Two short sentences, kept whole (not shortened to a tooltip).
-                new TextBlock { Text = "Auto picks the best model for your card. INT8 RDNA 2 is for RX 6000.", FontSize = 12, TextWrapping = TextWrapping.Wrap,
-                                Foreground = Res("SubtleTextBrush") }
-            }
-        };
+        return Group(box, offered.Contains(Fsr4ModelChoice.Lite) ? Subtle(Fsr4Models.Hint) : null);
     }
 
     /// <summary>

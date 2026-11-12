@@ -52,8 +52,18 @@ public sealed class UpscalerCatalog
     /// </summary>
     public List<CatalogComponent> Addons { get; set; } = new();
 
+    /// <summary>Games that ship NVIDIA's own DLSS 5: the game's menu turns it on, so the DLSS 5 build of OptiScaler isn't offered.</summary>
+    public OfficialDlss5List? OfficialDlss5 { get; set; }
+
     /// <summary>Per-game advice by card vendor (e.g. which upscaler to set in the game before installing OptiScaler).</summary>
     public List<GameNote> GameNotes { get; set; } = new();
+}
+
+/// <summary>Games with official DLSS 5, by title (matched like the wiki's titles: case, punctuation and "™" don't matter).</summary>
+public sealed class OfficialDlss5List
+{
+    public List<string> Titles { get; set; } = new();
+    public string? Notes { get; set; }
 }
 
 /// <summary>

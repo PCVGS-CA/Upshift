@@ -275,17 +275,45 @@ public static class GameUpdates
             .ToList();
 
     public static Task<InstallResult> UndoAsync(GameInfo game, IProgress<string>? progress) =>
-        RunAsync(game, progress, manifest =>
+        RunAsync(game, progress, async manifest =>
         {
             progress?.Report($"Putting back OptiScaler {manifest.LastUpdate?.FromVersion} in {game.Name}…");
-            return InstallRunner.RunAsync(new InstallPlan
+            var model = Fsr4ModelOf(game);
+            var result = await InstallRunner.RunAsync(new InstallPlan
             {
                 Operation = InstallOperation.UndoUpdate,
                 GameId = game.Id,
                 GameName = game.Name,
                 TargetDir = game.TargetDir!
             });
+            if (result.Success) await KeepFsr4ModelAsync(game, model);
+            return result;
         });
+
+    /// <summary>The game's FSR 4 model value in its OptiScaler.ini, or null when it has none.</summary>
+    private static string? Fsr4ModelOf(GameInfo game)
+    {
+        try
+        {
+            var path = Path.Combine(game.TargetDir!, "OptiScaler.ini");
+            return File.Exists(path) && IniFile.Load(path) is var ini && Fsr4Models.Supported(ini) ? ini.Get(Fsr4Models.Section, Fsr4Models.Key)?.Trim() : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
+    }
+
+    /// <summary>
+    /// Undo puts back the files from before the last update, OptiScaler.ini included: the game's FSR 4 model is then written
+    /// back when the restored ini has the setting and a different value. A change of its own, recorded like any other.
+    /// </summary>
+    private static async Task KeepFsr4ModelAsync(GameInfo game, string? model)
+    {
+        if (model is null || Fsr4ModelOf(game) is not { } now || string.Equals(now, model, StringComparison.OrdinalIgnoreCase)) return;
+        await InstallRunner.RunAsync(new InstallPlan
+        {
+            Operation = InstallOperation.Configure, GameId = game.Id, GameName = game.Name, TargetDir = game.TargetDir!,
+            IniSettings = Fsr4Models.Settings(model)
+        });
+    }
 
     /// <summary>Reinstalls the files of the installed version (downloading it again if needed), keeping the settings.</summary>
     public static Task<InstallResult> RepairAsync(GameInfo game, IProgress<string>? progress) =>

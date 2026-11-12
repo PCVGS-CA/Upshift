@@ -1043,6 +1043,45 @@ errors and no warnings.
   lines. Left out: the README/screenshot rewrite (unapproved draft, kept in `git stash` "README and screenshots draft").
   Harness 267/267 and a local Release package before tagging.
 
+- **1.7.0-test.1 (2026-11-11), not released: FSR 4 model, FSR SDK 2.4, official DLSS 5, 4.1.1b retired.** Branch `feature/1.4`.
+  - **Official DLSS 5:** catalog.v2.json `officialDlss5.titles` (NBA 2K27, Hogwarts Legacy, War Thunder, Where Winds Meet; matched by
+    `WikiMatcher.Key`). `Dlss5.HasOfficial`; on NVIDIA `Dlss5Status.OfficialInGame` + blocker `Dlss5.OfficialText`; Dlss5View shows only
+    that line (a game already switched keeps its switch-back). AMD-NR isn't blocked.
+  - **FSR SDK 2.4 (FidelityFX v2.4.0, 2026-10-28):** upscalerFiles now has v2.4.0's signedbin DLLs for DX12 (loader 2.3.0.4555,
+    upscaler 4.1.2.4555, frame generation 4.0.2.4555) and Vulkan (loader_vk 1.0.2.4555, upscaler_vk 4.1.2.4555,
+    framegeneration_vk 4.0.2.4555), all AMD-signed; the v2.3.0 lines are gone. Fingerprints/UpscalerList know the `_vk` names.
+    The v10 nightly already ships the 2.4 Vulkan DLLs.
+  - **4.1.1b retired:** not in Settings' user files, not offered in the FSR 4 source picker unless a game uses it ("Your 4.1.1b file
+    (no longer offered)"); overrides keep working until switched. `fsr411bRelease` stays in the catalog for older app versions.
+  - **FSR 4 model:** `Core/Install/Fsr4Models.cs` (`[FSR] Fsr4Model` from the v10.0.0-pre1 nightly's own ini: 0 FP8, 1 INT8, 2 INT8 RDNA2,
+    3 INT8 Lite, auto = best the GPU supports; Lite/RDNA2 only in the Vulkan driver FSR). Offered: Auto always; Full on RDNA 4 (FP8, or
+    INT8 when Fsr4GpuSupport limits to INT8) and RDNA 3/3.5 (INT8); Lite only on AMD in Vulkan games; nothing else (RDNA 2 DX12 = Auto
+    only). Shown on the Upscaling tab when the upscaler is FSR 4 (`IsUpscaler`: fsr31/fsr31_12 + UpscalerIndex 0); without the key (0.9.4)
+    only "Needs a newer OptiScaler". The hint shows only when Lite is offered. Card/header `Fsr4Text` ends "· Lite model". Settings
+    `Fsr4ModelDefault` → `Fsr4Models.ForNewInstall` (restored settings win on reinstall). `GameUpdates.UndoAsync` writes the game's model
+    back after Undo when the restored ini has the key. Old `OptiScalerOptions.Fsr4Models`/`Fsr4ModelPicker` removed.
+  - Tested: new harness `t9` in this session's scratchpad (83 checks: official list, model rules, all six 2.4 downloads with AMD signature
+    and hash vs the repo copies, dx12 4.1.1/4.0.1 → 2.4 update and exact restore, Vulkan rules by version, model through 0.9.4 →
+    nightly → nightly copy → undo → reinstall, another game untouched, a 4.1.1b override still recognised and removable); the app on
+    throwaway data (`UPSHIFT_TEST_DATA`, real RX 9070 XT): FSR 4 → Auto/Full in a DX12 game, ini written, card "FSR 4 · Auto model", 0.9.4
+    game "Needs a newer OptiScaler", Settings default saved. Not tested: Lite in a real Vulkan game, RX 7000/6000, a real game.
+  - **The old harness source (helixtest, 267 checks) was pruned from the old scratchpad** between sessions; only its bin is left.
+  - **OptiScaler v10 readiness (OptiScaler.dll in its own subfolder), not built:**
+    - Today's nightly (v10.0.0-pre1 20261111) still has OptiScaler.dll and OptiScaler.ini at the root; only the bundled DLLs are in
+      `OptiScaler\` (OptiDllPath default `.\OptiScaler`). Install/update/undo/uninstall of that layout are tested.
+    - **Install:** `Preview` refuses a source without a root `OptiScaler.dll` (OptiScalerInstaller.cs ~390); `FilesToCopy` renames only the
+      root `OptiScaler.dll` to the proxy name; `IsOptiScalerDll` checks OriginalFilename "OptiScaler.dll" (a root loader stub would differ).
+      All three need the real v10 layout (which file the game loads) before changing.
+    - **ini/log paths:** about 25 places read `TargetDir\OptiScaler.ini` (Configure, Update's MergeIni, SavedSettings, options view, card,
+      Dlss5, HelixSR, Measure, problem report, GameCleanup, ShaderLeftovers). Move them to one helper (`OptiScalerPaths.Ini(target, manifest)`)
+      first. `OptiScalerLog` reads `OptiScaler.log` next to the exe; v10's `LogFileName` default is "OptiScaler.log in current folder" and
+      `SingleFile=false` makes one file per session, so "Is it working?" must follow LogFileName/SingleFile.
+    - **Detection:** `ModDetector` finds hand installs by a proxy DLL's version text and a root `OptiScaler.ini`; `UpscalerFiles.OptiScalerOwner`
+      and `GameAnalyzer.RefreshQuick` look next to the exe. Upshift's own installs are found by the manifest (unaffected).
+    - **Undo, repair, uninstall:** manifest paths are relative, so subfolders work (tested with `OptiScaler\`); `CreatedFolders` and
+      `OptiScalerFolders` (D3D12_Optiscaler, Licenses, OptiScaler) remove the folders when empty. `.upshift\` stays in the exe folder.
+    - **OptiPatcher** follows `OptiDllPath` already; `Fsr4InUse`/`FsrUpscalerPath` take the shallowest upscaler DLL (fine).
+
 ## Next
 
 1. **DLSS 5 follow-ups:**

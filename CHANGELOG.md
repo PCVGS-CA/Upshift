@@ -2,6 +2,22 @@
 
 All notable changes to Upshift. Each release's section becomes its GitHub release notes, so the heading must be `## [x.y.z]` with the same version as `Directory.Build.props` (a date after it is fine).
 
+## [1.7.0]
+
+FSR 4 model per game, AMD's newest FSR files, and official DLSS 5.
+
+### New
+
+- Choose the FSR 4 model for each game: Auto, Full or Lite (needs an OptiScaler build with the setting).
+- Settings: a default FSR 4 model for new installs.
+- The game page and card show the FSR 4 model in use ("FSR 4 · Lite model").
+- AMD FSR SDK 2.4 (FSR 4.1.2) files for games that ship FSR, Vulkan games included.
+- Games with official DLSS 5 (NBA 2K27, Hogwarts Legacy, War Thunder, Where Winds Meet) say to turn it on in the game's menu.
+
+### Removed
+
+- The modified FSR 4.1.1b file is no longer offered: AMD's official FSR 4.1 covers RX 6000. Games already using it keep it until you switch.
+
 ## [1.6.0] - 2026-11-01
 
 A new Measure overlay, installing on several games at once, and safer installs.

@@ -276,21 +276,6 @@ public static class OptiScalerOptions
     };
 
     /// <summary>
-    /// The FSR 4 models, as [FSR] Fsr4Model in the build's own OptiScaler.ini (first in the v10.0.0-pre1 nightly of
-    /// 2026-10-23): "0 = FP8 | 1 = INT8 | 2 = INT8 RDNA2 | 3 = INT8 Lite", default (auto) "the best one the GPU supports".
-    /// Auto (null) puts the file's own value back.
-    /// </summary>
-    public static readonly IReadOnlyList<(string Label, string? Value)> Fsr4Models = new (string, string?)[]
-    {
-        ("Auto", null), ("FP8", "0"), ("INT8", "1"), ("INT8 RDNA 2", "2"), ("INT8 Lite", "3")
-    };
-
-    /// <summary>True when the installed build's OptiScaler.ini has the FSR 4 model setting.</summary>
-    public static bool HasFsr4Model(IniFile ini) => ini.Has("FSR", "Fsr4Model");
-
-    public static List<IniSetting> Fsr4ModelSettings(string? value) => new() { new("FSR", "Fsr4Model", value) };
-
-    /// <summary>
     /// Settings written in the shape the installed build's OptiScaler.ini has. The v10 test builds replaced
     /// Fsr4ForceEnableInt8 ("true" = INT8 on every card) with Fsr4GpuSupport ("2 = INT8", per their ini) and have no
     /// Fsr4Update, so those are translated (or left out) there, and back again for an ini that has the old keys.

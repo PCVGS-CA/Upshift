@@ -447,7 +447,10 @@ public sealed partial class LibraryViewModel : ObservableObject
             ProxyName = proxyName,
             // The upscaler dropdown starts on the suggestion, so the fresh OptiScaler.ini gets it too.
             // OptiScaler's log at its lightest level, for "According to OptiScaler's log" in the game's panel.
-            IniSettings = SuggestedUpscalerSettings(card).Concat(OptiScalerLog.LogSettings(true)).ToList(),
+            // Plus the default FSR 4 model from Settings, where this card and game can use it (a build without the setting
+            // leaves it out). Restored settings are applied after these, so a reinstall keeps the game's own choice.
+            IniSettings = SuggestedUpscalerSettings(card).Concat(OptiScalerLog.LogSettings(true))
+                .Concat(Fsr4Models.ForNewInstall(Fsr4Models.Parse(AppServices.Settings.Current.Fsr4ModelDefault), AppServices.Gpu, card.Info.Api)).ToList(),
             SettingsFolder = restore?.SettingsFolder ?? SavedSettings.FolderFor(AppServices.DataDir, card.Name),
             RemoveLeftovers = restore?.RemoveLeftovers ?? false,
             RestoreSettingsFrom = restore?.RestoreFrom,

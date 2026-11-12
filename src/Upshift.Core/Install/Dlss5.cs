@@ -3,6 +3,7 @@ using Upshift.Core.Catalog;
 using Upshift.Core.Detection;
 using Upshift.Core.Hardware;
 using Upshift.Core.Models;
+using Upshift.Core.Wiki;
 
 namespace Upshift.Core.Install;
 
@@ -27,6 +28,8 @@ public sealed class Dlss5Status
     public NeuralRuntime? PreferredRuntime { get; init; }
     public bool IsAmd => Option.Backend?.Vendor == GpuVendor.Amd;
     public bool CanSwitch => Option.Backend is not null && Blockers.Count == 0;
+    /// <summary>The game ships NVIDIA's own DLSS 5 (catalog list), and this card would get the NVIDIA DLSS 5 build.</summary>
+    public bool OfficialInGame { get; init; }
 }
 
 /// <summary>DLSS 5 (Neural Rendering): the rules for the user's file, the card, the driver and the game.</summary>
@@ -35,6 +38,16 @@ public static class Dlss5
     public const string Section = "DlssNr";
 
     /// <summary>DLSS 5 settings carried when a game moves from a replaced DLSS 5 build to its replacement.</summary>
+    /// <summary>Said instead of offering the DLSS 5 build in a game that has it officially.</summary>
+    public const string OfficialText = "This game has official DLSS 5. Turn it on in the game's menu.";
+
+    /// <summary>True when the catalog lists this game as shipping official DLSS 5.</summary>
+    public static bool HasOfficial(GameInfo game, UpscalerCatalog catalog)
+    {
+        var key = WikiMatcher.Key(game.Name);
+        return key.Length > 0 && catalog.OfficialDlss5?.Titles.Any(t => WikiMatcher.Key(t) == key) == true;
+    }
+
     public static readonly string[] CarriedKeys = { "Enabled", "ToggleKey", "TransferStrength", "ColourStrength", "WorkingScale", "WhitePointSource" };
     public const string NvidiaFileName = "nvngx_dlssnr.dll";
     private static readonly string[] NvidiaSigner = { "NVIDIA Corporation" };
@@ -75,8 +88,11 @@ public static class Dlss5
     public static Dlss5Status Evaluate(GameInfo game, GpuInfo? gpu, UpscalerCatalog catalog, Dlss5File? userFile, IniFile? ini)
     {
         var option = NeuralSelector.Evaluate(gpu, catalog);
-        var status = new Dlss5Status { Option = option, PreferredRuntime = option.Runtimes.FirstOrDefault() };
         var backend = option.Backend;
+        // NVIDIA's DLSS 5 build isn't offered where the game has DLSS 5 itself (AMD-NR is a different thing and stays).
+        var official = backend?.Vendor == GpuVendor.Nvidia && HasOfficial(game, catalog);
+        var status = new Dlss5Status { Option = option, PreferredRuntime = option.Runtimes.FirstOrDefault(), OfficialInGame = official };
+        if (official) status.Blockers.Add(OfficialText);
 
         if (game.HasAntiCheat) status.Blockers.Add("This game uses anti-cheat, so nothing is installed or changed in it.");
         if (backend is null)

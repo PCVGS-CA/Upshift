@@ -61,6 +61,9 @@ public sealed class AppSettings
     /// <summary>The overlay's corner: TopLeft, TopRight, BottomLeft or BottomRight.</summary>
     public string OverlayCorner { get; set; } = "TopRight";
 
+    /// <summary>"Default FSR 4 model for new installs": Auto, Full or Lite. Existing games keep their own choice.</summary>
+    public string Fsr4ModelDefault { get; set; } = "Auto";
+
     /// <summary>The overlay's style: "Full" (panel with tiles) or "Minimal" (one line).</summary>
     public string OverlayStyle { get; set; } = "Full";
 

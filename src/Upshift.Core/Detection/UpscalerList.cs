@@ -48,6 +48,7 @@ public static partial class UpscalerList
         ("sl.dlss_g.dll", DlssFg, false),
         ("nvngx_dlssnr.dll", DlssNr, true),
         ("amd_fidelityfx_upscaler_dx12.dll", FsrUp, true),
+        ("amd_fidelityfx_upscaler_vk.dll", FsrUp, true),
         // FidelityFX API DLLs: their version (1.0.x) is the API's, not FSR's, so the wiki's FSR version is shown instead.
         ("amd_fidelityfx_dx12.dll", FsrUp, false),
         ("amd_fidelityfx_vk.dll", FsrUp, false),
@@ -55,7 +56,9 @@ public static partial class UpscalerList
         ("ffx_fsr2_api_dx12_x64.dll", FsrUp, true),
         ("ffx_fsr2_api_vk_x64.dll", FsrUp, true),
         ("amd_fidelityfx_loader_dx12.dll", FsrUp, false),
+        ("amd_fidelityfx_loader_vk.dll", FsrUp, false),
         ("amd_fidelityfx_framegeneration_dx12.dll", FsrFg, true),
+        ("amd_fidelityfx_framegeneration_vk.dll", FsrFg, true),
         ("libxess.dll", XessSr, true),
         ("libxess_dx11.dll", XessSr, true),
         ("libxess_fg.dll", XessFg, true),

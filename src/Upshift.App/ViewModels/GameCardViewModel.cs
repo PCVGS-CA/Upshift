@@ -131,9 +131,13 @@ public sealed partial class GameCardViewModel : ObservableObject
         {
             try
             {
-                var (source, version) = OptiScalerOptions.Fsr4InUse(fsrDir, manifest!, IniFile.Load(Path.Combine(fsrDir, "OptiScaler.ini")),
-                    AppServices.Catalog.Fsr4.CommunityInt8FileName);
+                var fsrIni = IniFile.Load(Path.Combine(fsrDir, "OptiScaler.ini"));
+                var (source, version) = OptiScalerOptions.Fsr4InUse(fsrDir, manifest!, fsrIni, AppServices.Catalog.Fsr4.CommunityInt8FileName);
                 Fsr4Text = OptiScalerOptions.Fsr4Label(source, version) ?? "";
+                // The game's own FSR 4 model, when its OptiScaler has the setting: "… · Lite model".
+                // FSR 4 as the upscaler (on RDNA 4 it needs no INT8 switch, so Fsr4InUse says Off): "FSR 4".
+                if (Fsr4Text.Length == 0 && Fsr4Models.IsUpscaler(fsrIni, info.Api)) Fsr4Text = "FSR 4";
+                if (Fsr4Text.Length > 0 && Fsr4Models.Current(fsrIni) is { } model) Fsr4Text += " · " + Fsr4Models.ShortName(model);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         }

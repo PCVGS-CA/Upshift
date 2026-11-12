@@ -37,7 +37,30 @@ public sealed partial class SettingsPage : Page
         Helpers.Sections.Bind(HiddenExpander, "settings.hiddenGames");
         Helpers.AutoScroll.Attach(PageScroller);
         BuildMeasureKeys();
+        BuildFsr4ModelDefault();
         BuildDeveloperOptions();
+    }
+
+    // ---------------- FSR 4 model for new installs ----------------
+
+    private bool _fillingModels;
+
+    private void BuildFsr4ModelDefault()
+    {
+        _fillingModels = true;
+        foreach (var choice in Enum.GetValues<Upshift.Core.Install.Fsr4ModelChoice>())
+            Fsr4ModelDefaultBox.Items.Add(new ComboBoxItem { Content = Upshift.Core.Install.Fsr4Models.Label(choice), Tag = choice.ToString() });
+        var current = Upshift.Core.Install.Fsr4Models.Parse(AppServices.Settings.Current.Fsr4ModelDefault).ToString();
+        Fsr4ModelDefaultBox.SelectedItem = Fsr4ModelDefaultBox.Items.OfType<ComboBoxItem>().First(i => (string)i.Tag == current);
+        _fillingModels = false;
+    }
+
+    private void Fsr4ModelDefault_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_fillingModels || Fsr4ModelDefaultBox.SelectedItem is not ComboBoxItem { Tag: string tag }) return;
+        var settings = AppServices.Settings.Current;
+        settings.Fsr4ModelDefault = tag;
+        try { AppServices.Settings.Save(settings); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
 
     // ---------------- Measure performance ----------------
@@ -101,10 +124,9 @@ public sealed partial class SettingsPage : Page
     private static readonly (UserFileKind Kind, string Title, string Use)[] UserFileKinds =
     {
         (UserFileKind.DlssNr, "DLSS 5 (nvngx_dlssnr.dll)", "Used by a later version of this app."),
-        (UserFileKind.Fsr4Int8, "FSR 4.0.2c INT8 (amdxcffx64.dll)", "Used by the \"Your 4.0.2c file\" FSR 4 source in a game's OptiScaler options."),
-        (UserFileKind.Fsr411bInt8, "FSR 4.1.1b INT8 for RX 6000 (amd_fidelityfx_upscaler_dx12.dll)",
-            "The newer modified FSR 4 file for RX 6000 cards (4.0.2c is the older one). Used by the \"Your 4.1.1b file\" FSR 4 source in a game's OptiScaler options, " +
-            "where it takes the place of OptiScaler's own amd_fidelityfx_upscaler_dx12.dll.")
+        (UserFileKind.Fsr4Int8, "FSR 4.0.2c INT8 (amdxcffx64.dll)", "Used by the \"Your 4.0.2c file\" FSR 4 source in a game's OptiScaler options.")
+        // The FSR 4.1.1b file is no longer offered (AMD's official FSR 4.1 covers RX 6000). A file added earlier stays in
+        // user-files, and games that use it keep it until switched in their FSR 4 options.
     };
 
     private bool _dialogOpen;

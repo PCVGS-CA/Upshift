@@ -173,6 +173,8 @@ public sealed class UserFilesSummaryView : CardPart
 
         foreach (var (kind, title) in Kinds)
         {
+            // The 4.1.1b file is only listed while this game still uses it (it's no longer offered).
+            if (kind == Core.UserFiles.UserFileKind.Fsr411bInt8 && fsr4 != Fsr4Source.File411b) continue;
             var info = AppServices.UserFiles.Get(kind);
             var used = kind switch
             {
