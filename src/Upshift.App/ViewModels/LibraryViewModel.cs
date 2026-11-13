@@ -108,6 +108,24 @@ public sealed partial class LibraryViewModel : ObservableObject
 
     public void DismissHelixSrNotice() => HelixSrNotice = "";
 
+    /// <summary>"ANR updated to V.B15: …", or (Ask first) "ANR V.B15 is available: …" with "Update now".</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasAnrNotice))]
+    private string anrNotice = "";
+
+    public bool HasAnrNotice => AnrNotice.Length > 0;
+
+    [ObservableProperty]
+    private bool anrNoticeAsks;
+
+    public void DismissAnrNotice() => AnrNotice = "";
+
+    public async Task UpdateAnrNowAsync()
+    {
+        AnrNotice = "";
+        await Services.AnrGames.UpdateNowAsync();
+    }
+
     public async Task ResumeHelixSrAsync()
     {
         HelixSrNotice = "";
@@ -179,6 +197,7 @@ public sealed partial class LibraryViewModel : ObservableObject
         GameUpdates.BusyChanged += () => _dispatcher.TryEnqueue(() => OnPropertyChanged(nameof(CanPlaySelected)));
         // A game updated, undone or repaired from the Updates page.
         GameUpdates.LibraryChanged += gameId => _dispatcher.TryEnqueue(() => RefreshCard(gameId));
+        Services.AnrGames.Notice += (text, asks) => _dispatcher.TryEnqueue(() => { AnrNotice = text; AnrNoticeAsks = asks; });
         AppServices.HiddenGamesChanged += () => _dispatcher.TryEnqueue(() =>
         {
             SetGames(AppServices.Library.Current);
@@ -244,6 +263,14 @@ public sealed partial class LibraryViewModel : ObservableObject
 
     public Task<InstallResult?> SwitchBackAsync(GameCardViewModel card) =>
         RunGameUpdateAsync(card, p => GameUpdates.SwitchBackAsync(card.Info, p));
+
+    /// <summary>ANR (experimental) as the game's frame generation: the newest release, downloaded the first time.</summary>
+    public Task<InstallResult?> AddAnrAsync(GameCardViewModel card) => RunGameUpdateAsync(card, p => AnrGames.AddAsync(card.Info, p));
+
+    /// <summary>"Switch back": plain OptiScaler again, exactly.</summary>
+    public Task<InstallResult?> RemoveAnrAsync(GameCardViewModel card) => RunGameUpdateAsync(card, p => AnrGames.RemoveAsync(card.Info, p));
+
+    public Task<InstallResult?> AnrGoBackAsync(GameCardViewModel card) => RunGameUpdateAsync(card, p => AnrGames.GoBackAsync(card.Info, p));
 
     /// <summary>Puts back every original Upshift replaced in this game.</summary>
     public Task<InstallResult?> RestoreUpscalerFilesAsync(GameCardViewModel card, IReadOnlyCollection<string>? paths = null) =>

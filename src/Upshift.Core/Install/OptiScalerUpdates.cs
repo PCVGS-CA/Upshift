@@ -61,7 +61,7 @@ public static partial class OptiScalerInstaller
                     continue;
                 }
                 if (!File.Exists(path)) problems.Add($"{file.Path} is missing");
-                else if (!IsIni(file.Path) && !IsUserFile(file.Path) && HasChanged(file, path)) problems.Add($"{file.Path} has changed");
+                else if (!IsIni(file.Path) && !IsUserFile(file.Path) && !Anr.IsConfig(file.Path) && HasChanged(file, path)) problems.Add($"{file.Path} has changed");
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -135,7 +135,8 @@ public static partial class OptiScalerInstaller
             ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             : oldSource is not null
             ? FilesToCopy(oldSource, proxy).Select(f => f.Relative).ToHashSet(StringComparer.OrdinalIgnoreCase)
-            : AllEntries(manifest).Select(f => f.Path).Where(p => !IsUserFile(p)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            : AllEntries(manifest).Select(f => f.Path).Where(p => !IsUserFile(p) && manifest.Anr?.Files.Contains(p, StringComparer.OrdinalIgnoreCase) != true)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var iniPath = Path.Combine(target, IniName);
         var installedIni = File.Exists(iniPath) ? File.ReadAllText(iniPath) : null;
@@ -627,7 +628,7 @@ public static partial class OptiScalerInstaller
                 if (manifest.OverrideFor(file.Path) is not null) continue;
                 var path = Path.Combine(target, file.Path);
                 var exists = File.Exists(path);
-                var broken = !exists || (!IsIni(file.Path) && !IsUserFile(file.Path) && HasChanged(file, path));
+                var broken = !exists || (!IsIni(file.Path) && !IsUserFile(file.Path) && !Anr.IsConfig(file.Path) && HasChanged(file, path));
                 if (!broken) continue;
 
                 if (!release.TryGetValue(file.Path, out var from))

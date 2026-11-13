@@ -121,6 +121,9 @@ public static class InstallRunner
         InstallOperation.RemoveWithoutRecord => OptiScalerInstaller.RemoveWithoutRecord(plan, log),
         // Everything Upshift changed in one game, by the game's own records ("Remove Upshift from all games").
         InstallOperation.RemoveFromGame => GameCleanup.Remove(plan, dataDir, log),
+        // ANR's files only come from the data folder's checked download (see AnrGames).
+        InstallOperation.AddAnr => OptiScalerInstaller.AddAnr(plan, log),
+        InstallOperation.RemoveAnr => OptiScalerInstaller.RemoveAnr(plan, log),
         _ => OptiScalerInstaller.Uninstall(plan, log)
     };
 

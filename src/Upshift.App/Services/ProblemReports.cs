@@ -69,6 +69,9 @@ public static class ProblemReports
             if (card.HasFsr4Text) game.AppendLine(card.Fsr4Text);
             if (card.HasLoadStatus) game.AppendLine(card.LoadStatusText + (card.HasLoadStatusDetail ? " " + card.LoadStatusDetail : ""));
             if (card.NeedsRepair) game.AppendLine("Needs repair: " + card.RepairText.Replace("\n\n", " "));
+            if (manifest.Anr is { } anr)
+                game.AppendLine($"ANR frame generation (beta): {Anr.ShortVersion(anr.Version)}" + (anr.Released is { } rel ? $", released {rel:yyyy-MM-dd}" : "")
+                                + $", in {anr.Folder}. ANR is a third-party beta: report its problems at {Anr.IssuesUrl} (with nr_fg-log.txt from this report).");
         }
         else game.AppendLine("OptiScaler: not installed by Upshift" + (card.RecordDamaged ? " (Upshift's record for this folder is missing or damaged)" : ""));
         items.Add(new ReportItem("game.txt", "The game's name, store, folders, OptiScaler version and loading file, and its status", game.ToString()));
@@ -78,6 +81,9 @@ public static class ProblemReports
             Add(items, Path.Combine(dir, "OptiScaler.ini"), "OptiScaler.ini", "The game's OptiScaler.ini");
             Add(items, Path.Combine(dir, OptiScalerInstaller.StateFolder, "manifest.json"), "upshift-record.json", "Upshift's record of what it installed in this game");
             Add(items, Path.Combine(dir, OptiScalerLog.FileName), "OptiScaler.log", "OptiScaler's own log from the last run", 2_000_000);
+            // ANR (experimental): its newest log; personal details are taken out like in every other file.
+            if (Anr.NewestLog(dir, manifest) is { } anrLog)
+                Add(items, anrLog, "nr_fg-log.txt", $"ANR's newest log ({Path.GetFileName(anrLog)}); ANR's issues: {Anr.IssuesUrl}", 2_000_000);
 
             // HelixSR (experimental): its text files only. Its two network files (helixsr_weights.bin and
             // helixsr_kernels.pak) hold NVIDIA's network and are never put in a report.

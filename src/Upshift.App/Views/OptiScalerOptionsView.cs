@@ -152,13 +152,39 @@ public sealed class OptiScalerOptionsView : UserControl
         var current = OptiScalerOptions.CurrentFrameGen(ini);
         fgBox.SelectedItem = fgBox.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string)i.Tag == current?.Id) ?? fgBox.Items[0];
         var fgNote = Subtle(current?.Note ?? "");
+        // ANR (experimental, Settings > Experimental): DirectX 12 and Vulkan games with OptiScaler from Upshift, no anti-cheat.
+        var anrInGame = manifest.Anr;
+        var anrOffered = Services.AnrGames.WhyNot(card.Info, manifest) is null;
+        if (anrOffered || anrInGame is not null)
+        {
+            var supported = Anr.Supported(ini);
+            fgBox.Items.Add(Item(Anr.ChoiceId, supported || anrInGame is not null ? Anr.ChoiceLabel : $"{Anr.ChoiceLabel}: {Anr.NeedsNewer}",
+                enabled: supported || anrInGame is not null));
+            if (anrInGame is not null) fgBox.SelectedItem = fgBox.Items.OfType<ComboBoxItem>().First(i => (string)i.Tag == Anr.ChoiceId);
+        }
         fgBox.SelectionChanged += async (_, _) =>
         {
-            if (_building || fgBox.SelectedItem is not ComboBoxItem { Tag: string id }) return;
+            if (_building || fgBox.SelectedItem is not ComboBoxItem { Tag: string id } || Library is null) return;
+            if (AppServices.PretendGpu is not null) return;
+            if (id == Anr.ChoiceId)
+            {
+                if (anrInGame is not null) return;
+                var added = await Library.AddAnrAsync(card);
+                if (added is { Success: false }) await Notice("ANR wasn't added", added.Message);
+                return;
+            }
+            if (anrInGame is not null)
+            {
+                // Another frame generation: ANR comes out first (plain OptiScaler), then the chosen mode is written.
+                var removed = await Library.RemoveAnrAsync(card);
+                if (removed is { Success: false }) { await Notice("ANR wasn't removed", removed.Message); return; }
+            }
             await Save(card, OptiScalerOptions.FrameGenSettings(modes.First(m => m.Id == id)));
         };
-        body.Children.Add(Group(WithGuide(fgBox, catalog.Guides.FrameGen, modes.Select(m => (m.Id, m.Label)), gpu), fgNote,
+        body.Children.Add(Group(WithGuide(fgBox, catalog.Guides.FrameGen, modes.Select(m => (m.Id, m.Label)), gpu),
+            anrInGame is null ? fgNote : null,
             card.Suggestions?.HiddenFrameGen.Count > 0 ? Subtle("Some modes are hidden because the OptiScaler wiki says they don't work for this game.") : null));
+        if (anrInGame is not null) body.Children.Add(AnrSection(card, anrInGame));
 
         // ---- Frame cap (OptiScaler's Reflex-based limiter) ----
         body.Children.Add(FrameCapSection(card, ini, gpu));
@@ -711,6 +737,69 @@ public sealed class OptiScalerOptionsView : UserControl
             });
             Build();
         }
+    }
+
+    /// <summary>
+    /// ANR in this game: the hint, its version and release date, "Go back to previous ANR version" (a version kept in Upshift's
+    /// folder; automatic updates then leave this game alone), "Use the newest ANR", and "Switch back" (plain OptiScaler again).
+    /// </summary>
+    private FrameworkElement AnrSection(GameCardViewModel card, AnrRecord anr)
+    {
+        var panel = new StackPanel { Spacing = 6 };
+        panel.Children.Add(new TextBlock { Text = Anr.InGameHint + ".", TextWrapping = TextWrapping.Wrap, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+        var date = anr.Released is { } r ? $" · released {r.LocalDateTime:d MMM yyyy}" : "";
+        var held = Services.AnrGames.IsHeld(card.Info);
+        panel.Children.Add(Subtle($"ANR {Anr.ShortVersion(anr.Version)}{date}" + (held ? " · kept on this version" : "")));
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        var pretend = AppServices.PretendGpu is not null;
+        if (Services.AnrGames.PreviousOf(anr.Version) is { } previous)
+        {
+            var back = new Button { Content = "Go back to previous ANR version", IsEnabled = !pretend };
+            ToolTipService.SetToolTip(back, $"ANR {Anr.ShortVersion(previous.Version)}, kept in Upshift's folder");
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(back, "Go back to previous ANR version");
+            back.Click += async (_, _) =>
+            {
+                if (Library is null) return;
+                var result = await Library.AnrGoBackAsync(card);
+                if (result is { Success: false }) await Notice("ANR wasn't changed", result.Message);
+            };
+            buttons.Children.Add(back);
+        }
+        if (held || (Services.AnrGames.Newest is { } newest && Anr.BuildNumber(newest.Tag) > Anr.BuildNumber(anr.Version)))
+        {
+            var newestButton = new Button { Content = "Use the newest ANR", IsEnabled = !pretend };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(newestButton, "Use the newest ANR");
+            newestButton.Click += async (_, _) =>
+            {
+                if (Library is null) return;
+                var result = await Library.AddAnrAsync(card);
+                if (result is { Success: false }) await Notice("ANR wasn't updated", result.Message);
+            };
+            buttons.Children.Add(newestButton);
+        }
+        var switchBack = new Button { Content = "Switch back", IsEnabled = !pretend };
+        ToolTipService.SetToolTip(switchBack, "Takes ANR out: plain OptiScaler again, exactly as before");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(switchBack, "Switch back to plain OptiScaler");
+        switchBack.Click += async (_, _) =>
+        {
+            if (Library is null) return;
+            var result = await Library.RemoveAnrAsync(card);
+            if (result is { Success: false }) await Notice("ANR wasn't removed", result.Message);
+        };
+        buttons.Children.Add(switchBack);
+        panel.Children.Add(buttons);
+        panel.Children.Add(Subtle("ANR is a beta from a third party and may crash or freeze games. Problems: github.com/apex-compute/ANR/issues"));
+        return panel;
+    }
+
+    private async Task Notice(string title, string text)
+    {
+        if (ShowDialog is null) return;
+        await ShowDialog(new ContentDialog
+        {
+            XamlRoot = XamlRoot, Title = title, CloseButtonText = "OK",
+            Content = new TextBlock { Text = Helpers.ScreenText.Clean(text), TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true }
+        });
     }
 
     private static ComboBox Combo(string header, IEnumerable<ComboBoxItem> items)

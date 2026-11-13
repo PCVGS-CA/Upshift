@@ -85,6 +85,19 @@
             </StackPanel>
 
             <StackPanel Spacing="8">
+                <TextBlock Text="Experimental" FontWeight="SemiBold" />
+                <ToggleSwitch x:Name="AnrSwitch" Header="ANR frame generation (beta)" Toggled="Anr_Toggled"
+                              AutomationProperties.Name="ANR frame generation (beta)" />
+                <ComboBox x:Name="AnrUpdateBox" Header="ANR updates" MinWidth="240" SelectionChanged="AnrUpdate_Changed"
+                          AutomationProperties.Name="ANR updates">
+                    <ComboBoxItem Content="Update ANR automatically" Tag="auto" />
+                    <ComboBoxItem Content="Ask first" Tag="ask" />
+                </ComboBox>
+                <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
+                           Text="A third-party beta from github.com/apex-compute/ANR. Chosen per game under Frame generation; games are never updated while running." />
+            </StackPanel>
+
+            <StackPanel Spacing="8">
                 <TextBlock Text="Optional files you supply" FontWeight="SemiBold" />
                 <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
                            Text="The app never downloads or bundles these. Point it at a copy you already have and it's copied into the app's own folder." />

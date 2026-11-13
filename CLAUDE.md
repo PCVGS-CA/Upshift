@@ -1082,6 +1082,39 @@ errors and no warnings.
       `OptiScalerFolders` (D3D12_Optiscaler, Licenses, OptiScaler) remove the folders when empty. `.upshift\` stays in the exe folder.
     - **OptiPatcher** follows `OptiDllPath` already; `Fsr4InUse`/`FsrUpscalerPath` take the shallowest upscaler DLL (fine).
 
+- **1.7.0-test.2 (2026-11-12), not released: ANR frame generation (experimental).**
+  - **Rule exception (the user's decision, 2026-11-12):** ANR (github.com/apex-compute/ANR) is allowed although it states no licence and
+    has no pinned version, as an opt-in experimental feature. The rest of the download rule is unchanged. Downloads only from its GitHub
+    releases API, only the newest regular release's `anr-fg-*-addon.zip`, only when GitHub reports the asset's SHA-256 digest and it
+    matches (catalog `addons` → `anr`, `requireDigest`; `ComponentStore` refuses an asset without a digest when it's set).
+  - **What the add-on needs** (from its own `install.ps1`, FG V.B15; never run): its `Apex Neural Rendering FG` folder copied to
+    `<OptiDllPath>\custom\Apex Neural Rendering FG` (OptiDllPath auto → `OptiScaler\` when that folder exists), `[FrameGen]
+    FGInput=nvngxfg` + `FGNvngxReplacement=Apex Neural Rendering FG`, and an existing `nr_fg.ini` kept. It needs an OptiScaler with
+    `FGNvngxReplacement` (v10 nightly; **0.9.4 has none**, so 0.9.4 games show "ANR (beta): Needs a newer OptiScaler"). In game: turn on
+    DLSS frame generation. Logs: `nr_fg-*.log` in its `dlssg` folder.
+  - Core `Install/Anr.cs`: rules, `AnrRecord` (`manifest.Anr`: version, release date, folder, files, folders it made),
+    `OptiScalerInstaller.AddAnr` (also a version change: the old folder moves aside, a user-edited nr_fg.ini and the logs come along, any
+    failure puts everything back) and `RemoveAnr` (exactly plain OptiScaler: files, its folder with logs, the folders it made, the four
+    FrameGen values put back). `InstallOperation.AddAnr/RemoveAnr` (also through the UAC helper). Every file is in `manifest.Added`;
+    `Anr.IsConfig` (nr_fg.ini) is exempt from Verify/Repair/Uninstall's "changed" rule. Update's no-old-download fallback never counts ANR's
+    files as the old release's.
+  - App `Services/AnrGames.cs`: `WhyNot` (setting on, OptiScaler from Upshift, DirectX 12/Vulkan, no anti-cheat), Add/Remove/GoBack
+    (`AnrHeldGames`: a game taken back is left alone by automatic updates until "Use the newest ANR"), `TakeOutAsync`/`PutBackAsync` around
+    OptiScaler Update (put back when the new ini supports it), Undo and DLSS 5 switch (ANR out first: plain OptiScaler). Checks at start-up
+    and once a day (10-minute timer): "Update ANR automatically" (default) downloads and updates games that aren't running; running games
+    wait for a later tick; "Ask first" shows "ANR V.B15 is available: …" with Update now. Library InfoBar "ANR updated to V.B15: <first
+    change in the release notes>". `ComponentStore` keeps the previous version (2 kept, plus versions in use).
+  - UI: Settings > Experimental (switch with a one-time notice, `AnrNoticeShown`; "Update ANR automatically" / "Ask first"); Frame
+    generation choice "ANR (beta)" with "Turn on frame generation in the game's own menu.", version + release date, "Go back to previous
+    ANR version", "Use the newest ANR", "Switch back". Report a problem: `nr_fg-log.txt` (newest log, scrubbed) and the issues link.
+  - Tested: harness t9 119/119 (36 for ANR: real B15 + B14 downloads at GitHub's digest, every file recorded, ini values, edited nr_fg.ini
+    not "needs repair", update keeps nr_fg.ini and logs, go back, refused while a process runs from the folder, remove = exact plain
+    OptiScaler (files, folders, manifest), uninstall with ANR leaves only the game's files, 0.9.4 refused unchanged, someone else's ANR
+    folder refused); the app on throwaway data: Settings notice, choose ANR (real download), go back/newest, Switch back (0 differences),
+    automatic update at start-up with the notes line, update held while a stand-in process ran and done after, Ask first + Update now.
+    Not tested: ANR in a real game (needs DLSS FG in the game and a v10 OptiScaler), Undo/Update/switch with ANR in the app, the UAC
+    helper route, the report zip with a real nr_fg log, the missing-digest refusal with a real release.
+
 ## Next
 
 1. **DLSS 5 follow-ups:**

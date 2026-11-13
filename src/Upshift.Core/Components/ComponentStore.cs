@@ -147,6 +147,8 @@ public sealed partial class ComponentStore : IDisposable
             progress?.Report($"Downloading {asset.Name}…");
             await DownloadAsync(asset.Url, download, progress, ct);
 
+            if (component.RequireDigest && asset.Sha256 is null)
+                throw new ComponentDownloadException($"GitHub reports no checksum for {asset.Name}, so it wasn't used. Nothing was kept.");
             var size = new FileInfo(download).Length;
             if (asset.Size > 0 && size != asset.Size)
                 throw new ComponentDownloadException($"{asset.Name} is {size:N0} bytes but GitHub says {asset.Size:N0}. Nothing was kept.");

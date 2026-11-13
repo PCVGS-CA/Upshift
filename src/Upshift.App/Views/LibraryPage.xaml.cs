@@ -966,6 +966,14 @@ public sealed partial class LibraryPage : Page
 
     private void HelixSrNotice_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.DismissHelixSrNotice();
 
+    private void AnrNotice_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.DismissAnrNotice();
+
+    private async void AnrUpdateNow_Click(object sender, RoutedEventArgs e)
+    {
+        try { await ViewModel.UpdateAnrNowAsync(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { Services.CrashLog.Write(ex, "Update ANR now"); }
+    }
+
     private async void ResumeHelixSr_Click(object sender, RoutedEventArgs e)
     {
         try { await ViewModel.ResumeHelixSrAsync(); }

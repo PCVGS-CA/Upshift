@@ -41,6 +41,7 @@ public sealed partial class MainWindow : Window
         _ = ShowGpuAsync();
         // The "catalogUrl" catalog and, at most every 6 hours, the release check (both in the background).
         _ = Task.Run(Services.GameUpdates.StartupAsync);
+        Services.AnrGames.Start();
 
         // A newer Upshift, when "Check for updates automatically" is on (never downloaded until the user chooses).
         Services.AppUpdates.Changed += () => DispatcherQueue.TryEnqueue(ShowAppUpdate);

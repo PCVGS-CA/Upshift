@@ -228,6 +228,15 @@
                         <Button Content="Review" Click="DlssNoticeReview_Click" />
                     </InfoBar.ActionButton>
                 </InfoBar>
+                <!-- ANR (experimental) was updated, or (Ask first) a new version is available -->
+                <InfoBar IsOpen="{x:Bind ViewModel.HasAnrNotice, Mode=OneWay}" Severity="Informational"
+                         Title="ANR frame generation (beta)" Message="{x:Bind ViewModel.AnrNotice, Mode=OneWay}" Closed="AnrNotice_Closed"
+                         Visibility="{x:Bind ViewModel.HasAnrNotice, Mode=OneWay}" AutomationProperties.Name="ANR notice">
+                    <InfoBar.ActionButton>
+                        <Button Content="Update now" Click="AnrUpdateNow_Click" AutomationProperties.Name="Update ANR now"
+                                Visibility="{x:Bind ViewModel.AnrNoticeAsks, Mode=OneWay}" />
+                    </InfoBar.ActionButton>
+                </InfoBar>
                 <!-- A game set to HelixSR went back to its previous upscaler (HelixSR's files were missing or removed) -->
                 <InfoBar IsOpen="{x:Bind ViewModel.HasHelixSrNotice, Mode=OneWay}" Severity="Warning"
                          Title="HelixSR (experimental)" Message="{x:Bind ViewModel.HelixSrNotice, Mode=OneWay}" Closed="HelixSrNotice_Closed"

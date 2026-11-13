@@ -38,7 +38,51 @@ public sealed partial class SettingsPage : Page
         Helpers.AutoScroll.Attach(PageScroller);
         BuildMeasureKeys();
         BuildFsr4ModelDefault();
+        BuildAnr();
         BuildDeveloperOptions();
+    }
+
+    // ---------------- Experimental: ANR ----------------
+
+    private bool _fillingAnr;
+
+    private void BuildAnr()
+    {
+        _fillingAnr = true;
+        var settings = AppServices.Settings.Current;
+        AnrSwitch.IsOn = settings.AnrEnabled;
+        AnrUpdateBox.SelectedIndex = settings.AnrAutoUpdate ? 0 : 1;
+        AnrUpdateBox.IsEnabled = settings.AnrEnabled;
+        _fillingAnr = false;
+    }
+
+    private async void Anr_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_fillingAnr) return;
+        var settings = AppServices.Settings.Current;
+        if (AnrSwitch.IsOn && !settings.AnrNoticeShown)
+        {
+            // Said once, the first time it's turned on.
+            await new ContentDialog
+            {
+                XamlRoot = XamlRoot, Title = "ANR frame generation (beta)", CloseButtonText = "OK",
+                Content = new TextBlock { Text = Upshift.Core.Install.Anr.Notice, TextWrapping = TextWrapping.Wrap }
+            }.ShowAsync();
+            settings.AnrNoticeShown = true;
+        }
+        settings.AnrEnabled = AnrSwitch.IsOn;
+        AnrUpdateBox.IsEnabled = AnrSwitch.IsOn;
+        try { AppServices.Settings.Save(settings); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        AppServices.RaiseEffectiveGpuChanged();   // option panels are rebuilt, so the choice appears or goes
+        if (AnrSwitch.IsOn) _ = Task.Run(async () => { try { await Services.AnrGames.CheckAsync(); } catch (Exception ex) when (ex is not OutOfMemoryException) { Services.CrashLog.Write(ex, "ANR check"); } });
+    }
+
+    private void AnrUpdate_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_fillingAnr || AnrUpdateBox.SelectedItem is not ComboBoxItem { Tag: string tag }) return;
+        var settings = AppServices.Settings.Current;
+        settings.AnrAutoUpdate = tag == "auto";
+        try { AppServices.Settings.Save(settings); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
 
     // ---------------- FSR 4 model for new installs ----------------

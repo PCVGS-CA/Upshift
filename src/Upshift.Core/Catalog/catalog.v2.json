@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-11-11T18:00Z",
+  "updated": "2026-11-12T18:00Z",
   "notes": "Upshift's built-in catalog. Upshift will later download a newer version of this file from its GitHub repo, so new forks and GPU support can be added without releasing a new version. The userAgent values below are fallbacks; the app sends Upshift/<its version>.",
 
   "components": [
@@ -506,6 +506,16 @@
       "pinnedVersion": "v0.42",
       "pinnedSha256": "2a6e033aeda72d63281889480b2380da830530cf6e1e448e2056d451ade75f1b",
       "notes": "Official (optiscaler org), MIT. v0.42 published 2026-10-18; the hash is GitHub's asset digest for OptiPatcher_v0.42.asi (107,520 bytes). Installed as plugins\\OptiPatcher.asi under OptiScaler's DLL folder with [Plugins] LoadAsiPlugins=true (its README; OptiScaler 0.9.4 dllmain.cpp). Change the version only together with its hash."
+    },
+    {
+      "id": "anr",
+      "name": "ANR frame generation",
+      "kind": "addon",
+      "description": "Apex Neural Rendering frame generation (beta), added to OptiScaler as its custom frame generation provider.",
+      "repo": "apex-compute/ANR",
+      "assetPattern": "^anr-fg-.+-addon\\.zip$",
+      "requireDigest": true,
+      "notes": "Experimental, opt-in (Settings > Experimental). No licence is stated and there is no pinned version: an exception to the download rule by the user's decision (2026-11-12). Only the newest release's addon zip, only when GitHub reports its SHA-256 digest and it matches. Only the package's 'Apex Neural Rendering FG' folder is used; install.cmd/uninstall.cmd are never run. Needs OptiScaler with [FrameGen] FGNvngxReplacement (the v10 test builds)."
     }
   ],
   "officialDlss5": {

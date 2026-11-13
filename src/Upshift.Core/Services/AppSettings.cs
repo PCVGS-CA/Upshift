@@ -76,6 +76,20 @@ public sealed class AppSettings
     /// <summary>Games already told that exclusive fullscreen keeps the overlay from showing (said once per game).</summary>
     public List<string> OverlayNoticeShown { get; set; } = new();
 
+    /// <summary>Settings > Experimental > "ANR frame generation (beta)": off by default.</summary>
+    public bool AnrEnabled { get; set; }
+
+    /// <summary>The one-time notice shown when ANR is first turned on.</summary>
+    public bool AnrNoticeShown { get; set; }
+
+    /// <summary>"Update ANR automatically" (true) or "Ask first" (false).</summary>
+    public bool AnrAutoUpdate { get; set; } = true;
+
+    public DateTime? AnrLastCheckUtc { get; set; }
+
+    /// <summary>Games the user took back to an earlier ANR version: automatic updates leave them alone until "Use the newest".</summary>
+    public List<string> AnrHeldGames { get; set; } = new();
+
     /// <summary>Where SCSKiller.exe is, when the user pointed Upshift at it (Upshift only starts it).</summary>
     public string? ScsKillerPath { get; set; }
 

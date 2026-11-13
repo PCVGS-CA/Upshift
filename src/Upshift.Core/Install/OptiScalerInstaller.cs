@@ -6,7 +6,7 @@ using Upshift.Core.Detection;
 
 namespace Upshift.Core.Install;
 
-public enum InstallOperation { Install, Uninstall, Configure, Update, UndoUpdate, Repair, UpdateUpscalerFiles, RestoreUpscalerFiles, SwitchBuild, SwitchBack, RemoveWithoutRecord, RemoveFromGame }
+public enum InstallOperation { Install, Uninstall, Configure, Update, UndoUpdate, Repair, UpdateUpscalerFiles, RestoreUpscalerFiles, SwitchBuild, SwitchBack, RemoveWithoutRecord, RemoveFromGame, AddAnr, RemoveAnr }
 
 /// <summary>Everything needed to install or uninstall, so an elevated copy of the app can carry it out from a file.</summary>
 public sealed class InstallPlan
@@ -30,6 +30,8 @@ public sealed class InstallPlan
     /// <summary>The component's display name, e.g. "OptiScaler DLSSNR" (for messages).</summary>
     public string? ComponentName { get; set; }
     public string? Version { get; set; }
+    /// <summary>AddAnr only: when the ANR release was published (shown on the game page).</summary>
+    public DateTimeOffset? Released { get; set; }
     /// <summary>The name OptiScaler.dll is installed as, e.g. dxgi.dll (install only).</summary>
     public string? ProxyName { get; set; }
 
@@ -259,6 +261,10 @@ public sealed class InstallManifest
     /// <summary>User-supplied files in place of OptiScaler's own (null when there are none, so older manifests stay the same).</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<FileOverride>? Overrides { get; set; }
+
+    /// <summary>ANR frame generation added on top (experimental); left out of the JSON when there is none.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public AnrRecord? Anr { get; set; }
 
     /// <summary>The override at this path, if any.</summary>
     public FileOverride? OverrideFor(string relativePath) =>
@@ -598,7 +604,8 @@ public static partial class OptiScalerInstaller
                 if (!File.Exists(path)) { log.Write($"  already gone: {file.Path}"); continue; }
                 var over = manifest.OverrideFor(file.Path);
                 // OptiScaler.ini goes even when the in-game menu changed it: it was saved above.
-                var mayRemove = over is not null || (IsIni(file.Path) && plan.SettingsFolder is not null) || plan.RemoveChanged || Sha256(path) == file.Sha256;
+                var mayRemove = over is not null || (IsIni(file.Path) && plan.SettingsFolder is not null) || plan.RemoveChanged || Anr.IsConfig(file.Path)
+                                || Sha256(path) == file.Sha256;
                 if (!mayRemove)
                 {
                     result.KeptChanged.Add(file.Path);

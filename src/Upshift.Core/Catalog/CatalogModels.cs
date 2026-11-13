@@ -203,6 +203,8 @@ public sealed class CatalogComponent
     public string? PinnedVersion { get; set; }
     /// <summary>The pinned version's file SHA-256, written in the catalog: the download must match it as well as GitHub's own digest.</summary>
     public string? PinnedSha256 { get; set; }
+    /// <summary>A download is refused unless GitHub reports a SHA-256 digest for the asset (and it matches).</summary>
+    public bool RequireDigest { get; set; }
     public string? VerifyBeforeRelease { get; set; }
 
     /// <summary>For a test build: the component it's a test build of ("optiscaler"). Its newest release is its target.</summary>
