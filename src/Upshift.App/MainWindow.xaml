@@ -59,6 +59,11 @@
                                    ToolTipService.ToolTip="A newer Upshift is available" />
                     </NavigationViewItem.InfoBadge>
                 </NavigationViewItem>
+                <NavigationViewItem Content="Store" Tag="store" AutomationProperties.Name="Upscaler Store">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE719;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
                 <NavigationViewItem Content="Settings" Tag="settings">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE713;" />

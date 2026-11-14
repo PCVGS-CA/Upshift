@@ -1,0 +1,141 @@
+{
+  "schema": 1,
+  "updated": "2026-11-15T18:00Z",
+  "notes": "The Upscaler Store. Fetched from main like catalog.v2.json, used when newer than the built-in copy. Every entry is checked when loaded (StoreCatalog.Problems); one that breaks a rule is left out. Types: recipe, author-setup (Experimental only), user-supplied, link-only, builtin. Recipe steps: download, extract, copy, rename, ini-set, requires, message. Paths: {GameFolder} (the game's exe folder), {OptiScalerFolder} (OptiScaler's DLL folder inside it), {UpshiftData}\\<entry id>. Bump \"updated\" with every change.",
+  "entries": [
+    {
+      "id": "helixsr",
+      "name": "HelixSR",
+      "author": "lonewolf0622",
+      "repo": "https://github.com/lonewolf0622/HelixSR",
+      "license": "Freeware, source not published (setup scripts Apache-2.0)",
+      "description": "Runs DLSS's network on AMD cards as an FSR 3.1 replacement in DirectX 12 games.",
+      "gpus": [ { "vendor": "amd", "generations": [ "RDNA 1", "RDNA 2" ] } ],
+      "apis": [ "DX12" ],
+      "status": "Experimental",
+      "type": "builtin",
+      "builtin": "helixsr",
+      "notes": "Set up once on the Updates page; then chosen per game as the upscaler. Its setup builds the network files on your PC from NVIDIA's DLSS DLL and deletes that DLL again."
+    },
+    {
+      "id": "dlss5-skynizz",
+      "name": "DLSS 5 build of OptiScaler (Skynizz)",
+      "author": "Skynizz",
+      "repo": "https://github.com/Skynizz/optiscaler-dlss5",
+      "license": "GPL-3.0",
+      "description": "An OptiScaler fork that adds DLSS 5 Neural Rendering with your own DLSS 5 file.",
+      "gpus": [ { "vendor": "nvidia", "generations": [ "Blackwell", "Ada Lovelace", "Ampere", "Turing" ] } ],
+      "apis": [ "DX12" ],
+      "status": "Experimental",
+      "type": "builtin",
+      "builtin": "dlss5",
+      "notes": "Needs NVIDIA's DLSS 5 file (nvngx_dlssnr.dll), which you supply in Settings. Switched per game on its Upscaling tab (More options > DLSS 5); Switch back returns the game to regular OptiScaler exactly."
+    },
+    {
+      "id": "optiscaler-test-builds",
+      "name": "OptiScaler test builds",
+      "author": "OptiScaler team",
+      "repo": "https://github.com/optiscaler/OptiScaler-nightly",
+      "license": "GPL-3.0",
+      "description": "The OptiScaler team's daily builds, chosen per game next to Stable.",
+      "gpus": [],
+      "apis": [ "DX12", "Vulkan", "DX11" ],
+      "status": "Beta",
+      "type": "builtin",
+      "builtin": "testbuilds",
+      "notes": "Allow them in Settings > OptiScaler, then pick Test build on a game's Upscaling tab. Needed for ANR and the FSR 4 model choice."
+    },
+    {
+      "id": "anr",
+      "name": "ANR frame generation",
+      "author": "Apex Compute",
+      "repo": "https://github.com/apex-compute/ANR",
+      "license": "not stated",
+      "description": "Apex Neural Rendering frame generation, in place of DLSS frame generation through OptiScaler.",
+      "gpus": [
+        { "vendor": "nvidia", "generations": [ "Blackwell", "Ada Lovelace", "Ampere", "Turing" ] },
+        { "vendor": "amd", "generations": [ "RDNA 1", "RDNA 2", "RDNA 3", "RDNA 4" ] },
+        { "vendor": "intel", "generations": [ "Alchemist", "Battlemage" ] }
+      ],
+      "apis": [ "DX12", "Vulkan" ],
+      "status": "Experimental",
+      "type": "recipe",
+      "notes": "A third-party beta that changes often and may crash or freeze games, especially on AMD. No licence is stated; allowed as an opt-in experiment. Needs an OptiScaler test build (custom frame generation providers) and a game with DLSS frame generation: turn that on in the game's menu. Only the add-on package's own folder is used; its install.cmd is never run.",
+      "recipe": [
+        { "type": "requires", "values": [ "OptiScaler test build", "DX12|Vulkan" ] },
+        { "type": "download", "id": "addon", "asset": "^anr-fg-.+-addon\\.zip$", "tag": "latest" },
+        { "type": "extract", "from": "addon" },
+        { "type": "copy", "from": "addon:Apex Neural Rendering FG", "to": "{OptiScalerFolder}\\custom\\Apex Neural Rendering FG", "keep": [ "dlssg\\nr_fg.ini" ] },
+        { "type": "ini-set", "file": "{GameFolder}\\OptiScaler.ini", "section": "FrameGen", "key": "FGInput", "value": "nvngxfg" },
+        { "type": "ini-set", "file": "{GameFolder}\\OptiScaler.ini", "section": "FrameGen", "key": "FGNvngxReplacement", "value": "Apex Neural Rendering FG" },
+        { "type": "message", "text": "Turn on frame generation in the game's own menu." }
+      ]
+    },
+    {
+      "id": "amd-nr",
+      "name": "AMD-NR (Neural Rendering on AMD)",
+      "author": "3zwr1",
+      "repo": "https://github.com/3zwr1/AMD-NR---OptiScaler",
+      "license": "GPL-3.0",
+      "description": "DLSS 5-style Neural Rendering on RX 7000 and RX 9000, built into an OptiScaler fork.",
+      "gpus": [ { "vendor": "amd", "generations": [ "RDNA 4", "RDNA 3" ] } ],
+      "apis": [ "DX12", "Vulkan" ],
+      "status": "Experimental",
+      "type": "recipe",
+      "notes": "Lays the AMD-NR build of OptiScaler (v0.3.2) and its two runtimes over the OptiScaler Upshift installed; OptiScaler's own files are kept and come back when you remove it. Large downloads (about 540 MB and 110 MB). Press Home in the game to turn it on and off; the game asks which runtime to use the first time (lmxxf needs an RX 9000).",
+      "recipe": [
+        { "type": "requires", "values": [ "OptiScaler from Upshift", "GPU:amd:RDNA 4|RDNA 3", "DX12|Vulkan" ] },
+        { "type": "download", "id": "amdnr", "asset": "^AMDNR-v[\\d.]+\\.zip$", "tag": "Alpha0.3.2" },
+        { "type": "download", "id": "runtime", "asset": "^(v[\\d.]+-)?Runtime\\.zip$", "tag": "Alpha0.3.2" },
+        { "type": "extract", "from": "amdnr" },
+        { "type": "extract", "from": "runtime" },
+        { "type": "copy", "from": "amdnr:OptiScaler.dll", "to": "{GameFolder}\\AMDNR-OptiScaler.dll" },
+        { "type": "rename", "file": "{GameFolder}\\AMDNR-OptiScaler.dll", "name": "{ProxyName}" },
+        { "type": "copy", "from": "amdnr:OptiScaler", "to": "{GameFolder}\\OptiScaler" },
+        { "type": "copy", "from": "amdnr:LmxxfNrRuntime.dll", "to": "{GameFolder}\\LmxxfNrRuntime.dll" },
+        { "type": "copy", "from": "amdnr:LmxxfNrRuntime.pak", "to": "{GameFolder}\\LmxxfNrRuntime.pak" },
+        { "type": "copy", "from": "runtime:", "to": "{GameFolder}" },
+        { "type": "message", "text": "Press Home in the game to turn AMD-NR on and off." }
+      ]
+    },
+    {
+      "id": "dittosr",
+      "name": "DittoSR",
+      "author": "Vancete",
+      "repo": "https://github.com/Vancete/DittoSR",
+      "license": "MIT",
+      "description": "A lightweight upscaler for handhelds and low-end PCs, also for VR.",
+      "gpus": [],
+      "apis": [],
+      "status": "Experimental",
+      "type": "link-only",
+      "notes": "Shown for information; follow the project's own instructions. Upshift doesn't download or install it."
+    },
+    {
+      "id": "dlss-nr-on-intel",
+      "name": "DLSS NR on Intel",
+      "author": "uzbekunknown",
+      "repo": "https://github.com/uzbekunknown/dlss-nr-on-intel",
+      "license": "Apache-2.0",
+      "description": "Runs DLSS 5 Neural Rendering on Intel Arc cards.",
+      "gpus": [ { "vendor": "intel", "generations": [ "Alchemist", "Battlemage" ] } ],
+      "apis": [],
+      "status": "Experimental",
+      "type": "link-only",
+      "notes": "Code only: no NVIDIA files or weights. You'd build it and supply NVIDIA's files yourself; Upshift doesn't download or install it."
+    },
+    {
+      "id": "scskiller",
+      "name": "SCSKiller",
+      "author": "BlueHeisenberg",
+      "repo": "https://github.com/BlueHeisenberg/SCSKiller",
+      "license": "GPL-3.0",
+      "description": "Builds your games' shaders into the driver's cache before you play, against first-run stutter.",
+      "gpus": [ { "vendor": "nvidia", "generations": [] }, { "vendor": "amd", "generations": [] } ],
+      "apis": [],
+      "status": "Beta",
+      "type": "link-only",
+      "notes": "A separate program. Once it's installed, a game's Performance tab can open it."
+    }
+  ]
+}

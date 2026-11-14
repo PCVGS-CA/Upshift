@@ -108,7 +108,7 @@ public sealed partial class LibraryViewModel : ObservableObject
 
     public void DismissHelixSrNotice() => HelixSrNotice = "";
 
-    /// <summary>"ANR updated to V.B15: …", or (Ask first) "ANR V.B15 is available: …" with "Update now".</summary>
+    /// <summary>Upscaler Store add-ons: "ANR frame generation updated to FG-V.B16: …", or (Ask first) "… is available" with "Update now".</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasAnrNotice))]
     private string anrNotice = "";
@@ -141,7 +141,7 @@ public sealed partial class LibraryViewModel : ObservableObject
     public async Task UpdateAnrNowAsync()
     {
         AnrNotice = "";
-        await Services.AnrGames.UpdateNowAsync();
+        await Services.StoreService.ApplyAsync();
     }
 
     public async Task ResumeHelixSrAsync()
@@ -215,7 +215,7 @@ public sealed partial class LibraryViewModel : ObservableObject
         GameUpdates.BusyChanged += () => _dispatcher.TryEnqueue(() => OnPropertyChanged(nameof(CanPlaySelected)));
         // A game updated, undone or repaired from the Updates page.
         GameUpdates.LibraryChanged += gameId => _dispatcher.TryEnqueue(() => RefreshCard(gameId));
-        Services.AnrGames.Notice += (text, asks) => _dispatcher.TryEnqueue(() => { AnrNotice = text; AnrNoticeAsks = asks; });
+        Services.StoreService.Notice += (text, asks) => _dispatcher.TryEnqueue(() => { AnrNotice = text; AnrNoticeAsks = asks; });
         Services.TestBuilds.Notice += (text, asks) => _dispatcher.TryEnqueue(() => { TestBuildNotice = text; TestBuildNoticeAsks = asks; });
         AppServices.HiddenGamesChanged += () => _dispatcher.TryEnqueue(() =>
         {

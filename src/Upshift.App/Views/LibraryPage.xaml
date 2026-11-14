@@ -239,10 +239,10 @@
                 </InfoBar>
                 <!-- ANR (experimental) was updated, or (Ask first) a new version is available -->
                 <InfoBar IsOpen="{x:Bind ViewModel.HasAnrNotice, Mode=OneWay}" Severity="Informational"
-                         Title="ANR frame generation (beta)" Message="{x:Bind ViewModel.AnrNotice, Mode=OneWay}" Closed="AnrNotice_Closed"
+                         Title="Upscaler Store" Message="{x:Bind ViewModel.AnrNotice, Mode=OneWay}" Closed="AnrNotice_Closed"
                          Visibility="{x:Bind ViewModel.HasAnrNotice, Mode=OneWay}" AutomationProperties.Name="ANR notice">
                     <InfoBar.ActionButton>
-                        <Button Content="Update now" Click="AnrUpdateNow_Click" AutomationProperties.Name="Update ANR now"
+                        <Button Content="Update now" Click="AnrUpdateNow_Click" AutomationProperties.Name="Update store add-ons now"
                                 Visibility="{x:Bind ViewModel.AnrNoticeAsks, Mode=OneWay}" />
                     </InfoBar.ActionButton>
                 </InfoBar>
@@ -472,6 +472,7 @@
                         <views:GameUpdatesView x:Name="GameUpdatesPanel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
                         <!-- AMD cards: let the driver upgrade the game's own FSR 3.1 to FSR 4 (a driver list entry, no game files) -->
                         <views:AmdFsr4UpgradeView Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
+                        <views:StoreInGameView Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
                         <!-- Upscaler, frame generation and frame cap; the rest goes into More options below -->
                         <views:OptiScalerOptionsView x:Name="OptionsPanel" Card="{x:Bind ViewModel.Selected, Mode=OneWay}" />
                         <TextBlock Visibility="{x:Bind ViewModel.Selected.IsNotInstalledByUs, Mode=OneWay}" TextWrapping="Wrap"

@@ -1,0 +1,55 @@
+name: Suggest an upscaler
+description: An upscaler, fork or test project that could go into Upshift's Upscaler Store.
+title: "[Store] "
+labels: ["store"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks! Upshift only installs things from the author's own GitHub releases, checked against GitHub's checksum, and never NVIDIA's own or modified files (those stay something you supply). Projects that can't meet that can still be listed with a link.
+  - type: input
+    id: name
+    attributes:
+      label: Name
+      placeholder: "DittoSR"
+    validations:
+      required: true
+  - type: input
+    id: link
+    attributes:
+      label: Link
+      description: The project's own page (GitHub preferred).
+      placeholder: "https://github.com/owner/project"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What it does
+      description: One or two sentences.
+    validations:
+      required: true
+  - type: input
+    id: gpus
+    attributes:
+      label: Graphics cards
+      description: Which cards it works on (vendor and generation), as far as you know.
+      placeholder: "AMD RX 7000 and RX 9000"
+    validations:
+      required: true
+  - type: dropdown
+    id: optiscaler
+    attributes:
+      label: Works with OptiScaler?
+      options:
+        - "Yes, it's an add-on for OptiScaler"
+        - "Yes, it's a fork of OptiScaler"
+        - "No, it works on its own"
+        - "Not sure"
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Licence, how it's installed, known problems.

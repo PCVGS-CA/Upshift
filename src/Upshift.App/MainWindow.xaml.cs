@@ -41,7 +41,7 @@ public sealed partial class MainWindow : Window
         _ = ShowGpuAsync();
         // The "catalogUrl" catalog and, at most every 6 hours, the release check (both in the background).
         _ = Task.Run(Services.GameUpdates.StartupAsync);
-        Services.AnrGames.Start();
+        Services.StoreService.Start();
         Services.TestBuilds.Start();
 
         // A newer Upshift, when "Check for updates automatically" is on (never downloaded until the user chooses).
@@ -152,6 +152,7 @@ public sealed partial class MainWindow : Window
         NavigateTo(tag switch
         {
             "updates" => typeof(UpdatesPage),
+            "store" => typeof(StorePage),
             "settings" => typeof(SettingsPage),
             "about" => typeof(AboutPage),
             _ => typeof(LibraryPage)

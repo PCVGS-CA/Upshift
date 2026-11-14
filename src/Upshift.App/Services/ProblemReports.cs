@@ -73,9 +73,13 @@ public static class ProblemReports
             if (card.HasFsr4Text) game.AppendLine(card.Fsr4Text);
             if (card.HasLoadStatus) game.AppendLine(card.LoadStatusText + (card.HasLoadStatusDetail ? " " + card.LoadStatusDetail : ""));
             if (card.NeedsRepair) game.AppendLine("Needs repair: " + card.RepairText.Replace("\n\n", " "));
-            if (manifest.Anr is { } anr)
-                game.AppendLine($"ANR frame generation (beta): {Anr.ShortVersion(anr.Version)}" + (anr.Released is { } rel ? $", released {rel:yyyy-MM-dd}" : "")
-                                + $", in {anr.Folder}. ANR is a third-party beta: report its problems at {Anr.IssuesUrl} (with nr_fg-log.txt from this report).");
+            foreach (var added in StoreService.InGame(info))
+            {
+                var e = added.Entry ?? StoreService.Store.Find(added.EntryId);
+                game.AppendLine($"Upscaler Store: {added.Name} {added.Version}" + (added.Released is { } rel ? $", released {rel:yyyy-MM-dd}" : "")
+                                + (e is null ? "" : $" ({e.Status}, {e.Type}, by {e.Author}: {e.Repo}/issues)"));
+            }
+            if (manifest.Anr is { } anr) game.AppendLine($"ANR frame generation (beta, old record): {Anr.ShortVersion(anr.Version)}, in {anr.Folder}.");
         }
         else game.AppendLine("OptiScaler: not installed by Upshift" + (card.RecordDamaged ? " (Upshift's record for this folder is missing or damaged)" : ""));
         items.Add(new ReportItem("game.txt", "The game's name, store, folders, OptiScaler version and loading file, and its status", game.ToString()));

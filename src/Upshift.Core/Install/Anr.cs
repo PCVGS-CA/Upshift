@@ -112,7 +112,7 @@ public static class Anr
     /// <summary>ANR's newest log (nr_fg-*.log) for a game, or null.</summary>
     public static string? NewestLog(string targetDir, InstallManifest? manifest)
     {
-        var folder = manifest?.Anr?.Folder is { } f ? Path.Combine(targetDir, f) : null;
+        var folder = manifest?.Anr?.Folder is { } f ? Path.Combine(targetDir, f) : Path.Combine(OptiScalerInstaller.OptiScalerFolder(targetDir), "custom", FolderName);
         if (folder is null || !Directory.Exists(folder)) return null;
         try
         {

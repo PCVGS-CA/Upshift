@@ -6,7 +6,7 @@ using Upshift.Core.Detection;
 
 namespace Upshift.Core.Install;
 
-public enum InstallOperation { Install, Uninstall, Configure, Update, UndoUpdate, Repair, UpdateUpscalerFiles, RestoreUpscalerFiles, SwitchBuild, SwitchBack, RemoveWithoutRecord, RemoveFromGame, AddAnr, RemoveAnr }
+public enum InstallOperation { Install, Uninstall, Configure, Update, UndoUpdate, Repair, UpdateUpscalerFiles, RestoreUpscalerFiles, SwitchBuild, SwitchBack, RemoveWithoutRecord, RemoveFromGame, AddAnr, RemoveAnr, StoreAdd, StoreRemove, StoreSetup }
 
 /// <summary>Everything needed to install or uninstall, so an elevated copy of the app can carry it out from a file.</summary>
 public sealed class InstallPlan
@@ -30,8 +30,15 @@ public sealed class InstallPlan
     /// <summary>The component's display name, e.g. "OptiScaler DLSSNR" (for messages).</summary>
     public string? ComponentName { get; set; }
     public string? Version { get; set; }
-    /// <summary>AddAnr only: when the ANR release was published (shown on the game page).</summary>
+    /// <summary>AddAnr / store entries: when the release was published (shown on the game page).</summary>
     public DateTimeOffset? Released { get; set; }
+
+    /// <summary>Store entries: the entry as JSON (checked again by the installer), its id, the unpacked downloads by the
+    /// recipe's download id (all inside Upshift's data folder), and the card and game its requirements are checked against.</summary>
+    public string? StoreEntryJson { get; set; }
+    public string? StoreEntryId { get; set; }
+    public Dictionary<string, string> StoreSources { get; set; } = new();
+    public StoreContext? StoreContext { get; set; }
     /// <summary>The name OptiScaler.dll is installed as, e.g. dxgi.dll (install only).</summary>
     public string? ProxyName { get; set; }
 
@@ -553,6 +560,8 @@ public static partial class OptiScalerInstaller
     /// </summary>
     public static InstallResult Uninstall(InstallPlan plan, InstallLog log)
     {
+        if (ReadStoreRecord(plan.TargetDir).Entries.Count > 0 && StoreRemoveAll(plan.TargetDir, "", log) is { } storeProblem)
+            return Refuse(log, $"The add-ons from the Upscaler Store couldn't all be taken out first, so OptiScaler wasn't removed: {storeProblem}");
         var target = plan.TargetDir;
         log.Write($"UNINSTALL {plan.GameName} | from {target}" + (plan.RemoveChanged ? " | changed files too" : ""));
         if (MoveLegacyState(target, log) is { } moveProblem) return Refuse(log, moveProblem);

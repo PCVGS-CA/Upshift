@@ -156,7 +156,7 @@ public sealed class OptiScalerOptionsView : UserControl
         fgBox.SelectedItem = fgBox.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string)i.Tag == current?.Id) ?? fgBox.Items[0];
         var fgNote = Subtle(current?.Note ?? "");
         // ANR (experimental, Settings > Experimental): DirectX 12 and Vulkan games with OptiScaler from Upshift, no anti-cheat.
-        var anrInGame = manifest.Anr;
+        var anrInGame = Services.AnrGames.InGame(card.Info);
         string? anrHint = null;
         var anrOffered = Services.AnrGames.WhyNot(card.Info, manifest) is null;
         if (anrOffered || anrInGame is not null)
@@ -821,7 +821,7 @@ public sealed class OptiScalerOptionsView : UserControl
     /// ANR in this game: the hint, its version and release date, "Go back to previous ANR version" (a version kept in Upshift's
     /// folder; automatic updates then leave this game alone), "Use the newest ANR", and "Switch back" (plain OptiScaler again).
     /// </summary>
-    private FrameworkElement AnrSection(GameCardViewModel card, AnrRecord anr)
+    private FrameworkElement AnrSection(GameCardViewModel card, Services.AnrGames.InUse anr)
     {
         var panel = new StackPanel { Spacing = 6 };
         panel.Children.Add(new TextBlock { Text = Anr.InGameHint + ".", TextWrapping = TextWrapping.Wrap, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });

@@ -1143,6 +1143,54 @@ errors and no warnings.
     "updated" notice. Not tested: the DLSS 5 refusal and the running-game wait in the app for test builds (same check as ANR's), the
     automatic mode, a real game on a test build.
 
+- **1.7.0-test.4 (2026-11-15), not released: the Upscaler Store.**
+  - Core `Store/`: `StoreModels` (entries, recipe steps, `StoreTypes`), `StoreCatalog` (embedded `Catalog/store.json` as resource
+    `store.json`; `Load` takes `data\catalog\remote-store.json` when newer; `RefreshAsync` from main's raw URL; `Problems` = the rules,
+    `NeverDownloaded`, `FitsGpu`/`FitsApi`), `StoreInstaller` (partial `OptiScalerInstaller`: `StoreAdd`/`StoreRemove`/`StoreRemoveAll`,
+    record `.upshift\store.json` = `StoreGameRecord`; OptiScaler's own files replaced → `FileOverride` Kind `store:<id>`; game files →
+    `.upshift\store-backup\<id>\`; inis backed up whole; `{UpshiftData}` = `data\store`, shared entry folders counted in `.games.json`;
+    NVIDIA-signed DLLs refused via `SignatureCheck`), `AuthorSetup` (snapshots copied to `data\store\_snapshot-*`, 4 GB limit, unelevated
+    run, 30-minute limit, `Outside` watch of top-level folders/files and HKCU/HKLM keys and values, `blocked.json`).
+    `InstallOperation.StoreAdd/StoreRemove/StoreSetup` (also via the UAC helper, rules checked again there). OptiScaler `Update`,
+    `UndoUpdate`, `SwitchBack` refuse while add-ons are in; `Uninstall` and `GameCleanup.Remove` take them out first (InstallRunner passes
+    the data folder for Uninstall). `CatalogComponent.RequireDigest` serves the store's synthetic components `store-<id>-<download>`.
+  - App: `Services/StoreService` (WhyNot, downloads by tag/latest, Add/Remove/GoBack/UseNewest, `StoreHeld`, TakeOut/PutBack around
+    OptiScaler changes, daily check + `StoreAutoUpdate` default Ask first, Library InfoBar "Upscaler Store"), `Views/StorePage` (nav "Store":
+    cards, Works on my PC / status / type / search, detail with Add to a game, experimental notice once per entry `StoreNoticesShown`,
+    author-setup warning every time, user-supplied file picker, In your games + Remove), `Views/StoreInGameView` (Upscaling tab: "From the
+    Upscaler Store" with Remove, go back, newest, issues link). `AnrGames` is now a wrapper for the "anr" recipe (old test.2 records still
+    switch back); ANR updates follow the store setting (was automatic by default). Dlss5View on AMD points to the Store's AMD-NR recipe.
+    Report: each add-on with version, status, type and its issues link. `.github/ISSUE_TEMPLATE/suggest_upscaler.yml`.
+  - Entries: builtin HelixSR, DLSS 5 build (Skynizz), OptiScaler test builds; recipe ANR, AMD-NR (Alpha0.3.2 + runtime, laid over
+    OptiScaler: OptiScaler.dll → {ProxyName}, OptiScaler\ files, lmxxf runtime, danielblnc runtime); link-only DittoSR (MIT), DLSS NR on
+    Intel (Apache-2.0), SCSKiller (GPL-3.0).
+  - Tested: harness t9 179/179 (43 new: store.json loads 8/8, 13 kinds of bad entry rejected, works-on-my-PC, the real ANR recipe B14 → B15
+    keeping nr_fg.ini and logs → Switch back exact, OptiScaler update refused while in, an AMD-NR-shaped recipe on 0.9.4 (override of the
+    loading file, game file backed up, data folder, inis in game and data) → removed exact incl. ini byte for byte, uninstall takes it out,
+    an NVIDIA-signed DLL refused, user-supplied add/remove exact, author setup with a stand-in program: recorded, removed exact, failing
+    setup undone, outside writes (LocalAppData folder + HKCU key) undone, removed and blocked); the app on throwaway data: Store page and
+    filter (5 of 8 on the RX 9070 XT), ANR detail, only the two test-build games offered, notice, real download, game page section,
+    Remove (0 differences), the Frame generation route (0 differences). Not tested: the real AMD-NR recipe (650 MB, and not in a game),
+    an author-setup entry from a real project (none listed), the UAC helper route, a remote store.json (the repo is private: 404).
+
+  - **How to add a store entry** (also in Projects/Upshift.md):
+
+    - File: `src/Upshift.Core/Catalog/store.json` (built into the app; fetched from main at start-up and used when its `updated` is newer). Bump `updated` with every change. Each entry is checked when loaded; one that breaks a rule is left out (the reason is kept in `StoreCatalog.Rejected`).
+    - Fields: `id` (lower-case, digits, dashes), `name`, `author`, `repo` (https; for anything downloaded `https://github.com/owner/repo`, the author's own), `license` (or "not stated"), `description` (one line), `gpus` ([{vendor: nvidia/amd/intel, generations: ["RDNA 4", "Blackwell", "Alchemist"…]}], empty = any; no generations = all of that vendor), `apis` (DX12/Vulkan/DX11, empty = any), `status` (Stable/Beta/Experimental), `type`, `notes`, and per type `recipe` / `setup` / `userFile` / `builtin`.
+    - Types: `recipe` (steps below); `author-setup` (Experimental only; `setup`: {asset regex, tag, run = .exe inside the download, args with {GameFolder}/{EntryFolder}}; confirmed every time, snapshots before/after, anything outside the game folder and Upshift's folder → undone and the entry blocked on that PC); `user-supplied` (`userFile`: {fileName, to under {GameFolder}/{OptiScalerFolder}, link}; the user picks the file, Upshift keeps a copy in `store-user\<id>` and places it); `link-only` (card + project page, nothing downloaded); `builtin` (`builtin`: helixsr, dlss5 or testbuilds: opens Upshift's own page).
+    - Recipe steps (nothing else is accepted):
+      - `download` {id, asset (regex), tag ("latest" or a tag)}: from the entry's own GitHub repo; refused without GitHub's SHA-256 digest or when it differs.
+      - `extract` {from: download id}: zip/7z unpacked into Upshift's components folder.
+      - `copy` {from: "downloadId:path" (a file, a folder, or "" for all), to: under {GameFolder}, {OptiScalerFolder} or {UpshiftData}\<entry id>, keep: [files the user may edit, kept on a version change]}.
+      - `rename` {file: a file the recipe copied, name: a plain file name or {ProxyName} (OptiScaler's loading name)}.
+      - `ini-set` {file: an .ini under those places, section, key, value (may use {GameFolder}, {UpshiftData}, {EntryFolder})}.
+      - `requires` {values: "OptiScaler from Upshift", "OptiScaler test build", "DX12", "Vulkan", "DX12|Vulkan", "GPU:amd", "GPU:amd:RDNA 4|RDNA 3"}: all must hold, checked before starting.
+      - `message` {text}: shown after the install.
+    - Placeholders: {GameFolder} = the game's exe folder; {OptiScalerFolder} = OptiScaler's DLL folder in it (OptiDllPath; the `OptiScaler` folder in v10 builds); {UpshiftData} = Upshift's `store` folder, so `{UpshiftData}\<id>` is the entry's own (shared by its games, removed with the last one).
+    - What Upshift does with a recipe: every file recorded in the game's `.upshift\store.json`; a file of OptiScaler's it replaces is kept as an override (Verify, Update and Uninstall know it); a game file it replaces is backed up; every ini it edits is backed up whole and put back byte for byte (key by key if changed since). Remove / Switch back reverses all of it, folders and logs included; OptiScaler's uninstall, update, undo and switch take the add-ons out first (update puts them back). Version changes keep `keep` files and whatever the add-on wrote into its own folders. Latest-tag recipes are checked at start-up and daily (Settings: Ask first by default), never while the game runs; "Go back to the previous version" holds a game.
+    - Hard limits for every type: nothing outside the game folder and Upshift's folder; never games with anti-cheat; never NVIDIA's own or modified files (names like nvngx_dlss*.dll, amdxcffx64.dll, dlssg_for_sm86, and any copied DLL signed by NVIDIA are refused): those are user-supplied.
+    - To suggest one: the repo's "Suggest an upscaler" issue form.
+
 ## Next
 
 1. **DLSS 5 follow-ups:**

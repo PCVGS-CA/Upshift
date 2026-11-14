@@ -136,8 +136,8 @@ public static class GameUpdates
             }
             var runtime = await RuntimeForAsync(into, version, progress);
 
-            // ANR (experimental) comes out first and goes back in afterwards, when the new OptiScaler can load it.
-            var (anr, anrFailed) = await AnrGames.TakeOutAsync(game, manifest, progress);
+            // Upscaler Store add-ons (ANR…) come out first and go back in afterwards, where the new OptiScaler can still take them.
+            var (anr, anrFailed) = await StoreService.TakeOutAsync(game, manifest, progress);
             if (anrFailed is not null) return anrFailed;
             progress?.Report($"Updating {component.Name} in {game.Name} to {VersionText(into.Id, version)}…");
             var updated = await InstallRunner.RunAsync(new InstallPlan
@@ -153,7 +153,7 @@ public static class GameUpdates
                 ComponentName = into.Name,
                 Version = version
             });
-            if (await AnrGames.PutBackAsync(game, anr, progress) is { } anrNote) updated.Message = $"{updated.Message} {anrNote}".Trim();
+            if (await StoreService.PutBackAsync(game, anr, progress) is { } anrNote) updated.Message = $"{updated.Message} {anrNote}".Trim();
             return updated;
         });
 
@@ -187,7 +187,7 @@ public static class GameUpdates
                 catch (ComponentDownloadException) { }
             }
             var runtimeFiles = await RuntimeForAsync(fork, version, progress);
-            if ((await AnrGames.TakeOutAsync(game, manifest, progress)).Failed is { } anrFailed) return anrFailed;
+            if ((await StoreService.TakeOutAsync(game, manifest, progress)).Failed is { } anrFailed) return anrFailed;
 
             progress?.Report($"Switching {game.Name} to {fork.Name}…");
             return await InstallRunner.RunAsync(new InstallPlan
@@ -285,7 +285,7 @@ public static class GameUpdates
         {
             progress?.Report($"Putting back OptiScaler {manifest.LastUpdate?.FromVersion} in {game.Name}…");
             var model = Fsr4ModelOf(game);
-            if ((await AnrGames.TakeOutAsync(game, manifest, progress)).Failed is { } anrFailed) return anrFailed;
+            if ((await StoreService.TakeOutAsync(game, manifest, progress)).Failed is { } anrFailed) return anrFailed;
             var result = await InstallRunner.RunAsync(new InstallPlan
             {
                 Operation = InstallOperation.UndoUpdate,

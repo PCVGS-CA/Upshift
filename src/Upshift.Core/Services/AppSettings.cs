@@ -93,13 +93,16 @@ public sealed class AppSettings
     /// <summary>The one-time notice shown when ANR is first turned on.</summary>
     public bool AnrNoticeShown { get; set; }
 
-    /// <summary>"Update ANR automatically" (true) or "Ask first" (false).</summary>
-    public bool AnrAutoUpdate { get; set; } = true;
+    /// <summary>Upscaler Store add-on updates: automatic (true) or "Ask first" (false, the default). ANR included.</summary>
+    public bool StoreAutoUpdate { get; set; }
 
-    public DateTime? AnrLastCheckUtc { get; set; }
+    public DateTime? StoreLastCheckUtc { get; set; }
 
-    /// <summary>Games the user took back to an earlier ANR version: automatic updates leave them alone until "Use the newest".</summary>
-    public List<string> AnrHeldGames { get; set; } = new();
+    /// <summary>"gameId|entryId" for add-ons taken back a version: updates leave them alone until "Use the newest".</summary>
+    public List<string> StoreHeld { get; set; } = new();
+
+    /// <summary>Experimental store entries whose notice was confirmed once.</summary>
+    public List<string> StoreNoticesShown { get; set; } = new();
 
     /// <summary>Where SCSKiller.exe is, when the user pointed Upshift at it (Upshift only starts it).</summary>
     public string? ScsKillerPath { get; set; }

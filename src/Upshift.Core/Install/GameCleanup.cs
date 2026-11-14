@@ -27,7 +27,8 @@ public static class GameCleanup
         {
             try
             {
-                var target = game.TargetDir is { Length: > 0 } t && OptiScalerInstaller.ReadManifest(t) is { Removed: false } ? t : null;
+                var target = game.TargetDir is { Length: > 0 } t
+                             && (OptiScalerInstaller.ReadManifest(t) is { Removed: false } || OptiScalerInstaller.ReadStoreRecord(t).Entries.Count > 0) ? t : null;
                 var root = game.InstallDir is { Length: > 0 } i ? i : game.TargetDir;
                 var upscaler = new[] { root, game.TargetDir }.Any(d => d is { Length: > 0 } && UpscalerFiles.ReadRecord(d) is { Files.Count: > 0 });
                 if ((target is null && !upscaler) || root is null) continue;
@@ -84,6 +85,10 @@ public static class GameCleanup
         var target = plan.TargetDir;
         var removedOptiScaler = false;
         var restored = 0;
+
+        // 0. Add-ons from the Upscaler Store, by their own record.
+        if (OptiScalerInstaller.ReadStoreRecord(target).Entries.Count > 0 && OptiScalerInstaller.StoreRemoveAll(target, dataDir, log) is { } storeProblem)
+            problems.Add($"the Upscaler Store add-ons: {storeProblem}");
 
         // 1. OptiScaler, by its record. The shader recorder's values go first, so the saved copy of OptiScaler.ini
         //    (kept in Upshift's data for a later reinstall) doesn't carry them.

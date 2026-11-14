@@ -124,7 +124,14 @@ public static class InstallRunner
         // ANR's files only come from the data folder's checked download (see AnrGames).
         InstallOperation.AddAnr => OptiScalerInstaller.AddAnr(plan, log),
         InstallOperation.RemoveAnr => OptiScalerInstaller.RemoveAnr(plan, log),
-        _ => OptiScalerInstaller.Uninstall(plan, log)
+        // Store entries are checked again here against the rules (paths only inside the game and Upshift's folder).
+        InstallOperation.StoreAdd => OptiScalerInstaller.StoreAdd(plan, dataDir, log),
+        InstallOperation.StoreRemove => OptiScalerInstaller.StoreRemove(plan, dataDir, log),
+        InstallOperation.StoreSetup => AuthorSetup.Run(plan, dataDir, log),
+        // Store add-ons come out first with the data folder known, so their shared files in it are counted down too.
+        _ => OptiScalerInstaller.StoreRemoveAll(plan.TargetDir, dataDir, log) is { } storeProblem
+            ? new InstallResult { Message = $"The Upscaler Store add-ons couldn't all be taken out first, so OptiScaler wasn't removed: {storeProblem}" }
+            : OptiScalerInstaller.Uninstall(plan, log)
     };
 
     /// <summary>

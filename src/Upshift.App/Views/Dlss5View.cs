@@ -115,6 +115,20 @@ public sealed class Dlss5View : UserControl
             return;
         }
 
+        // AMD-NR is a recipe in the Upscaler Store now (laid over this game's OptiScaler there). A game switched with an
+        // earlier version keeps its "switch back" below.
+        if (status.IsAmd && manifest?.Switch is null)
+        {
+            body.Children.Add(Line("\uE719", "AMD-NR (Neural Rendering on AMD) is in the Upscaler Store now: open it there and add it to this game.", "UpshiftAccentBrush"));
+            var open = new Button { Content = "Open the Upscaler Store" };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(open, "Open the Upscaler Store");
+            open.Click += (_, _) => (App.MainAppWindow as MainWindow)?.ShowPage("store");
+            body.Children.Add(open);
+            Content = Wrap(body);
+            _building = false;
+            return;
+        }
+
         // Can this card use it, and why; once switched, what's set up (from the DLSS 5 file actually in the game).
         if (installedByUs && manifest!.Switch is not null && !pretend)
         {

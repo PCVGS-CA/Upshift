@@ -107,6 +107,7 @@ public static partial class OptiScalerInstaller
         // A switch (to a DLSS 5 build) is an update to another component that also saves an exact return point:
         // the previous "Undo last update" copy stays, and "Switch back" restores everything from before the switch.
         var isSwitch = plan.Operation == InstallOperation.SwitchBuild;
+        if (ReadStoreRecord(target).Entries.Count > 0) return Refuse(log, "Take this game's Upscaler Store add-ons out first; Upshift puts them back after the update.");
         var manifest = ReadManifest(target);
         if (manifest is null or { Removed: true }) return Refuse(log, "OptiScaler isn't installed here by this app, so it wasn't updated.");
         if (isSwitch && manifest.Switch is not null) return Refuse(log, "This game already uses a DLSS 5 build of OptiScaler; switch back first.");
@@ -404,6 +405,7 @@ public static partial class OptiScalerInstaller
         var target = plan.TargetDir;
         log.Write($"UNDO UPDATE {plan.GameName} | in {target}");
         if (MoveLegacyState(target, log) is { } moveProblem) return Refuse(log, moveProblem);
+        if (ReadStoreRecord(target).Entries.Count > 0) return Refuse(log, "Take this game's Upscaler Store add-ons out first.");
 
         var manifest = ReadManifest(target);
         if (manifest is not { Removed: false, LastUpdate.UndoFolder: { } undoRelative }
@@ -442,6 +444,7 @@ public static partial class OptiScalerInstaller
     {
         var target = plan.TargetDir;
         log.Write($"SWITCH BACK {plan.GameName} | in {target}");
+        if (ReadStoreRecord(target).Entries.Count > 0) return Refuse(log, "Take this game's Upscaler Store add-ons out first.");
         var manifest = ReadManifest(target);
         if (manifest is not { Removed: false, Switch: { } sw }) return Refuse(log, "This game isn't using a DLSS 5 build of OptiScaler.");
         var returnDir = Path.Combine(target, sw.ReturnFolder);

@@ -53,8 +53,7 @@ public sealed partial class SettingsPage : Page
         _fillingAnr = true;
         var settings = AppServices.Settings.Current;
         AnrSwitch.IsOn = settings.AnrEnabled;
-        AnrUpdateBox.SelectedIndex = settings.AnrAutoUpdate ? 0 : 1;
-        AnrUpdateBox.IsEnabled = settings.AnrEnabled;
+        AnrUpdateBox.SelectedIndex = settings.StoreAutoUpdate ? 1 : 0;
         _fillingAnr = false;
     }
 
@@ -73,17 +72,16 @@ public sealed partial class SettingsPage : Page
             settings.AnrNoticeShown = true;
         }
         settings.AnrEnabled = AnrSwitch.IsOn;
-        AnrUpdateBox.IsEnabled = AnrSwitch.IsOn;
         try { AppServices.Settings.Save(settings); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         AppServices.RaiseEffectiveGpuChanged();   // option panels are rebuilt, so the choice appears or goes
-        if (AnrSwitch.IsOn) _ = Task.Run(async () => { try { await Services.AnrGames.CheckAsync(); } catch (Exception ex) when (ex is not OutOfMemoryException) { Services.CrashLog.Write(ex, "ANR check"); } });
+
     }
 
     private void AnrUpdate_Changed(object sender, SelectionChangedEventArgs e)
     {
         if (_fillingAnr || AnrUpdateBox.SelectedItem is not ComboBoxItem { Tag: string tag }) return;
         var settings = AppServices.Settings.Current;
-        settings.AnrAutoUpdate = tag == "auto";
+        settings.StoreAutoUpdate = tag == "auto";
         try { AppServices.Settings.Save(settings); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
 
