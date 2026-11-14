@@ -2,20 +2,18 @@
 
 All notable changes to Upshift. Each release's section becomes its GitHub release notes, so the heading must be `## [x.y.z]` with the same version as `Directory.Build.props` (a date after it is fine).
 
-## [1.7.0]
+## [1.7.0] - 2026-11-15
 
-FSR 4 model per game, AMD's newest FSR files, and official DLSS 5.
+The Upscaler Store, OptiScaler test builds per game, the FSR 4 model choice, and AMD's newest FSR files.
 
 ### New
 
-- Choose the FSR 4 model for each game: Auto, Full or Lite (needs an OptiScaler build with the setting).
-- Settings: a default FSR 4 model for new installs.
-- The game page and card show the FSR 4 model in use ("FSR 4 · Lite model").
+- Upscaler Store: browse upscalers, forks and test projects, filtered to what works on your PC, and add them to a game. New entries arrive without an app update, and everything it installs comes out again exactly.
+- OptiScaler test builds per game: allow them in Settings > OptiScaler, then pick Stable or Test build on a game's page. Back to Stable undoes the move.
+- Choose the FSR 4 model per game: Auto, Full or Lite (on OptiScaler test builds), plus a default for new installs.
 - AMD FSR SDK 2.4 (FSR 4.1.2) files for games that ship FSR, Vulkan games included.
+- Experimental, in the Store: ANR frame generation (beta) and AMD-NR. Off until you add them; updates ask first and never run while the game does.
 - Games with official DLSS 5 (NBA 2K27, Hogwarts Legacy, War Thunder, Where Winds Meet) say to turn it on in the game's menu.
-- Upscaler Store: browse upscalers, forks and test projects, filtered to what works on your PC, and add them to a game. Entries come from a list in Upshift's repo, so new ones arrive without an app update. ANR and AMD-NR are in it now; everything it installs comes out again exactly.
-- OptiScaler test builds per game: allow them in Settings > OptiScaler, then pick Stable or Test build on a game's page. Settings are kept both ways, Back to Stable undoes the move, and updates come daily (Ask first or automatic), never while the game runs.
-- Experimental: ANR frame generation (beta), from github.com/apex-compute/ANR. Off by default (Settings > Experimental); per game under Frame generation, for DirectX 12 and Vulkan games on an OptiScaler test build. Updates itself (or asks first), never while the game runs, and can go back a version.
 
 ### Removed
 
