@@ -13,6 +13,7 @@ FSR 4 model per game, AMD's newest FSR files, and official DLSS 5.
 - The game page and card show the FSR 4 model in use ("FSR 4 · Lite model").
 - AMD FSR SDK 2.4 (FSR 4.1.2) files for games that ship FSR, Vulkan games included.
 - Games with official DLSS 5 (NBA 2K27, Hogwarts Legacy, War Thunder, Where Winds Meet) say to turn it on in the game's menu.
+- OptiScaler test builds per game: allow them in Settings > OptiScaler, then pick Stable or Test build on a game's page. Settings are kept both ways, Back to Stable undoes the move, and updates come daily (Ask first or automatic), never while the game runs.
 - Experimental: ANR frame generation (beta), from github.com/apex-compute/ANR. Off by default (Settings > Experimental); per game under Frame generation, for DirectX 12 and Vulkan games on an OptiScaler test build. Updates itself (or asks first), never while the game runs, and can go back a version.
 
 ### Removed

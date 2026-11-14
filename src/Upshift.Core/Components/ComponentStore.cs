@@ -231,6 +231,8 @@ public sealed partial class ComponentStore : IDisposable
     /// <summary>Keeps the most recently downloaded versions (and any in <paramref name="keep"/>), removes the rest.</summary>
     private void Prune(CatalogComponent component, IReadOnlyCollection<string> keep)
     {
+        // The catalog's tested version (OptiScaler's Stable 0.9.4) is always kept, as the fallback for test builds.
+        if (component.PinnedVersion is { } pinned && !keep.Contains(pinned)) keep = keep.Append(pinned).ToList();
         var all = Downloaded(component);
         var slots = Math.Max(0, KeepVersions - all.Count(c => keep.Contains(c.Version)));
         foreach (var cached in all)

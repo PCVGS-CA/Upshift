@@ -120,6 +120,24 @@ public sealed partial class LibraryViewModel : ObservableObject
 
     public void DismissAnrNotice() => AnrNotice = "";
 
+    /// <summary>"OptiScaler test build updated to 10.0.0-pre1 · 14 Nov …", or (Ask first) "… is available" with "Update now".</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasTestBuildNotice))]
+    private string testBuildNotice = "";
+
+    public bool HasTestBuildNotice => TestBuildNotice.Length > 0;
+
+    [ObservableProperty]
+    private bool testBuildNoticeAsks;
+
+    public void DismissTestBuildNotice() => TestBuildNotice = "";
+
+    public async Task UpdateTestBuildsNowAsync()
+    {
+        TestBuildNotice = "";
+        await TestBuilds.ApplyAsync();
+    }
+
     public async Task UpdateAnrNowAsync()
     {
         AnrNotice = "";
@@ -198,6 +216,7 @@ public sealed partial class LibraryViewModel : ObservableObject
         // A game updated, undone or repaired from the Updates page.
         GameUpdates.LibraryChanged += gameId => _dispatcher.TryEnqueue(() => RefreshCard(gameId));
         Services.AnrGames.Notice += (text, asks) => _dispatcher.TryEnqueue(() => { AnrNotice = text; AnrNoticeAsks = asks; });
+        Services.TestBuilds.Notice += (text, asks) => _dispatcher.TryEnqueue(() => { TestBuildNotice = text; TestBuildNoticeAsks = asks; });
         AppServices.HiddenGamesChanged += () => _dispatcher.TryEnqueue(() =>
         {
             SetGames(AppServices.Library.Current);
@@ -271,6 +290,11 @@ public sealed partial class LibraryViewModel : ObservableObject
     public Task<InstallResult?> RemoveAnrAsync(GameCardViewModel card) => RunGameUpdateAsync(card, p => AnrGames.RemoveAsync(card.Info, p));
 
     public Task<InstallResult?> AnrGoBackAsync(GameCardViewModel card) => RunGameUpdateAsync(card, p => AnrGames.GoBackAsync(card.Info, p));
+
+    /// <summary>OptiScaler version for one game: the newest test build, Stable, or the test build before.</summary>
+    public Task<InstallResult?> UseTestBuildAsync(GameCardViewModel card) => RunGameUpdateAsync(card, p => TestBuilds.UseNewestAsync(card.Info, p));
+    public Task<InstallResult?> UseStableAsync(GameCardViewModel card) => RunGameUpdateAsync(card, p => TestBuilds.BackToStableAsync(card.Info, p));
+    public Task<InstallResult?> PreviousTestBuildAsync(GameCardViewModel card) => RunGameUpdateAsync(card, p => TestBuilds.GoBackAsync(card.Info, p));
 
     /// <summary>Puts back every original Upshift replaced in this game.</summary>
     public Task<InstallResult?> RestoreUpscalerFilesAsync(GameCardViewModel card, IReadOnlyCollection<string>? paths = null) =>

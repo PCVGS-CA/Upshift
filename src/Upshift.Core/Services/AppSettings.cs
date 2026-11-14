@@ -12,8 +12,19 @@ public sealed class AppSettings
     /// <summary>Check GitHub for new releases at start-up (at most every 6 hours).</summary>
     public bool AutoCheckUpdates { get; set; } = true;
 
-    /// <summary>"OptiScaler test builds": offer the official nightly builds on the Updates page. Off by default.</summary>
+    /// <summary>"Allow OptiScaler test builds": the official nightly builds, chosen per game. Off by default.</summary>
     public bool OptiScalerTestBuilds { get; set; }
+
+    /// <summary>The one-time notice shown when test builds are first allowed.</summary>
+    public bool TestBuildsNoticeShown { get; set; }
+
+    /// <summary>"Update test builds automatically" (true) or "Ask first" (false, the default).</summary>
+    public bool TestBuildAutoUpdate { get; set; }
+
+    public DateTime? TestBuildLastCheckUtc { get; set; }
+
+    /// <summary>Games taken back to an earlier test build: left alone by test build updates until "Use the newest test build".</summary>
+    public List<string> TestBuildHeldGames { get; set; } = new();
 
     /// <summary>Optional address of another catalog.json. Empty means Upshift's online catalog (DefaultCatalogUrl).</summary>
     public string CatalogUrl { get; set; } = "";

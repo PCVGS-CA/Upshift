@@ -303,6 +303,38 @@ public static class OptiScalerOptions
         && DateTime.TryParseExact(m.Value, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d)
             ? $"Test build ({d.ToString("d MMM yyyy", CultureInfo.InvariantCulture)})" : $"Test build ({tag})";
 
+    /// <summary>
+    /// "10.0.0-pre1 · test build · 13 Nov": the version from the release file's name (OptiScaler_v10.0.0-pre1_20261113.7z) or,
+    /// without it, the installed DLL's product version, then the build date from the tag (nightly-yyyymmdd).
+    /// </summary>
+    public static string TestBuildText(string tag, string? assetName, string? dllProductVersion)
+    {
+        var version = assetName is not null && System.Text.RegularExpressions.Regex.Match(assetName, @"_v(\d[^_]*)_") is { Success: true } a ? a.Groups[1].Value
+            : dllProductVersion?.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        var date = System.Text.RegularExpressions.Regex.Match(tag, @"(\d{8})") is { Success: true } m
+                   && DateTime.TryParseExact(m.Value, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d)
+            ? d.ToString("d MMM", CultureInfo.InvariantCulture) : tag;
+        return version is null ? $"test build · {date}" : $"{version} · test build · {date}";
+    }
+
+    /// <summary>
+    /// The changes a nightly lists ("### Changes Since the Last Nightly", one bullet per commit: "[hash](url) Text (author)"), as
+    /// one short line: the first two, without hashes and authors, plus "(+N more)". Empty when the release lists none.
+    /// </summary>
+    public static string NightlyNotesLine(string? notes)
+    {
+        if (string.IsNullOrWhiteSpace(notes)) return "";
+        var changes = notes.Replace("\r", "").Split('\n').Select(l => l.Trim())
+            .Where(l => l.StartsWith("- ") || l.StartsWith("* "))
+            .Select(l => System.Text.RegularExpressions.Regex.Replace(l[2..], @"^\[[0-9a-f]{6,40}\]\([^)]*\)\s*", ""))
+            .Select(l => System.Text.RegularExpressions.Regex.Replace(l, @"\s*\([^()]*\)\s*$", "").Trim())
+            .Where(l => l.Length > 0).ToList();
+        if (changes.Count == 0) return "";
+        var line = string.Join("; ", changes.Take(2));
+        if (line.Length > 200) line = line[..197].TrimEnd() + "…";
+        return changes.Count > 2 ? $"{line} (+{changes.Count - 2} more)" : line;
+    }
+
     /// <summary>OptiScaler's on-screen FSR 4 watermark (Fsr4EnableWatermark). Off puts the original value back.</summary>
     public static List<IniSetting> WatermarkSettings(bool on) => new() { new("FSR", "Fsr4EnableWatermark", on ? "true" : null) };
 

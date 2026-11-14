@@ -1115,6 +1115,34 @@ errors and no warnings.
     Not tested: ANR in a real game (needs DLSS FG in the game and a v10 OptiScaler), Undo/Update/switch with ANR in the app, the UAC
     helper route, the report zip with a real nr_fg log, the missing-digest refusal with a real release.
 
+- **1.7.0-test.3 (2026-11-14), not released: OptiScaler test builds per game.** (Built on 1.5.0-test.2's test build support.)
+  - Source: only optiscaler/OptiScaler-nightly, now with `requireDigest` (no GitHub SHA-256 → refused). `ComponentStore.Prune` always
+    keeps a component's pinned version, so Stable 0.9.4 is never pruned (before, two newer OptiScaler downloads could remove it).
+  - Settings: the old "OptiScaler test builds" switch moved from Updates to a new "OptiScaler" section (with the FSR 4 model default) as
+    "Allow OptiScaler test builds", one-time notice (`TestBuildsNoticeShown`), "Test build updates": Ask first (default,
+    `TestBuildAutoUpdate` false) / Update test builds automatically.
+  - App `Services/TestBuilds.cs`: `WhyNot` (allowed, no anti-cheat, OptiScaler from Upshift, not while the DLSS 5 build is on: says so),
+    `UseNewestAsync` (= `GameUpdates.InstallTestBuildAsync`), `BackToStableAsync` (exact Undo when the last update came from Stable),
+    `GoBackAsync` (previous downloaded nightly: Undo when it came from there, else an update; holds the game via `TestBuildHeldGames`),
+    all refused while a process runs from the game folder. Checks 30 s after start-up and then daily (10-minute timer; runs
+    `AppServices.Updates.CheckAsync`), Ask first → Library InfoBar "OptiScaler test build 13 Nov is available: <changes>" + Update now;
+    automatic → updates games behind (not held, not running; running ones wait for a later tick). ANR is taken out/put back by
+    `GameUpdates.UpdateAsync` as before.
+  - Game page (Upscaling tab, top): "OptiScaler version" Stable (0.9.4) / Test build (13 Nov); on a test build "OptiScaler 10.0.0-pre1 ·
+    test build · 13 Nov" (`OptiScalerOptions.TestBuildText`: version from the release file name, else the DLL's product version
+    "10.0.0-dev"), "Go back to previous test build", "Use the newest test build", "Back to Stable". The card's text is the same.
+    `OptiScalerOptions.NightlyNotesLine`: first two changes from the release's "Changes Since the Last Nightly" list, without commit
+    hashes and authors, "(+N more)". "Needs a newer OptiScaler" for ANR and the FSR 4 model now says to switch the game to the test build
+    (or to allow test builds). Report a problem: OptiScaler version and channel (Stable / test build / DLSS 5 build / other release).
+  - Layout: the 13 Nov nightly still has OptiScaler.dll and OptiScaler.ini at the top with the bundled DLLs in `OptiScaler\` (the layout
+    already handled); OptiScaler in its own subfolder hasn't shipped, so the v10 readiness notes above still apply.
+  - Tested: harness t9 136/136 (17 new: digest required, Stable never pruned, version and notes text from the real 13 Nov release, real
+    11/12/13 Nov downloads, Stable → test build (settings in both kept, new ones at defaults) → Undo exact, 12 → 13 Nov → Undo exact, ANR
+    and FSR 4 model supported, uninstall clean); the app on throwaway data: Settings notice and options, Ask-first notice with changes,
+    Stable game → Test build (exact text, ANR offered) → Back to Stable (0 differences), go back to previous / newest, Update now with the
+    "updated" notice. Not tested: the DLSS 5 refusal and the running-game wait in the app for test builds (same check as ANR's), the
+    automatic mode, a real game on a test build.
+
 ## Next
 
 1. **DLSS 5 follow-ups:**

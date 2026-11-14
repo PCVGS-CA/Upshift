@@ -65,7 +65,11 @@ public static class ProblemReports
         var manifest = dir is null ? null : OptiScalerInstaller.ReadManifest(dir);
         if (manifest is { Removed: false })
         {
-            game.AppendLine($"OptiScaler: {GameUpdates.ComponentFor(manifest.ComponentId).Name} {manifest.Version}, loading file {manifest.ProxyName}, in {dir}");
+            game.AppendLine(TestBuilds.OnTestBuild(manifest)
+                ? $"OptiScaler: {TestBuilds.Text(manifest.Version, dir, manifest.ProxyName)} ({manifest.Version}), channel: test build, loading file {manifest.ProxyName}, in {dir}"
+                : $"OptiScaler: {GameUpdates.ComponentFor(manifest.ComponentId).Name} {manifest.Version}, channel: "
+                  + (manifest.Switch is not null ? "DLSS 5 build" : manifest.Version == TestBuilds.StableVersion ? "Stable" : "other release")
+                  + $", loading file {manifest.ProxyName}, in {dir}");
             if (card.HasFsr4Text) game.AppendLine(card.Fsr4Text);
             if (card.HasLoadStatus) game.AppendLine(card.LoadStatusText + (card.HasLoadStatusDetail ? " " + card.LoadStatusDetail : ""));
             if (card.NeedsRepair) game.AppendLine("Needs repair: " + card.RepairText.Replace("\n\n", " "));

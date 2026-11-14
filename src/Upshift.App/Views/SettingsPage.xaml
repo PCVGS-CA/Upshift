@@ -42,10 +42,6 @@
                 <ToggleSwitch x:Name="AutoCheckSwitch" Header="Check for updates automatically" />
                 <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
                            Text="At start-up, Upshift checks GitHub for a newer version of itself and, at most every 6 hours, reads each component's release list. Nothing is installed into games unless you choose to update them, and Upshift only updates itself when you press Update on its row at the top of the Updates page (or Restart to update)." />
-                <ToggleSwitch x:Name="TestBuildsSwitch" Header="OptiScaler test builds" Toggled="TestBuilds_Toggled"
-                              AutomationProperties.Name="OptiScaler test builds" />
-                <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
-                           Text="Untested development builds. May crash games." />
                 <TextBlock Text="Catalog address (catalogUrl)" Margin="0,6,0,0" />
                 <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
                            Text="Upshift reads its list of downloads, DLSS names and advice from its online catalog on GitHub, so fixes arrive without an app update. A newer, valid catalog is used from the next start; when it can't be reached, the copy built into the app is used. Leave this empty for Upshift's catalog, or enter another address." />
@@ -77,7 +73,16 @@
             </StackPanel>
 
             <StackPanel Spacing="8">
-                <TextBlock Text="FSR 4" FontWeight="SemiBold" />
+                <TextBlock Text="OptiScaler" FontWeight="SemiBold" />
+                <ToggleSwitch x:Name="TestBuildsSwitch" Header="Allow OptiScaler test builds" Toggled="TestBuilds_Toggled"
+                              AutomationProperties.Name="Allow OptiScaler test builds" />
+                <ComboBox x:Name="TestBuildUpdateBox" Header="Test build updates" MinWidth="240" SelectionChanged="TestBuildUpdate_Changed"
+                          AutomationProperties.Name="Test build updates">
+                    <ComboBoxItem Content="Ask first" Tag="ask" />
+                    <ComboBoxItem Content="Update test builds automatically" Tag="auto" />
+                </ComboBox>
+                <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"
+                           Text="Daily builds from the OptiScaler team, chosen per game on its Upscaling tab. Stable stays the default. Games are never updated while running." />
                 <ComboBox x:Name="Fsr4ModelDefaultBox" Header="Default FSR 4 model for new installs" MinWidth="240"
                           SelectionChanged="Fsr4ModelDefault_Changed" AutomationProperties.Name="Default FSR 4 model for new installs" />
                 <TextBlock FontSize="12" Foreground="{StaticResource SubtleTextBrush}" TextWrapping="Wrap"

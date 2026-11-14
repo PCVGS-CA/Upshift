@@ -23,6 +23,8 @@ public sealed partial class SettingsPage : Page
         AutoCheckSwitch.Toggled += AutoCheck_Toggled;
         _loadingTestBuilds = true;
         TestBuildsSwitch.IsOn = AppServices.Settings.Current.OptiScalerTestBuilds;
+        TestBuildUpdateBox.SelectedIndex = AppServices.Settings.Current.TestBuildAutoUpdate ? 1 : 0;
+        TestBuildUpdateBox.IsEnabled = TestBuildsSwitch.IsOn;
         _loadingTestBuilds = false;
         CatalogUrlBox.Text = AppServices.Settings.Current.CatalogUrl;
         CatalogStatusText.Text = AppServices.CatalogStatus
@@ -583,15 +585,35 @@ public sealed partial class SettingsPage : Page
 
     private bool _loadingTestBuilds;
 
-    /// <summary>"OptiScaler test builds": on asks GitHub about the official nightly builds straight away.</summary>
-    private void TestBuilds_Toggled(object sender, RoutedEventArgs e)
+    /// <summary>"Allow OptiScaler test builds": a one-time notice the first time; on asks GitHub about the nightlies straight away.</summary>
+    private async void TestBuilds_Toggled(object sender, RoutedEventArgs e)
     {
         if (_loadingTestBuilds) return;
         var settings = AppServices.Settings.Current;
+        if (TestBuildsSwitch.IsOn && !settings.TestBuildsNoticeShown)
+        {
+            await new ContentDialog
+            {
+                XamlRoot = XamlRoot, Title = "OptiScaler test builds", CloseButtonText = "OK",
+                Content = new TextBlock { Text = Services.TestBuilds.NoticeText, TextWrapping = TextWrapping.Wrap }
+            }.ShowAsync();
+            settings.TestBuildsNoticeShown = true;
+        }
         settings.OptiScalerTestBuilds = TestBuildsSwitch.IsOn;
+        TestBuildUpdateBox.IsEnabled = TestBuildsSwitch.IsOn;
         AppServices.Settings.Save(settings);
-        if (TestBuildsSwitch.IsOn) _ = Task.Run(() => AppServices.Updates.CheckAsync(CancellationToken.None));
+        AppServices.RaiseEffectiveGpuChanged();   // option panels are rebuilt, so the version picker appears or goes
+        if (TestBuildsSwitch.IsOn)
+            _ = Task.Run(async () => { try { await Services.TestBuilds.CheckAsync(); } catch (Exception ex) when (ex is not OutOfMemoryException) { Services.CrashLog.Write(ex, "Test build check"); } });
         else AppServices.Updates.NotifyChanged();
+    }
+
+    private void TestBuildUpdate_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingTestBuilds || TestBuildUpdateBox.SelectedItem is not ComboBoxItem { Tag: string tag }) return;
+        var settings = AppServices.Settings.Current;
+        settings.TestBuildAutoUpdate = tag == "auto";
+        try { AppServices.Settings.Save(settings); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
 
     private void AutoCheck_Toggled(object sender, RoutedEventArgs e)

@@ -968,6 +968,14 @@ public sealed partial class LibraryPage : Page
 
     private void AnrNotice_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.DismissAnrNotice();
 
+    private void TestBuildNotice_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.DismissTestBuildNotice();
+
+    private async void TestBuildUpdateNow_Click(object sender, RoutedEventArgs e)
+    {
+        try { await ViewModel.UpdateTestBuildsNowAsync(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { Services.CrashLog.Write(ex, "Update test builds now"); }
+    }
+
     private async void AnrUpdateNow_Click(object sender, RoutedEventArgs e)
     {
         try { await ViewModel.UpdateAnrNowAsync(); }

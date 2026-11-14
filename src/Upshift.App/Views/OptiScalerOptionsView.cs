@@ -102,6 +102,9 @@ public sealed class OptiScalerOptionsView : UserControl
         var helixOffered = Services.HelixSrGames.OfferedFor(card.Info);
         var helixDir = (helixOffered || helixInUse) && helixMissing is null ? Services.HelixSrGames.FilesDir : null;
 
+        // ---- OptiScaler version: Stable or Test build, per game (only while test builds are allowed, or the game is on one) ----
+        if (Services.TestBuilds.Allowed || Services.TestBuilds.OnTestBuild(manifest)) body.Children.Add(VersionSection(card, manifest));
+
         // ---- Upscaler ----
         var upscalers = OptiScalerOptions.Upscalers(gpu, card.Info.Api, catalog.Fsr4, int8Shown && fsr4On, helixDir);
         var suggested = card.Recommendation?.ChoiceId;
@@ -154,12 +157,14 @@ public sealed class OptiScalerOptionsView : UserControl
         var fgNote = Subtle(current?.Note ?? "");
         // ANR (experimental, Settings > Experimental): DirectX 12 and Vulkan games with OptiScaler from Upshift, no anti-cheat.
         var anrInGame = manifest.Anr;
+        string? anrHint = null;
         var anrOffered = Services.AnrGames.WhyNot(card.Info, manifest) is null;
         if (anrOffered || anrInGame is not null)
         {
             var supported = Anr.Supported(ini);
             fgBox.Items.Add(Item(Anr.ChoiceId, supported || anrInGame is not null ? Anr.ChoiceLabel : $"{Anr.ChoiceLabel}: {Anr.NeedsNewer}",
                 enabled: supported || anrInGame is not null));
+            if (!supported && anrInGame is null) anrHint = Services.TestBuilds.NeedsNewerText("ANR (beta)");
             if (anrInGame is not null) fgBox.SelectedItem = fgBox.Items.OfType<ComboBoxItem>().First(i => (string)i.Tag == Anr.ChoiceId);
         }
         fgBox.SelectionChanged += async (_, _) =>
@@ -182,7 +187,7 @@ public sealed class OptiScalerOptionsView : UserControl
             await Save(card, OptiScalerOptions.FrameGenSettings(modes.First(m => m.Id == id)));
         };
         body.Children.Add(Group(WithGuide(fgBox, catalog.Guides.FrameGen, modes.Select(m => (m.Id, m.Label)), gpu),
-            anrInGame is null ? fgNote : null,
+            anrInGame is null ? fgNote : null, anrHint is null ? null : Subtle(anrHint),
             card.Suggestions?.HiddenFrameGen.Count > 0 ? Subtle("Some modes are hidden because the OptiScaler wiki says they don't work for this game.") : null));
         if (anrInGame is not null) body.Children.Add(AnrSection(card, anrInGame));
 
@@ -494,7 +499,7 @@ public sealed class OptiScalerOptionsView : UserControl
     private FrameworkElement Fsr4ModelSection(GameCardViewModel card, IniFile ini, GpuInfo? gpu)
     {
         if (!Fsr4Models.Supported(ini))
-            return Group(new TextBlock { Text = "FSR 4 model" }, Subtle(Fsr4Models.NeedsNewerText));
+            return Group(new TextBlock { Text = "FSR 4 model" }, Subtle(Services.TestBuilds.NeedsNewerText("FSR 4 model choice")));
         var api = card.Info.Api;
         var offered = Fsr4Models.Offered(gpu, api, ini);
         var current = Fsr4Models.Current(ini);
@@ -737,6 +742,79 @@ public sealed class OptiScalerOptionsView : UserControl
             });
             Build();
         }
+    }
+
+    /// <summary>
+    /// "OptiScaler version": Stable (0.9.4) or Test build for this game only. Moving is an OptiScaler update that keeps the settings
+    /// both versions have (Undo puts it back exactly); not while the DLSS 5 build is on, never with anti-cheat. On a test build:
+    /// its exact version and date, "Go back to previous test build" and "Back to Stable".
+    /// </summary>
+    private FrameworkElement VersionSection(GameCardViewModel card, InstallManifest manifest)
+    {
+        var onTest = Services.TestBuilds.OnTestBuild(manifest);
+        var why = Services.TestBuilds.WhyNot(card.Info, manifest);
+        var stable = Services.TestBuilds.StableVersion;
+        var box = Combo("OptiScaler version", new[]
+        {
+            Item("stable", $"Stable ({stable.TrimStart('v')})"),
+            Item("test", "Test build" + (Services.TestBuilds.Newest is { } n ? $" ({OptiScalerOptions.TestBuildText(n.Tag, null, null).Replace("test build · ", "")})" : ""))
+        });
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(box, "OptiScaler version");
+        box.SelectedIndex = onTest ? 1 : 0;
+        box.IsEnabled = why is null && AppServices.PretendGpu is null && manifest.ComponentId is var id
+                        && (onTest || id == AppServices.OptiScaler.Id);
+        box.SelectionChanged += async (_, _) =>
+        {
+            if (_building || Library is null || box.SelectedItem is not ComboBoxItem { Tag: string tag }) return;
+            var result = tag == "test" ? (onTest ? null : await Library.UseTestBuildAsync(card)) : (onTest ? await Library.UseStableAsync(card) : null);
+            if (result is { Success: false }) await Notice("OptiScaler wasn't changed", result.Message);
+        };
+        var panel = new StackPanel { Spacing = 6 };
+        panel.Children.Add(box);
+        if (onTest)
+        {
+            panel.Children.Add(Subtle($"OptiScaler {Services.TestBuilds.Text(manifest.Version, card.Info.TargetDir, manifest.ProxyName)}"
+                                      + (Services.TestBuilds.IsHeld(card.Info) ? " · kept on this build" : "")));
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            if (Services.TestBuilds.PreviousOf(manifest.Version) is { } previous)
+            {
+                var back = new Button { Content = "Go back to previous test build", IsEnabled = AppServices.PretendGpu is null };
+                ToolTipService.SetToolTip(back, OptiScalerOptions.TestBuildText(previous.Version, previous.AssetName, null) + ", kept in Upshift's folder");
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(back, "Go back to previous test build");
+                back.Click += async (_, _) =>
+                {
+                    if (Library is null) return;
+                    var result = await Library.PreviousTestBuildAsync(card);
+                    if (result is { Success: false }) await Notice("OptiScaler wasn't changed", result.Message);
+                };
+                buttons.Children.Add(back);
+            }
+            if (Services.TestBuilds.IsHeld(card.Info) || (Services.TestBuilds.Newest is { } newest && string.CompareOrdinal(manifest.Version, newest.Tag) < 0))
+            {
+                var newestButton = new Button { Content = "Use the newest test build", IsEnabled = AppServices.PretendGpu is null };
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(newestButton, "Use the newest test build");
+                newestButton.Click += async (_, _) =>
+                {
+                    if (Library is null) return;
+                    var result = await Library.UseTestBuildAsync(card);
+                    if (result is { Success: false }) await Notice("OptiScaler wasn't changed", result.Message);
+                };
+                buttons.Children.Add(newestButton);
+            }
+            var toStable = new Button { Content = "Back to Stable", IsEnabled = AppServices.PretendGpu is null };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(toStable, "Back to Stable");
+            toStable.Click += async (_, _) =>
+            {
+                if (Library is null) return;
+                var result = await Library.UseStableAsync(card);
+                if (result is { Success: false }) await Notice("OptiScaler wasn't changed", result.Message);
+            };
+            buttons.Children.Add(toStable);
+            panel.Children.Add(buttons);
+        }
+        else if (why is not null) panel.Children.Add(Subtle(why));
+        else panel.Children.Add(Subtle("Test builds keep your settings that exist in both versions; Back to Stable undoes the move."));
+        return panel;
     }
 
     /// <summary>

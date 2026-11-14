@@ -228,6 +228,15 @@
                         <Button Content="Review" Click="DlssNoticeReview_Click" />
                     </InfoBar.ActionButton>
                 </InfoBar>
+                <!-- OptiScaler test builds: updated, or (Ask first) a newer one is available -->
+                <InfoBar IsOpen="{x:Bind ViewModel.HasTestBuildNotice, Mode=OneWay}" Severity="Informational"
+                         Title="OptiScaler test builds" Message="{x:Bind ViewModel.TestBuildNotice, Mode=OneWay}" Closed="TestBuildNotice_Closed"
+                         Visibility="{x:Bind ViewModel.HasTestBuildNotice, Mode=OneWay}" AutomationProperties.Name="Test build notice">
+                    <InfoBar.ActionButton>
+                        <Button Content="Update now" Click="TestBuildUpdateNow_Click" AutomationProperties.Name="Update test builds now"
+                                Visibility="{x:Bind ViewModel.TestBuildNoticeAsks, Mode=OneWay}" />
+                    </InfoBar.ActionButton>
+                </InfoBar>
                 <!-- ANR (experimental) was updated, or (Ask first) a new version is available -->
                 <InfoBar IsOpen="{x:Bind ViewModel.HasAnrNotice, Mode=OneWay}" Severity="Informational"
                          Title="ANR frame generation (beta)" Message="{x:Bind ViewModel.AnrNotice, Mode=OneWay}" Closed="AnrNotice_Closed"

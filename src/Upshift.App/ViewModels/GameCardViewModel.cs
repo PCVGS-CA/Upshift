@@ -123,8 +123,11 @@ public sealed partial class GameCardViewModel : ObservableObject
         IsInstalledByUs = manifest is { Removed: false };
         // "OptiScaler v0.9.4", or the DLSS 5 build switched in ("OptiScaler DLSSNR v0.2.0-dlssnr").
         InstalledComponentId = IsInstalledByUs ? manifest!.ComponentId : null;
-        InstalledText = IsInstalledByUs
-            ? $"{Services.GameUpdates.ComponentFor(manifest!.ComponentId).Name} {Services.GameUpdates.VersionText(manifest.ComponentId, manifest.Version)} installed as {manifest.ProxyName}" : "";
+        // A test build: "OptiScaler 10.0.0-pre1 · test build · 13 Nov installed as dxgi.dll".
+        InstalledText = !IsInstalledByUs ? ""
+            : Services.TestBuilds.OnTestBuild(manifest)
+                ? $"OptiScaler {Services.TestBuilds.Text(manifest!.Version, info.TargetDir, manifest.ProxyName)} installed as {manifest.ProxyName}"
+                : $"{Services.GameUpdates.ComponentFor(manifest!.ComponentId).Name} {Services.GameUpdates.VersionText(manifest.ComponentId, manifest.Version)} installed as {manifest.ProxyName}";
         InstalledVersion = IsInstalledByUs ? manifest!.Version : null;
         // Which FSR 4 the game uses and the version of its file: "FSR 4: your 4.1.1b file · v4.1.1.0".
         if (IsInstalledByUs && info.TargetDir is { } fsrDir && File.Exists(Path.Combine(fsrDir, "OptiScaler.ini")))
